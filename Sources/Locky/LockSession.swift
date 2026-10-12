@@ -339,6 +339,7 @@ final class LockSession: NSObject, NSWindowDelegate {
                 }
             }
             if main {
+                screen.message = started.message.map { NSHostingController(rootView: LockMessage(text: $0, auth: theme.auth, style: style)) }
                 if mode == .lock { screen.banner = NSHostingView(rootView: SafetyBanner(model: banner)) }
                 if mode == .preview, !started.problems.isEmpty {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
@@ -456,6 +457,16 @@ final class LockScreenView: NSView {
             needsLayout = true
         }
     }
+    /// The lock screen message, above the password field.
+    var message: NSHostingController<LockMessage>? {
+        didSet {
+            oldValue?.view.removeFromSuperview()
+            if let message {
+                if let banner { addSubview(message.view, positioned: .below, relativeTo: banner) } else { addSubview(message.view) }
+            }
+            needsLayout = true
+        }
+    }
 
     override var isFlipped: Bool { true }
 
@@ -518,7 +529,23 @@ final class LockScreenView: NSView {
                 auth.view.frame = bounds
             }
         }
+        if let message {
+            message.view.frame = messageFrame(size: message.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale)), scale: scale)
+        }
         banner?.frame = CGRect(x: 16, y: 16, width: min(bounds.width - 32, 640), height: 200)
+    }
+
+    /// Under the password field (and its hint) when there is room, otherwise above it; centered on it, or
+    /// lined up with its left edge when the theme lines the hint up that way (a terminal prompt).
+    func messageFrame(size: CGSize, scale: CGFloat) -> CGRect {
+        let gap = 14 * scale
+        guard let frame = auth?.view.frame, let spec = auth?.spec, authSize.width > 0 else {
+            return CGRect(x: bounds.midX - size.width / 2, y: bounds.maxY - 28 * scale - size.height, width: size.width, height: size.height).integral
+        }
+        let below = frame.maxY + gap
+        let y = below + size.height <= bounds.maxY - 12 * scale ? below : frame.minY - gap - size.height
+        let x = spec.hintAlign == "leading" ? frame.minX : frame.midX - size.width / 2
+        return CGRect(x: x, y: y, width: size.width, height: size.height).integral
     }
 }
 

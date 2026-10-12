@@ -7,7 +7,7 @@ minus what [plugins.md](plugins.md#the-rules-that-keep-the-lock-screen-safe) lis
 
 | | |
 |---|---|
-| `locky.setup(opts)` | Merges `opts` into `locky.config`: `theme`, `auto_unlock`, `background`, `palette`, `widgets`, `hour24` (`true` or `false` forces a 24- or 12-hour clock in every theme), and `privacy` (`true`: `locky.sys.user()` and `locky.sys.hostname()` return generic names, and `locky.herdr` gives each agent its kind as the title and no workspace; widgets that show other personal data should check `locky.config.privacy`). The Locky window's settings.json applies after init.lua and wins. |
+| `locky.setup(opts)` | Merges `opts` into `locky.config`: `theme`, `auto_unlock`, `background`, `palette`, `widgets`, `hour24` (`true` or `false` forces a 24- or 12-hour clock in every theme), and `privacy` (`true`: `locky.sys.user()` and `locky.sys.hostname()` return generic names, and `locky.herdr` gives each agent its kind as the title and no workspace; widgets that show other personal data should check `locky.config.privacy`), and `message` (a line under the password field, such as "If found, call ..."; it stays visible while a theme hides the field). The Locky window's settings.json applies after init.lua and wins. |
 | `locky.config` | The current settings. |
 | `locky.version` | Locky's version. |
 

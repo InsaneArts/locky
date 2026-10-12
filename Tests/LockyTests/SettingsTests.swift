@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Locky
@@ -290,5 +291,43 @@ import Testing
         let user = Auth.user(privacy: true)
         #expect(user.name.isEmpty && user.login == "user" && user.host == "mac")
         #expect(Auth.user(privacy: false).login == NSUserName())
+    }
+}
+
+@MainActor
+@Suite struct LockMessageTests {
+    private func screen(authAnchor: Anchor, offset: CGPoint) -> LockScreenView {
+        let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var spec = Theme.Auth()
+        spec.anchor = authAnchor
+        spec.offset = offset
+        screen.auth = (NSView(), spec)
+        screen.authSize = CGSize(width: 240, height: 120)
+        screen.layout()
+        return screen
+    }
+
+    @Test func theMessageSitsUnderTheFieldWhenThereIsRoom() throws {
+        let screen = screen(authAnchor: .center, offset: .zero)
+        let auth = try #require(screen.auth?.view.frame)
+        let frame = screen.messageFrame(size: CGSize(width: 300, height: 20), scale: 1)
+        #expect(frame.minY == auth.maxY + 14)
+        #expect(frame.midX == auth.midX)
+    }
+
+    @Test func aFieldAtTheBottomEdgeGetsTheMessageAboveIt() throws {
+        let screen = screen(authAnchor: .bottom, offset: CGPoint(x: 0, y: -20))
+        let auth = try #require(screen.auth?.view.frame)
+        let frame = screen.messageFrame(size: CGSize(width: 300, height: 20), scale: 1)
+        #expect(frame.maxY == auth.minY - 14)
+    }
+
+    @Test func settingsCarryTheMessageToTheLockScreen() async throws {
+        let sandbox = try Sandbox()
+        try Settings(["message": .string("  If found, call 555-0100  ")]).save(config: sandbox.config)
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        let started = await runtime.start(theme: "default")
+        runtime.stop()
+        #expect(started.message == "If found, call 555-0100")
     }
 }
