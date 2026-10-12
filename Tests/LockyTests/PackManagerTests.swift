@@ -139,6 +139,34 @@ import Testing
         #expect(PackManager(path: sandbox.path()).specs().problems.first?.contains("two packages are named") == true)
     }
 
+    /// A NUL byte that reached git's arguments made Foundation raise an Objective-C exception, which ends the app.
+    @Test func specsRefuseControlCharacters() throws {
+        let sandbox = try Sandbox()
+        for spec in [#"{ src = "a/b\0" }"#, #"{ src = "a/b", version = "main\0" }"#, #"{ src = "a/b", name = "b\n" }"#, #"{ dir = "/tmp/x\0y" }"#] {
+            try sandbox.write("init.lua", "locky.pack.add({ \(spec) })")
+            let (specs, problems) = PackManager(path: sandbox.path()).specs()
+            #expect(specs.isEmpty, "\(spec)")
+            #expect(problems.first?.contains("must not contain control characters") == true, "\(spec)")
+        }
+        // settings.json's packages too: JSON can hold a NUL.
+        try sandbox.write("init.lua", "-- nothing")
+        try sandbox.write("settings.json", #"{ "packs": [ { "src": "a/b", "version": "main\u0000" } ] }"#)
+        let (specs, problems) = PackManager(path: sandbox.path()).specs()
+        #expect(specs.isEmpty)
+        #expect(problems == ["settings.json packs: [1] spec.version: must not contain control characters"])
+    }
+
+    /// A NUL inside an argument makes Process raise; one at the end cuts the argument short.
+    @Test func gitNeverRunsWithANulByte() throws {
+        let sandbox = try Sandbox()
+        let manager = PackManager(path: sandbox.path())
+        for argument in ["origin/ma\0in^{commit}", "main\0"] {
+            let result = manager.runGit(["-C", sandbox.packs.path, "rev-parse", "--verify", "--quiet", argument])
+            #expect(!result.ok)
+            #expect(result.error.contains("NUL"))
+        }
+    }
+
     // MARK: check
 
     /// Adds `repo` as the package "hello" at `version` and syncs it.

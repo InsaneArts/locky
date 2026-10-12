@@ -290,7 +290,13 @@ struct PackManager {
         (value.count == 40 || value.count == 64) && value.allSatisfy(\.isHexDigit)
     }
 
-    private func runGit(_ arguments: [String], timeout: Double = 30) -> (ok: Bool, output: String, error: String) {
+    /// Not private: the tests call it.
+    func runGit(_ arguments: [String], timeout: Double = 30) -> (ok: Bool, output: String, error: String) {
+        // Process raises an Objective-C exception for a NUL inside an argument, which would end the app (and a
+        // lock with it), and cuts the argument short at a NUL at its end.
+        guard !arguments.contains(where: { $0.contains("\0") }) else {
+            return (false, "", "a git argument contains a NUL byte")
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: git)
         // Give up on a connection that stalls, instead of waiting forever.

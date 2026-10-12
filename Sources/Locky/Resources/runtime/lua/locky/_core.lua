@@ -957,6 +957,12 @@ local function pack_spec(spec)
   validate("spec.version", spec.version, function(v)
     return v == nil or v:sub(1, 1) ~= "-", "must not start with '-'"
   end)
+  -- A NUL byte in git's arguments ends the app: Foundation raises an Objective-C exception for it.
+  for _, field in ipairs({ "src", "version", "name", "dir" }) do
+    validate("spec." .. field, spec[field], function(v)
+      return v == nil or not v:find("%c"), "must not contain control characters"
+    end)
+  end
   local src = spec.src
   if src and src:match("^[%w_.-]+/[%w_.-]+$") then
     src = "https://github.com/" .. src
