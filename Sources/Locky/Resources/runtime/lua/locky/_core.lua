@@ -443,6 +443,12 @@ locky.config = {
   palette = {},
   -- Options for every instance of a widget, such as { clock = { format = "HH:mm" } }.
   widgets = {},
+  -- true or false forces a 24- or 12-hour clock in every theme; nil follows the system.
+  hour24 = nil,
+  -- Hides agent titles and workspaces, your name, and the computer's name from widgets.
+  privacy = false,
+  -- A line under the password field, such as "If found, call ...".
+  message = nil,
 }
 
 function locky.setup(opts)
@@ -837,6 +843,31 @@ local function pack_spec(spec)
   return { name = name, src = src, version = spec.version, dir = spec.dir and locky.fs.expand(spec.dir) }
 end
 
+-- `from` is "settings" for the Locky window's packages (settings.json) and "config" for init.lua's.
+local function add_packs(specs, from, level)
+  for _, spec in ipairs(specs) do
+    local normalized = pack_spec(spec)
+    normalized.from = from
+    local duplicate
+    for _, existing in ipairs(pack_specs) do
+      -- The Mac's file system ignores case, so "One" and "one" would share a folder.
+      if existing.name:lower() == normalized.name:lower() then
+        duplicate = existing
+        break
+      end
+    end
+    if duplicate and duplicate.from == "settings" and from ~= "settings" then
+      -- The window added it before init.lua ran; settings.json wins, as it does everywhere.
+      duplicate.in_config = true
+    elseif duplicate then
+      error(("two packages are named %q; give one a name = ..."):format(normalized.name), level)
+    else
+      insert(pack_specs, normalized)
+      native.pack_add(normalized.name, normalized.dir)
+    end
+  end
+end
+
 --- Adds plugins: "user/repo", a git URL, or { src = ..., version = "v1.2.0" | branch | commit, name = ... }.
 --- { dir = "~/code/my-plugin" } adds a local folder, for writing a plugin.
 function locky.pack.add(specs)
@@ -844,17 +875,7 @@ function locky.pack.add(specs)
   if type(specs[1]) ~= "string" and type(specs[1]) ~= "table" and (specs.src or specs.dir) then
     specs = { specs }
   end
-  for _, spec in ipairs(specs) do
-    local normalized = pack_spec(spec)
-    for _, existing in ipairs(pack_specs) do
-      -- The Mac's file system ignores case, so "One" and "one" would share a folder.
-      if existing.name:lower() == normalized.name:lower() then
-        error(("two packages are named %q; give one a name = ..."):format(normalized.name), 2)
-      end
-    end
-    insert(pack_specs, normalized)
-    native.pack_add(normalized.name, normalized.dir)
-  end
+  add_packs(specs, "config", 3)
 end
 
 -------------------------------------------------------------------------------
@@ -896,7 +917,39 @@ local instances, last_instance = {}, 0
 return {
   config = function()
     local config = locky.config
-    return { theme = config.theme, auto_unlock = config.auto_unlock }
+    return {
+      theme = config.theme, auto_unlock = config.auto_unlock, hour24 = config.hour24, privacy = config.privacy == true,
+      message = type(config.message) == "string" and config.message or nil,
+    }
+  end,
+
+  -- settings.json's packages, before init.lua runs. Returns a message for each one that failed.
+  settings_packs = function(specs)
+    local failures = {}
+    for i, spec in ipairs(specs) do
+      local ok, message = pcall(add_packs, { spec }, "settings", 0)
+      if not ok then
+        -- A position inside Locky's core says nothing to the user.
+        failures[#failures + 1] = ("[%d] %s"):format(i, (tostring(message):gsub("^locky/_core%.lua:%d+: ", "")))
+      end
+    end
+    return failures
+  end,
+
+  -- settings.json's values, after init.lua, so they win.
+  -- Returns a message for each value of the wrong type; those are skipped.
+  apply_settings = function(settings)
+    local failures = {}
+    for _, key in ipairs({ "theme", "auto_unlock", "hour24", "privacy", "message" }) do
+      local expected = ({ theme = "string", auto_unlock = "number", hour24 = "boolean", privacy = "boolean", message = "string" })[key]
+      local value = settings[key]
+      if value ~= nil and type(value) ~= expected then
+        failures[#failures + 1] = ("%s: expected a %s, got %s"):format(key, expected, type(value))
+      elseif value ~= nil then
+        locky.config[key] = value
+      end
+    end
+    return failures
   end,
 
   load_theme = function(name)

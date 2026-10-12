@@ -75,12 +75,20 @@ final class LuaRuntime: @unchecked Sendable {
         var autoUnlock: Double
         /// Errors in init.lua, plugin scripts, or the theme: for the preview and `locky check`.
         var problems: [String]
+        /// true or false forces a 24- or 12-hour clock; nil follows the system.
+        var hour24: Bool? = nil
+        /// Hides the user's name in the password field (Lua hides it in widgets).
+        var privacy = false
+        /// A line under the password field.
+        var message: String? = nil
     }
 
     let queue = DispatchQueue(label: "com.tornikegomareli.Locky.lua", qos: .userInitiated)
     let environment: Environment
     private let delegate: Delegate
     private(set) var path: RuntimePath
+    /// settings.json, read when Lua boots unless the host passes its own (the theme editor's preview does).
+    private var settings: Settings?
     private var vm: LuaVM?
     private var entries: [String: LuaRef] = [:]
     private var problems: [String] = []
@@ -113,9 +121,10 @@ final class LuaRuntime: @unchecked Sendable {
 
     static let log = Logger(subsystem: "com.tornikegomareli.Locky", category: "lua")
 
-    init(path: RuntimePath = .standard(), environment: Environment = Environment(), delegate: Delegate) {
+    init(path: RuntimePath = .standard(), environment: Environment = Environment(), settings: Settings? = nil, delegate: Delegate) {
         self.path = path
         self.environment = environment
+        self.settings = settings
         self.delegate = delegate
     }
 
@@ -164,10 +173,14 @@ final class LuaRuntime: @unchecked Sendable {
             invalidate(id)
         }
         emit("lock")
-        return Started(theme: theme, instances: instances, autoUnlock: autoUnlock, problems: problems)
+        let message = config["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Started(theme: theme, instances: instances, autoUnlock: autoUnlock, problems: problems, hour24: config["hour24"].bool,
+                       privacy: config["privacy"].bool ?? false, message: message?.isEmpty == false ? String(message!.prefix(200)) : nil)
     }
 
     /// Loads the Lua core and runs the user's files, without a theme: for `locky check` and the pack manager.
+    /// settings.json comes in two parts: its packages before init.lua, so init.lua can require them, and
+    /// its values after init.lua, so they win.
     func boot() throws {
         let vm = try LuaVM()
         self.vm = vm
@@ -177,9 +190,29 @@ final class LuaRuntime: @unchecked Sendable {
         for (name, value) in exported {
             if let ref = value.function { entries[name] = ref }
         }
+        if settings == nil {
+            let (loaded, problem) = Settings.load(config: path.config)
+            if let problem { report(problem) }
+            settings = loaded
+        }
+        let settings = settings ?? Settings()
+        if !settings.packs.isEmpty {
+            do {
+                let failures = try call("settings_packs", [.array(settings.packs)], budget: Budget.callback).first?.array ?? []
+                for case .string(let failure) in failures { report("settings.json packs: \(failure)") }
+            } catch {
+                report("settings.json packs: \(LuaError(String(describing: error)).summary)")
+            }
+        }
         let initFile = path.config.appending(path: "init.lua")
         if FileManager.default.fileExists(atPath: initFile.path) {
             runFile(initFile, budget: Budget.config)
+        }
+        do {
+            let failures = try call("apply_settings", [settings.lua], budget: Budget.callback).first?.array ?? []
+            for case .string(let failure) in failures { report("settings.json \(failure)") }
+        } catch {
+            report("settings.json: \(LuaError(String(describing: error)).summary)")
         }
         for script in path.pluginScripts() {
             runFile(script, budget: Budget.pluginScript)
