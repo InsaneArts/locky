@@ -1020,19 +1020,43 @@ local function load_theme(name, with_edit)
   return normalized
 end
 
--- A copy with only strings, numbers, booleans, and tables: for data the host reads.
-local function plain(value)
+-- A copy with only strings, numbers, booleans, and tables: for data the host reads. The host takes string keys
+-- and a list without gaps, nothing else, and a table 16 levels down is left out, so a cycle ends. Raw access:
+-- a metamethod must not fail the copy.
+local function plain(value, depth)
+  depth = depth or 0
   local kind = type(value)
   if kind == "string" or kind == "number" or kind == "boolean" then
     return value
-  elseif kind ~= "table" then
+  elseif kind ~= "table" or depth >= 16 then
     return nil
   end
   local copy = {}
-  for key, item in pairs(value) do
-    copy[key] = plain(item)
+  for key, item in next, value do
+    if type(key) == "string" then
+      copy[key] = plain(item, depth + 1)
+    end
+  end
+  for i = 1, rawlen(value) do
+    copy[i] = plain(rawget(value, i), depth + 1)
+    if copy[i] == nil then
+      break
+    end
   end
   return copy
+end
+
+-- A field the host reads as text: a string, or nothing.
+local function text(value)
+  return type(value) == "string" and value or nil
+end
+
+-- An error as text. Only a string or a number: tostring would run an error object's own __tostring, which may fail.
+local function error_text(e)
+  if type(e) == "string" or type(e) == "number" then
+    return tostring(e)
+  end
+  return ("(error object is a %s value)"):format(type(e))
 end
 
 -------------------------------------------------------------------------------
@@ -1281,19 +1305,19 @@ return {
   theme_names = locky.theme.list,
   widget_names = locky.widget.list,
 
-  -- Each theme's name, description, author, folder, and palette, or the error that stops it from loading.
+  -- Each theme's name, description, author, folder, and palette, or the error that stops it from loading. The
+  -- window reads the list at once, so a theme that fails it gets an error row of its own.
   theme_infos = function()
     local list = {}
     for _, name in ipairs(locky.theme.list()) do
-      local ok, theme = pcall(read_theme, name)
-      if ok then
-        list[#list + 1] = {
-          id = name, name = plain(theme.name) or name, description = plain(theme.description), author = plain(theme.author),
-          dir = theme.dir, palette = plain(theme.palette),
+      local ok, info = pcall(function()
+        local theme = read_theme(name)
+        return {
+          id = name, name = text(theme.name) or name, description = text(theme.description), author = text(theme.author),
+          dir = text(theme.dir), palette = plain(theme.palette),
         }
-      else
-        list[#list + 1] = { id = name, name = name, error = tostring(theme) }
-      end
+      end)
+      list[#list + 1] = ok and info or { id = name, name = name, error = error_text(info) }
     end
     return list
   end,
@@ -1311,12 +1335,16 @@ return {
     return { id = name, name = theme.name, background = plain(theme.background), widgets = widgets_list }
   end,
 
-  -- Every widget: name, description, the file that defines it, and whether it sits on a card by default.
+  -- Every widget: name, description, the file that defines it, and whether it sits on a card by default. Like
+  -- theme_infos, one widget that fails gets an error row.
   widget_catalog = function()
     local list = {}
     for _, name in ipairs(locky.widget.list()) do
       local definition = widgets[name]
-      list[#list + 1] = { name = name, description = plain(definition.description), file = definition.file, card = definition.card == true }
+      local ok, info = pcall(function()
+        return { name = name, description = text(definition.description), file = text(definition.file), card = definition.card == true }
+      end)
+      list[#list + 1] = ok and info or { name = name, error = error_text(info) }
     end
     return list
   end,

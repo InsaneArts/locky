@@ -347,6 +347,29 @@ import Testing
         // The core widgets are there too.
         #expect(catalog.contains { $0["name"] == .string("clock") })
     }
+
+    /// The window reads these lists with try?, so one theme or widget that failed them emptied the whole page.
+    @Test func oneOddThemeOrWidgetSpoilsOnlyItsOwnRow() throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("themes/cycle.lua", "local p = { accent = '#ff0000' } p.self = p return { palette = p }")
+        try sandbox.write("themes/keys.lua", "return { palette = { [true] = '#ffffff', [0] = '#000000', [2.5] = 'x', accent = '#00ff00' } }")
+        try sandbox.write("themes/odd.lua", "return { name = { 'not text' }, author = 5, dir = function() end }")
+        try sandbox.write("themes/broken.lua", "error(setmetatable({}, { __tostring = function() error('worse') end }))")
+        try sandbox.write("plugin/z.lua", "local d = {} d[1] = d locky.widget.define('z', { description = d, render = function() end })")
+        let runtime = runtime(sandbox)
+        _ = runtime.bootForTest()
+        let infos = try runtime.sync { try runtime.call("theme_infos", budget: 5) }.first?.array ?? []
+        func info(_ id: String) -> LuaValue { infos.first { $0["id"] == .string(id) } ?? .nil }
+        #expect(info("t")["error"] == .nil && info("default")["name"] == .string("Aurora"))
+        #expect(info("cycle")["palette"]["accent"] == .string("#ff0000"))
+        #expect(info("keys")["palette"]["accent"] == .string("#00ff00"))
+        #expect(info("odd")["name"] == .string("odd") && info("odd")["author"] == .nil && info("odd")["dir"] == .nil)
+        #expect(info("broken")["error"] == .string("(error object is a table value)"))
+
+        let catalog = try runtime.sync { try runtime.call("widget_catalog", budget: 1) }.first?.array ?? []
+        #expect(catalog.contains { $0["name"] == .string("z") && $0["description"] == .nil })
+        #expect(catalog.contains { $0["name"] == .string("three") && $0["description"] == .string("widget three") })
+    }
 }
 
 @Suite struct HourFormatTests {
