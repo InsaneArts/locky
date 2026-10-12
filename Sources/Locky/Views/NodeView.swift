@@ -10,6 +10,8 @@ struct LockyStyle: Equatable, Sendable {
     var scale: CGFloat = 1
     /// true or false forces a 24- or 12-hour "time"; nil follows the system.
     var hour24: Bool?
+    /// The battery saver: nothing animates, digits included.
+    var still = false
 
     /// A palette role, a color name, or "#rrggbb[aa]".
     func color(_ name: String) -> Color {
@@ -167,7 +169,8 @@ struct NodeView: View, Equatable {
     }
 
     private var animation: Animation? {
-        switch node.animate {
+        guard !style.still else { return nil }
+        return switch node.animate {
         case "smooth": .smooth
         case "spring": .spring(duration: 0.5, bounce: 0.3)
         case "linear": .linear(duration: 0.3)
@@ -193,12 +196,12 @@ struct NodeView: View, Equatable {
         case .text(let text):
             // Rolling digits draw every frame while they move, on the CPU: worth it for a value that changes
             // now and then, too costly for one that changes every second or two.
-            let roll = node.numeric ?? false
+            let roll = (node.numeric ?? false) && !style.still
             styledText(Text(text))
                 .contentTransition(roll ? .numericText() : .identity)
                 .animation(roll ? .smooth(duration: 0.4) : nil, value: text)
         case .time(let format):
-            let roll = node.numeric ?? !Self.showsSeconds(format)
+            let roll = (node.numeric ?? !Self.showsSeconds(format)) && !style.still
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let text = SystemInfo.format(context.date, format, hour24: style.hour24)
                 styledText(Text(text))

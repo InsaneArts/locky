@@ -7,22 +7,23 @@ import MetalKit
 enum Backgrounds {
     /// `overlay`: drawn above the widgets with transparency, for scanlines, grain, or a vignette.
     @MainActor
-    static func makeView(_ background: Theme.Background, screen: NSScreen?, overlay: Bool = false) -> NSView {
+    /// `still` (the battery saver) draws a shader once and keeps a video on its first frame.
+    static func makeView(_ background: Theme.Background, screen: NSScreen?, overlay: Bool = false, still: Bool = false) -> NSView {
         if overlay {
             let container = OverlayContainer()
-            let content = makeView(background, screen: screen, transparent: true)
+            let content = makeView(background, screen: screen, transparent: true, still: still)
             content.autoresizingMask = [.width, .height]
             container.addSubview(content)
             return container
         }
-        return makeView(background, screen: screen, transparent: false)
+        return makeView(background, screen: screen, transparent: false, still: still)
     }
 
     @MainActor
-    private static func makeView(_ background: Theme.Background, screen: NSScreen?, transparent: Bool) -> NSView {
+    private static func makeView(_ background: Theme.Background, screen: NSScreen?, transparent: Bool, still: Bool) -> NSView {
         switch background {
         case .shader(let url, let colors, let speed, let resolution, let fps, let params, let dim):
-            return ShaderView.make(url: url, colors: colors, speed: speed, resolution: resolution, fps: fps, params: params, dim: dim,
+            return ShaderView.make(url: url, colors: colors, speed: speed, resolution: resolution, fps: still ? 0 : fps, params: params, dim: dim,
                                    transparent: transparent)
         case .wallpaper(let blur, let dim, let tint, let tintAmount):
             let view = PictureView(dim: dim, tint: tint, tintAmount: tintAmount)
@@ -36,7 +37,7 @@ enum Backgrounds {
             view.load(url, blur: blur)
             return view
         case .video(let url, let dim):
-            return VideoView(url: url, dim: dim)
+            return VideoView(url: url, dim: dim, playing: !still)
         case .color(let hex):
             return GradientView(colors: [hex, hex], angle: 180, noise: 0)
         case .gradient(let colors, let angle, let noise):
@@ -271,7 +272,8 @@ final class VideoView: NSView {
     private var looper: AVPlayerLooper?
     private let shade = CALayer()
 
-    init(url: URL, dim: Double) {
+    /// Not `playing`, it shows the video's first frame.
+    init(url: URL, dim: Double, playing: Bool = true) {
         super.init(frame: .zero)
         wantsLayer = true
         let playerLayer = AVPlayerLayer(player: player)
@@ -282,7 +284,7 @@ final class VideoView: NSView {
         player.isMuted = true
         player.preventsDisplaySleepDuringVideoPlayback = false
         looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: url))
-        player.play()
+        if playing { player.play() }
     }
 
     required init?(coder: NSCoder) { fatalError() }

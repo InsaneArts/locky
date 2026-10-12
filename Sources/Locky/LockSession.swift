@@ -49,6 +49,9 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var ended = false
     private let banner = SafetyBanner.Model()
+    /// The battery saver: on battery or in Low Power Mode, with settings.json's battery_saver on, nothing moves.
+    private var still = false
+    private var powerObserver: PowerObserver?
     /// When to take a photo of whoever types wrong passwords, and the photos this lock took.
     private lazy var intruder = IntruderPolicy(settings: options.settings)
     private(set) var photos: [URL] = []
@@ -71,6 +74,10 @@ final class LockSession: NSObject, NSWindowDelegate {
             napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
         }
         observeSystem()
+        still = Self.saving(options.settings)
+        if mode != .embedded, options.settings.batterySaver {
+            powerObserver = PowerObserver { [weak self] in self?.powerChanged() }
+        }
 
         let environment = LuaRuntime.Environment()
         environment.keyboard = Keyboard.current()
@@ -137,6 +144,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         autoUnlock?.cancel()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
+        powerObserver = nil
         idleTimer?.cancel()
         if let keyboardObserver { DistributedNotificationCenter.default().removeObserver(keyboardObserver) }
         if mode == .lock { NSApp.presentationOptions = [] }
@@ -367,12 +375,12 @@ final class LockSession: NSObject, NSWindowDelegate {
         for (index, screen) in screens.enumerated() {
             let main = index == 0
             let scale = Layout.scale(for: screen.bounds.size)
-            let style = LockyStyle(palette: theme.palette, font: theme.font, scale: scale, hour24: started.hour24)
+            let style = LockyStyle(palette: theme.palette, font: theme.font, scale: scale, hour24: started.hour24, still: still)
             screen.style = style
             let display = windows.indices.contains(index) ? windows[index].screen : NSScreen.main
-            screen.background = Backgrounds.makeView(theme.background, screen: display)
+            screen.background = Backgrounds.makeView(theme.background, screen: display, still: still)
             if let overlay = theme.overlay {
-                screen.overlay = Backgrounds.makeView(overlay, screen: display, overlay: true)
+                screen.overlay = Backgrounds.makeView(overlay, screen: display, overlay: true, still: still)
             }
             for (offset, placement) in theme.widgets.enumerated() where main || placement.allDisplays {
                 let host = WidgetHost(placement: placement, theme: theme, style: style, showsErrors: mode != .lock)
@@ -410,6 +418,22 @@ final class LockSession: NSObject, NSWindowDelegate {
             screen.setAuthVisible(false, dim: auth.dim, animated: true)
             runtime?.queue.async { [runtime] in runtime?.emit("auth_hidden") }
         }
+    }
+
+    // MARK: Power
+
+    private static func saving(_ settings: Settings) -> Bool {
+        settings.batterySaver && (Power.onBattery || Power.lowPowerMode)
+    }
+
+    /// The Mac went on battery or off it, or into Low Power Mode or out of it: the lock is drawn again, still or
+    /// moving, with each widget's latest view and what was typed.
+    private func powerChanged() {
+        let now = Self.saving(options.settings)
+        guard now != still else { return }
+        still = now
+        LogFile.shared.write(level: "info", message: now ? "battery saver on" : "battery saver off", source: "locky")
+        if mode == .lock { rebuildForDisplays() }
     }
 
     // MARK: Safety
