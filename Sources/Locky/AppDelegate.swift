@@ -15,9 +15,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let model = AppModel(store: store)
         model.lockNow = { [weak self] in self?.lockNow() }
         model.preview = { [weak self] theme in self?.preview(theme: theme) }
+        model.recordingShortcut = { [weak self] recording in
+            guard let self else { return }
+            recordingShortcut = recording
+            if recording { hotkeys.unregister() } else { applyShortcut() }
+        }
         return model
     }()
     private var windowController: LockyWindowController?
+    /// The Lock Now shortcut, from settings.json.
+    private lazy var hotkeys = HotkeyCenter { [weak self] in self?.lockNow() }
+    /// While Settings records a new shortcut, the old one stays free so the recorder sees the keys.
+    private var recordingShortcut = false
     /// The theme picked in the menu (settings.json's theme). It wins over init.lua's until "Use init.lua's
     /// Theme" clears it.
     private var pickedTheme: String? {
@@ -30,9 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.migrateMenuTheme()
         store.watch()
         store.onChange = { [weak self] in
-            guard let self, windowController?.window?.isVisible == true else { return }
-            model.refresh()
+            guard let self else { return }
+            applyAppSettings()
+            if windowController?.window?.isVisible == true { model.refresh() }
         }
+        applyAppSettings()
         scheduleUpdateChecks()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locky")
@@ -51,6 +62,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.selectedTheme = launch.theme
             model.screenshots = launch.behind
             showWindow(section, behind: launch.behind, size: launch.size)
+        }
+    }
+
+    /// The settings the app itself acts on: the Lock Now shortcut.
+    private func applyAppSettings() {
+        applyShortcut()
+    }
+
+    private func applyShortcut() {
+        guard !recordingShortcut else { return }
+        guard let shortcut = store.settings.shortcut else {
+            hotkeys.unregister()
+            model.shortcutProblem = nil
+            return
+        }
+        guard shortcut != hotkeys.shortcut else { return }
+        do {
+            try hotkeys.register(shortcut)
+            model.shortcutProblem = nil
+        } catch {
+            model.shortcutProblem = error.localizedDescription
         }
     }
 

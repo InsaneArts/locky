@@ -245,14 +245,21 @@ private struct MessageField: View {
     }
 }
 
-/// Launch at login and the Lock Now shortcut.
+/// The Lock Now shortcut.
 private struct GeneralSettings: View {
     let model: AppModel
 
     var body: some View {
         Section("General") {
-            Text("Launch at login and the lock shortcut come with the system services.")
-                .foregroundStyle(.secondary)
+            ShortcutRecorder(shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
+                model.store.update { $0.shortcut = shortcut }
+            }), onRecordingChange: model.recordingShortcut) {
+                Text("Lock Now shortcut")
+                Text("Works in every app. Click to record; Delete clears it.")
+            }
+            if let problem = model.shortcutProblem {
+                Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
         }
     }
 }

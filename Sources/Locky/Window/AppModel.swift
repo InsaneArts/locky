@@ -52,8 +52,13 @@ final class AppModel {
     /// The editors and terminals on this Mac, found once when the Config page first needs them.
     private(set) var editors: (editors: [Editor], terminals: [Terminal])?
 
+    /// Why the Lock Now shortcut could not be registered, such as another app holding it.
+    var shortcutProblem: String?
+
     /// What the window asks the app to do.
     @ObservationIgnored var lockNow: () -> Void = {}
+    /// Settings records a new shortcut (true) or stops (false).
+    @ObservationIgnored var recordingShortcut: (Bool) -> Void = { _ in }
     @ObservationIgnored var preview: (_ theme: String?) -> Void = { _ in }
 
     @ObservationIgnored private var refreshing: Task<Void, Never>?
