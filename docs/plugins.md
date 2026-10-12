@@ -87,7 +87,9 @@ view and property, and [api.md](api.md) for `locky.*`.
 
 - **Time budgets.** Every call into Lua has one: 100 ms for `render`, timers, events, and process
   callbacks; 500 ms for `init`; 2 s for `init.lua`; 1 s for each `plugin/` script. Locky stops code that
-  runs longer, even inside `pcall` or a coroutine.
+  runs longer, even inside `pcall` or a coroutine. A budget counts the time the code runs, so a Mac busy
+  with other work does not stop a widget; time spent waiting (a slow file read) counts once a call has
+  held the Lua queue for ten times its budget plus a second.
 - **Failing widgets stop.** A widget that fails three times in a row, or runs past its budget once, is
   stopped with all its timers and processes. The others keep going. A call that a long C function (a big
   `table.move`, a slow pattern) carried past its budget counts as a failure too.
@@ -101,7 +103,8 @@ view and property, and [api.md](api.md) for `locky.*`.
   a crash, and sizes and offsets stay within 100,000 points.
 - **No blocking calls.** There is no `os.execute` or `io.popen`: use `locky.system`, which never blocks.
   `io.open` and `io.lines` open only regular files (a named pipe would block). There is no `os.exit`, no C
-  modules, no bytecode, no `__gc` finalizers, and `debug` has only `traceback` and `getinfo`.
+  modules, no bytecode, no `__gc` finalizers, and `debug` has only `traceback` and `getinfo` (which never
+  returns a function: that would hand plugins the raw `pcall`, which can catch a timeout).
 - **No keyboard.** Widgets never get keystrokes or clicks. No event carries any part of the password.
 
 Plugins are trusted code, like Neovim plugins: they run as you and may read your files and run programs.

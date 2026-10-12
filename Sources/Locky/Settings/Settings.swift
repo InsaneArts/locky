@@ -1,7 +1,8 @@
 import Foundation
 
-/// ~/.config/locky/settings.json: what the Locky window changes. Lua applies it right after init.lua, so a
-/// key set here wins over init.lua, and a missing key leaves init.lua's value (or the default) in place.
+/// ~/.config/locky/settings.json: what the Locky window changes. Lua applies it before init.lua runs (so the
+/// modules init.lua requires already see privacy mode) and again after the plugin scripts, so a key set here
+/// wins over init.lua and plugins, and a missing key leaves their value (or the default) in place.
 /// The app's own settings (the shortcut, auto-lock, power) live here too, so dotfiles carry them. Keys
 /// this version does not know stay in the file when the window saves it.
 struct Settings: Equatable, Sendable {
