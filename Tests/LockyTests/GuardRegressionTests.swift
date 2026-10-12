@@ -77,6 +77,59 @@ import Testing
             """) == [.bool(true)])
     }
 
+    /// Inside a pcall'd function, debug.getinfo(2, "f").func was the C pcall under Locky's own, which catches the
+    /// timeout error: a loop of it ran 2 s of CPU time under a 0.1 s budget.
+    @Test func getinfoGivesNoFunctions() throws {
+        let runtime = try runtime()
+        #expect(try runtime.eval("""
+            local functions = 0
+            local function count(info)
+              if info and info.func then functions = functions + 1 end
+            end
+            pcall(function()
+              count(debug.getinfo(2, "f"))
+              count(debug.getinfo(2))
+              count(debug.getinfo(coroutine.running(), 2, "f"))
+            end)
+            local co = coroutine.create(function() pcall(coroutine.yield) end)
+            coroutine.resume(co)
+            for level = 0, 3 do count(debug.getinfo(co, level, "f")) end
+            count(debug.getinfo(print, "f"))
+            return functions
+            """) == [.int(0)])
+        let cpu = cpuSeconds {
+            #expect(throws: LuaError.self) {
+                try runtime.eval("""
+                    local raw
+                    pcall(function() raw = debug.getinfo(2, "f").func end)
+                    local start = os.clock()
+                    while os.clock() - start < 2 do raw(function() while true do end end) end
+                    """, budget: 0.1)
+            }
+        }
+        #expect(cpu < 1)
+    }
+
+    /// Plugins see the same levels as before, and Locky's own users (print's file:line, package_dir) still work.
+    @Test func getinfoKeepsItsLevels() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/where.lua", "DIR = locky.fs.package_dir()")
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        #expect(runtime.bootForTest().isEmpty)
+        #expect(try runtime.eval("return DIR") == [.string(sandbox.config.path)])
+        #expect(try runtime.eval("""
+            local function f()
+              local running = debug.getinfo(coroutine.running(), 1, "l").currentline
+              return debug.getinfo(1, "S").short_src, debug.getinfo(1, "l").currentline, debug.getinfo(2, "l").currentline, running
+            end
+            local source, here, caller, running = f()
+            return source, here, caller, running
+            """) == [.string("eval"), .int(3), .int(5), .int(2)])
+        let marker = "getinfo-\(UUID().uuidString)"
+        _ = try runtime.eval("print('\(marker)')")
+        #expect(LogFile.shared.recent.contains { $0.contains("eval:1: \(marker)") })
+    }
+
     @Test func pipesAreRefused() throws {
         let runtime = try runtime()
         let fifo = FileManager.default.temporaryDirectory.appending(path: "locky-fifo-\(UUID().uuidString)").path

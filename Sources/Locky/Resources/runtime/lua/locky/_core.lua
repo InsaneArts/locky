@@ -5,7 +5,8 @@ local native, budget_exceeded = ...
 
 local type, pairs, ipairs, select, tostring, rawget, error = type, pairs, ipairs, select, tostring, rawget, error
 local raw_pcall, raw_xpcall = pcall, xpcall
-local raw_create, raw_resume = coroutine.create, coroutine.resume
+local raw_create, raw_resume, raw_running = coroutine.create, coroutine.resume, coroutine.running
+local raw_getinfo = debug.getinfo
 local raw_load, raw_loadfile, raw_setmetatable = load, loadfile, setmetatable
 local pack, unpack, concat, insert, sort = table.pack, table.unpack, table.concat, table.insert, table.sort
 
@@ -118,9 +119,37 @@ function setmetatable(t, mt)
   return raw_setmetatable(t, mt)
 end
 
+-- debug.getinfo without `func`: a function on the stack can be the C pcall under Locky's pcall, and called
+-- directly it would catch the timeout error and keep going. Levels count from the caller, as before.
+function debug.getinfo(...)
+  local thread, level, what = ...
+  if type(thread) ~= "thread" then
+    thread, level, what = nil, thread, level
+  end
+  -- On the running thread's stack, this function is one more level.
+  if type(level) == "number" and level > 0 and (thread == nil or thread == raw_running()) then
+    level = level + 1
+  end
+  if what == nil then
+    what = "lnSrtu"  -- Lua's default, less "f"
+  elseif type(what) == "string" then
+    what = what:gsub("f", "")
+  end
+  local info
+  if thread then
+    info = raw_getinfo(thread, level, what)
+  else
+    info = raw_getinfo(level, what)
+  end
+  if info then
+    info.func = nil
+  end
+  return info
+end
+
 -- Where a call came from, as "file:line", for logs and errors.
 local function caller(level)
-  local info = debug.getinfo(level + 1, "Sl")
+  local info = raw_getinfo(level + 1, "Sl")
   if not info then
     return "?"
   end
@@ -493,7 +522,7 @@ end
 
 --- The folder of the package that holds the calling file: where its assets/ and shaders/ live.
 function locky.fs.package_dir(level)
-  local source = debug.getinfo((level or 1) + 1, "S").source
+  local source = raw_getinfo((level or 1) + 1, "S").source
   if source:sub(1, 1) ~= "@" then
     return nil
   end
@@ -648,7 +677,7 @@ function locky.widget.define(name, spec)
   local definition = tbl.extend("force", spec)
   definition.name = name
   definition.source = caller(2)
-  local info = debug.getinfo(2, "S")
+  local info = raw_getinfo(2, "S")
   definition.file = info and info.source:match("^@(.*)")
   widgets[name] = definition
   return definition
