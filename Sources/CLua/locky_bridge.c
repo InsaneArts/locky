@@ -14,9 +14,15 @@ double locky_cpu_now(void) {
 
 /* A budget counts the time the code ran, not time it waited for a busy CPU: a Mac busy with something else
  * must not stop a widget that works. The wall clock is ten times cheaper to read, and CPU time never runs
- * ahead of it, so the thread's CPU time is read only once the wall clock is past its deadline. */
+ * ahead of it, so the thread's CPU time is read only once the wall clock is past its deadline. Waiting is
+ * free only until the hard deadline: a loop of calls that block (a slow network file, IPC) uses almost no
+ * CPU time, yet holds the Lua queue. */
 static int locky_expired(const LockyGuard *g) {
-    return g->deadline > 0 && locky_now() > g->deadline && locky_cpu_now() > g->cpu_deadline;
+    if (g->deadline <= 0) {
+        return 0;
+    }
+    double now = locky_now();
+    return now > g->deadline && (now > g->hard_deadline || locky_cpu_now() > g->cpu_deadline);
 }
 
 LockyGuard *locky_guard(lua_State *L) {
@@ -151,6 +157,12 @@ void locky_openlibs(lua_State *L) {
 
 static int locky_trampoline(lua_State *L) {
     LockyGuard *g = locky_guard(L);
+    /* The count hook runs every 1000 instructions, and a loop around a call that blocks runs only a few per
+     * call: a loop of 1 s reads would reach the hook after minutes. */
+    if (g->deadline > 0 && (g->timed_out || locky_expired(g))) {
+        g->timed_out = 1;
+        return luaL_error(L, LOCKY_TIMEOUT);
+    }
     int index = (int)lua_tointeger(L, lua_upvalueindex(1));
     int results = g->dispatch(L, g->context, index);
     if (results < 0) {
@@ -181,19 +193,26 @@ static int locky_traceback(lua_State *L) {
 int locky_pcall(lua_State *L, int nargs, int nresults, double budget) {
     LockyGuard *g = locky_guard(L);
     double outer_deadline = g->deadline, outer_cpu_deadline = g->cpu_deadline;
+    double outer_hard_deadline = g->hard_deadline;
     int outer_timed_out = g->timed_out;
     int outer_memory_error = g->memory_error;
 
-    double deadline = budget > 0 ? locky_now() + budget : 0;
+    double now = locky_now();
+    double deadline = budget > 0 ? now + budget : 0;
     double cpu_deadline = budget > 0 ? locky_cpu_now() + budget : 0;
+    double hard_deadline = budget > 0 ? now + budget * 10 + 1 : 0;
     if (outer_deadline > 0 && (deadline == 0 || outer_deadline < deadline)) {
         deadline = outer_deadline;
     }
     if (outer_deadline > 0 && (cpu_deadline == 0 || outer_cpu_deadline < cpu_deadline)) {
         cpu_deadline = outer_cpu_deadline;
     }
+    if (outer_deadline > 0 && (hard_deadline == 0 || outer_hard_deadline < hard_deadline)) {
+        hard_deadline = outer_hard_deadline;
+    }
     g->deadline = deadline;
     g->cpu_deadline = cpu_deadline;
+    g->hard_deadline = hard_deadline;
     g->timed_out = outer_timed_out;
     g->memory_error = 0;
 
@@ -216,6 +235,7 @@ int locky_pcall(lua_State *L, int nargs, int nresults, double budget) {
 
     g->deadline = outer_deadline;
     g->cpu_deadline = outer_cpu_deadline;
+    g->hard_deadline = outer_hard_deadline;
     g->timed_out = outer_timed_out;
     g->memory_error = outer_memory_error;
     return status;

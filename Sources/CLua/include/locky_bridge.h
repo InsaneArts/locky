@@ -19,11 +19,13 @@
  * error message, which the trampoline then raises from C. */
 typedef int (*LockyDispatch)(lua_State *L, void *context, int index);
 
-/* What the count hook enforces for one Lua state. The host allocates it and keeps it alive until
- * lua_close returns. Every coroutine of the state shares it. */
+/* What the count hook and each call into the host enforce for one Lua state. The host allocates it and
+ * keeps it alive until lua_close returns. Every coroutine of the state shares it. */
 typedef struct LockyGuard {
     double deadline;      /* on locky_now()'s clock; 0 means no deadline */
     double cpu_deadline;  /* the same budget on locky_cpu_now()'s clock: the call ends when both pass */
+    double hard_deadline; /* on locky_now()'s clock, ten times the budget and a second after the start: the call
+                           * ends then even if it used no CPU time, since waiting holds the Lua queue too */
     int timed_out;        /* set once the deadline passes; cleared when the protected call returns */
     size_t used;          /* bytes the state holds now */
     size_t peak;
@@ -48,7 +50,8 @@ void locky_openlibs(lua_State *L);
 void locky_pushnative(lua_State *L, int index);
 
 /* lua_pcall with a traceback, under a time budget in seconds of running (0: no budget of its own): time
- * the thread waits for a busy CPU does not count. A nested call never extends the budget of the call around it. */
+ * the thread waits for a busy CPU, or in a call that blocks, does not count until ten times the budget and a
+ * second have passed. A nested call never extends the budget of the call around it. */
 int locky_pcall(lua_State *L, int nargs, int nresults, double budget);
 
 /* Loads Lua source (never bytecode). `chunkname` follows lua_load's rules, such as "@path". */

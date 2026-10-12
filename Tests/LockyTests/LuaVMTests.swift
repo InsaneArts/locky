@@ -45,6 +45,19 @@ import Testing
         } throws: { ($0 as? LuaError)?.message.contains("time budget exceeded") == true }
     }
 
+    /// Waiting is free only up to ten times the budget and a second: a loop of calls that block (a slow network
+    /// file read, IPC) uses almost no CPU time, and would hold the Lua queue for as long as it likes.
+    @Test func aLoopOfBlockingCallsStopsAtTheHardLimit() throws {
+        let vm = try LuaVM()
+        let start = Date()
+        #expect {
+            // 100 waits of 50 ms: 5 s, where the hard limit of a 0.1 s budget is 2 s.
+            try vm.runPrelude("local native = ... for i = 1, 100 do native.wait() end", chunkName: "=wait",
+                              natives: ["wait": { _ in usleep(50_000); return [] }], budget: 0.1)
+        } throws: { ($0 as? LuaError)?.message.contains("time budget exceeded") == true }
+        #expect(Date().timeIntervalSince(start) < 4)
+    }
+
     @Test func anEndlessLoopStopsAtItsBudget() throws {
         let vm = try LuaVM()
         let cpu = cpuSeconds {
