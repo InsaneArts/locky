@@ -19,7 +19,7 @@ locky.widget.define("greeting", {
   render = function(self)
     local o = self.opts
     local name = o.name
-    if name == nil and not locky.config.privacy then
+    if name == nil and locky.config.privacy ~= true then
       name = (locky.sys.user().full_name:match("^(%S+)")) or locky.sys.user().name
     end
     local text = part_of_day(self.state.hour or os.date("*t").hour) .. (name and (", " .. name) or "") .. (o.period == false and "" or ".")

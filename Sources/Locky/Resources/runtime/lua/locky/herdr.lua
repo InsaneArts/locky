@@ -42,7 +42,7 @@ function M.parse(json)
     local status = rank[a.agent_status] and a.agent_status or "unknown"
     counts[status] = counts[status] + 1
     local kind = capital(a.display_agent or a.agent or "agent")
-    local private = locky.config.privacy
+    local private = locky.config.privacy == true
     agents[#agents + 1] = {
       status = status,
       kind = kind,
