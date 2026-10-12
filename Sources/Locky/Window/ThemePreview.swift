@@ -11,6 +11,8 @@ struct ThemePreview: NSViewRepresentable {
     var settings: Settings
     /// Changes when a Lua file or an asset changes (Inspection.sources): the preview starts again.
     var sources = 0
+    /// The config folder Lua reads, the store's.
+    var config = RuntimePath.defaultConfig
     /// Keeps running behind other windows: for screenshots.
     var alwaysLive = false
 
@@ -18,6 +20,7 @@ struct ThemePreview: NSViewRepresentable {
 
     func updateNSView(_ view: ThemePreviewView, context: Context) {
         view.alwaysLive = alwaysLive
+        view.config = config
         view.show(ThemePreviewView.Key(theme: theme, settings: settings, sources: sources))
     }
 
@@ -53,6 +56,7 @@ final class ThemePreviewView: NSView {
     }
 
     var alwaysLive = false
+    var config = RuntimePath.defaultConfig
     /// Rounds the corners, in screen points.
     private let clip = NSView()
     /// Holds each session's screen at the layout size; its frame is the scaled-down size.
@@ -146,8 +150,9 @@ final class ThemePreviewView: NSView {
         container.wantsLayer = true
         container.alphaValue = 0
         stage.addSubview(container)
-        let session = LockSession(mode: .embedded, options: LockSession.Options(theme: key.theme, previewSize: Self.layoutSize, settings: key.settings,
-                                                                               container: container, epoch: epoch))
+        var options = LockSession.Options(theme: key.theme, previewSize: Self.layoutSize, settings: key.settings, container: container, epoch: epoch)
+        options.path = .standard(config: config)
+        let session = LockSession(mode: .embedded, options: options)
         session.onReady = { [weak self, weak session] in
             if let self, let session { promote(session) }
         }

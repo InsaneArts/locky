@@ -34,7 +34,8 @@ struct DashboardPage: View {
         let id = model.activeTheme
         let info = model.inspection.theme(id)
         return HStack(alignment: .center, spacing: 24) {
-            ThemePreview(theme: id, settings: model.store.settings, sources: model.inspection.sources, alwaysLive: model.screenshots)
+            ThemePreview(theme: id, settings: model.store.settings, sources: model.inspection.sources, config: model.store.config,
+                         alwaysLive: model.screenshots)
                 .aspectRatio(1.6, contentMode: .fit)
                 .frame(width: 400)
                 .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
