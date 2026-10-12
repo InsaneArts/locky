@@ -108,4 +108,116 @@ import Testing
         let specs = try runtime.sync { try runtime.call("pack_specs", budget: 1) }.first?.array ?? []
         #expect(specs.map { $0["name"] } == [.string("locky-weather")])
     }
+
+    // MARK: Theme changes
+
+    private func themeSandbox() throws -> Sandbox {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", """
+        return {
+          background = { color = "#111111" },
+          widgets = {
+            { "one", anchor = "top", opts = { size = 10 } },
+            { "two", anchor = "left", offset = { 5, 6 }, opts = { size = 20 } },
+          },
+        }
+        """)
+        try sandbox.write("plugin/widgets.lua", """
+        for _, name in ipairs({ "one", "two", "three" }) do
+          locky.widget.define(name, { description = "widget " .. name, render = function() return locky.ui.text(name) end })
+        end
+        """)
+        return sandbox
+    }
+
+    private func loadTheme(_ runtime: LuaRuntime) throws -> LuaValue {
+        try runtime.sync { try runtime.call("load_theme", [.string("t")], budget: 1) }.first ?? .nil
+    }
+
+    @Test func settingsReplaceAThemesBackgroundOverInitLuas() throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("init.lua", "locky.setup({ background = { color = '#00ff00' } })")
+        let runtime1 = runtime(sandbox)
+        _ = runtime1.bootForTest()
+        #expect(try loadTheme(runtime1)["background"]["color"] == .string("#00ff00"))
+
+        try Settings(["themes": .table(["t": .table(["background": .table(["wallpaper": .bool(true), "blur": .int(12)])])])])
+            .save(config: sandbox.config)
+        let runtime2 = runtime(sandbox)
+        _ = runtime2.bootForTest()
+        let background = try loadTheme(runtime2)["background"]
+        #expect(background["wallpaper"] == .bool(true))
+        #expect(background["blur"] == .int(12))
+        #expect(background["color"] == .nil)
+    }
+
+    @Test func widgetEditsKeepTheThemesOptionsAndAddNewWidgets() throws {
+        let sandbox = try themeSandbox()
+        try Settings(["themes": .table(["t": .table(["widgets": .array([
+            .table(["ref": .int(2), "widget": .string("two"), "anchor": .string("bottom"), "offset": .array([.int(1), .int(2)])]),
+            .table(["widget": .string("three"), "anchor": .string("top-right"), "card": .bool(true)]),
+        ])])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        let widgets = try loadTheme(runtime)["widgets"].array ?? []
+        #expect(widgets.map { $0["widget"] } == [.string("two"), .string("three")])
+        #expect(widgets[0]["anchor"] == .string("bottom"))
+        #expect(widgets[0]["offset"] == .array([.int(1), .int(2)]))
+        #expect(widgets[1]["card"] == .bool(true))
+        // "two" keeps the options the theme gave it.
+        #expect(try runtime.eval("return locky.theme.current.widgets[1].opts.size") == [.int(20)])
+    }
+
+    @Test func aRefFindsItsWidgetAfterTheThemeReorders() throws {
+        let sandbox = try themeSandbox()
+        // Saved when "two" was the first placement; the theme has since put "one" first.
+        try Settings(["themes": .table(["t": .table(["widgets": .array([
+            .table(["ref": .int(1), "widget": .string("two"), "anchor": .string("center")]),
+            .table(["ref": .int(3), "widget": .string("gone"), "anchor": .string("center")]),
+        ])])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        let widgets = try loadTheme(runtime)["widgets"].array ?? []
+        #expect(widgets.map { $0["widget"] } == [.string("two")])
+        #expect(try runtime.eval("return locky.theme.current.widgets[1].opts.size") == [.int(20)])
+    }
+
+    @Test func aBadEditIsReportedAndTheThemeLoadsWithoutIt() throws {
+        let sandbox = try themeSandbox()
+        try Settings(["themes": .table(["t": .table([
+            "background": .table(["color": .string("#ff0000")]),
+            "widgets": .array([.table(["widget": .string("one"), "anchor": .string("middle")])]),
+        ])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        _ = runtime.bootForTest()
+        let theme = try loadTheme(runtime)
+        #expect(theme["problems"][0].string?.contains("widgets[1].anchor") == true)
+        // Nothing of the edit applies, the background included.
+        #expect(theme["background"]["color"] == .string("#111111"))
+        #expect(theme["widgets"].array?.map { $0["widget"] } == [.string("one"), .string("two")])
+    }
+
+    @Test func themeLayoutIgnoresTheWindowsChanges() throws {
+        let sandbox = try themeSandbox()
+        try Settings(["themes": .table(["t": .table(["widgets": .array([])])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        _ = runtime.bootForTest()
+        #expect(try loadTheme(runtime)["widgets"].array?.isEmpty == true)
+        let layout = try runtime.sync { try runtime.call("theme_layout", [.string("t")], budget: 1) }.first ?? .nil
+        #expect(layout["widgets"].array?.map { $0["widget"] } == [.string("one"), .string("two")])
+        #expect(layout["widgets"][1]["offset"] == .array([.int(5), .int(6)]))
+        #expect(layout["background"]["color"] == .string("#111111"))
+    }
+
+    @Test func theWidgetCatalogNamesEachWidgetsFile() throws {
+        let sandbox = try themeSandbox()
+        let runtime = runtime(sandbox)
+        _ = runtime.bootForTest()
+        let catalog = try runtime.sync { try runtime.call("widget_catalog", budget: 1) }.first?.array ?? []
+        let three = try #require(catalog.first { $0["name"] == .string("three") })
+        #expect(three["description"] == .string("widget three"))
+        #expect(three["file"].string?.hasSuffix("config/plugin/widgets.lua") == true)
+        // The core widgets are there too.
+        #expect(catalog.contains { $0["name"] == .string("clock") })
+    }
 }

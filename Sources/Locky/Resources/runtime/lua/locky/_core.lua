@@ -617,6 +617,8 @@ function locky.widget.define(name, spec)
   local definition = tbl.extend("force", spec)
   definition.name = name
   definition.source = caller(2)
+  local info = debug.getinfo(2, "S")
+  definition.file = info and info.source:match("^@(.*)")
   widgets[name] = definition
   return definition
 end
@@ -738,7 +740,7 @@ local function point(name, value)
 end
 
 -- Checks a theme and fills in defaults. Errors name the field.
-local function normalize_theme(name, theme)
+local function normalize_theme(name, theme, background_from_settings)
   validate("theme " .. name, theme, "table")
   validate("theme.palette", theme.palette, "table", true)
   validate("theme.widgets", theme.widgets, "table", true)
@@ -753,7 +755,7 @@ local function normalize_theme(name, theme)
       border = "#ffffff26", success = "#30d158", warning = "#ff9f0a", danger = "#ff453a",
     }, theme.palette or {}, locky.config.palette or {}),
     font = theme.font or {},
-    background = locky.config.background or theme.background or { color = "#000000" },
+    background = background_from_settings and theme.background or locky.config.background or theme.background or { color = "#000000" },
     overlay = theme.overlay,
     card = tbl.deep_extend("force", { style = "glass", radius = 22 }, theme.card or {}),
     auth = tbl.deep_extend("force", { style = "pill", anchor = "bottom", offset = { 0, -60 }, avatar = true, name = true, hint = true }, theme.auth or {}),
@@ -786,7 +788,8 @@ end
 
 local current_theme
 
-local function load_theme(name)
+-- A theme file with the changes init.lua and plugins made with locky.theme.extend.
+local function read_theme(name)
   local path = native.find_runtime("themes/" .. name .. ".lua")
   if not path then
     error(("no theme named %q (looked for themes/%s.lua in the runtime path)"):format(name, name), 0)
@@ -805,7 +808,105 @@ local function load_theme(name)
       theme = tbl.deep_extend("force", theme, patch)
     end
   end
-  return normalize_theme(name, theme)
+  return theme
+end
+
+-- The Locky window's changes to themes, from settings.json: { [name] = { background = {...}, widgets = {...} } }.
+local settings_themes = {}
+
+local function placement_name(placement)
+  return type(placement) == "table" and (placement.widget or placement[1]) or nil
+end
+
+-- What the window changed in `theme`: its background, and its widget list. A widget entry with `ref` is the
+-- theme's own placement number `ref` (keeping its options) with the entry's fields on top; an entry without
+-- `ref` adds a widget. Returns nil for no change; raises on a bad entry, so nothing half-applies.
+local function settings_edit(name, theme, edit)
+  if type(edit) ~= "table" then
+    return nil
+  end
+  local where = "settings.json themes." .. name
+  validate(where .. ".background", edit.background, "table", true)
+  validate(where .. ".widgets", edit.widgets, "table", true)
+  local result = { background = edit.background and tbl.deepcopy(edit.background) }
+  if edit.widgets then
+    local original, used, list = theme.widgets or {}, {}, {}
+    for i, entry in ipairs(edit.widgets) do
+      local at = ("%s.widgets[%d]"):format(where, i)
+      validate(at, entry, "table")
+      validate(at .. ".widget", entry.widget, "string")
+      validate(at .. ".anchor", entry.anchor, function(v)
+        return v == nil or anchors[v] ~= nil, "expected an anchor such as top or bottom-right"
+      end)
+      validate(at .. ".opts", entry.opts, "table", true)
+      local base
+      if entry.ref ~= nil then
+        -- The theme's placement, if it is still there; after the theme changed, its first unused placement of
+        -- the same widget. A widget the theme no longer has is dropped.
+        if placement_name(original[entry.ref]) == entry.widget and not used[entry.ref] then
+          base = entry.ref
+        else
+          for j, placement in ipairs(original) do
+            if not used[j] and placement_name(placement) == entry.widget then
+              base = j
+              break
+            end
+          end
+        end
+      end
+      if entry.ref == nil or base then
+        local placement = {}
+        if base then
+          used[base] = true
+          for key, value in pairs(original[base]) do
+            placement[key] = value
+          end
+          placement[1] = nil
+        end
+        placement.widget = entry.widget
+        for _, key in ipairs({ "anchor", "offset", "size", "align", "card", "display" }) do
+          if entry[key] ~= nil then
+            placement[key] = entry[key]
+          end
+        end
+        if entry.opts then
+          placement.opts = tbl.deep_extend("force", placement.opts or {}, entry.opts)
+        end
+        list[#list + 1] = placement
+      end
+    end
+    result.widgets = list
+  end
+  return result
+end
+
+local function load_theme(name)
+  local theme = read_theme(name)
+  local problems = {}
+  local ok, edit = pcall(settings_edit, name, theme, settings_themes[name])
+  if not ok then
+    problems[1] = tostring(edit)
+    edit = nil
+  end
+  if edit then
+    theme.background = edit.background or theme.background
+    theme.widgets = edit.widgets or theme.widgets
+  end
+  local normalized = normalize_theme(name, theme, edit ~= nil and edit.background ~= nil)
+  normalized.problems = problems
+  return normalized
+end
+
+-- A copy with only strings, numbers, booleans, and tables: for data the host reads.
+local function plain(value)
+  if type(value) ~= "table" then
+    return (type(value) == "string" or type(value) == "number" or type(value) == "boolean") and value or nil
+  end
+  local copy = {}
+  for key, item in pairs(value) do
+    copy[key] = plain(item)
+  end
+  return copy
 end
 
 -------------------------------------------------------------------------------
@@ -936,7 +1037,7 @@ return {
     return failures
   end,
 
-  -- settings.json's values, after init.lua, so they win.
+  -- settings.json's values, after init.lua, so they win. Its theme changes apply as each theme loads.
   -- Returns a message for each value of the wrong type; those are skipped.
   apply_settings = function(settings)
     local failures = {}
@@ -949,6 +1050,7 @@ return {
         locky.config[key] = value
       end
     end
+    settings_themes = type(settings.themes) == "table" and settings.themes or {}
     return failures
   end,
 
@@ -1039,4 +1141,41 @@ return {
 
   theme_names = locky.theme.list,
   widget_names = locky.widget.list,
+
+  -- Each theme's name, description, author, and folder, or the error that stops it from loading.
+  theme_infos = function()
+    local list = {}
+    for _, name in ipairs(locky.theme.list()) do
+      local ok, theme = pcall(read_theme, name)
+      if ok then
+        list[#list + 1] = { id = name, name = plain(theme.name) or name, description = plain(theme.description), author = plain(theme.author), dir = theme.dir }
+      else
+        list[#list + 1] = { id = name, name = name, error = tostring(theme) }
+      end
+    end
+    return list
+  end,
+
+  -- The theme as init.lua and plugins leave it, before the window's changes: what Reset goes back to.
+  theme_layout = function(name)
+    local theme = normalize_theme(name, read_theme(name), false)
+    local widgets_list = {}
+    for i, placement in ipairs(theme.widgets) do
+      widgets_list[i] = {
+        widget = placement.widget, anchor = placement.anchor, offset = placement.offset, size = placement.size,
+        align = placement.align, card = plain(placement.card), display = placement.display,
+      }
+    end
+    return { id = name, name = theme.name, background = plain(theme.background), widgets = widgets_list }
+  end,
+
+  -- Every widget: name, description, and the file that defines it.
+  widget_catalog = function()
+    local list = {}
+    for _, name in ipairs(locky.widget.list()) do
+      local definition = widgets[name]
+      list[#list + 1] = { name = name, description = plain(definition.description), file = definition.file }
+    end
+    return list
+  end,
 }

@@ -292,6 +292,7 @@ final class LuaRuntime: @unchecked Sendable {
     private func loadTheme(_ name: String) -> Theme? {
         do {
             guard let exported = try call("load_theme", [.string(name)], budget: Budget.theme).first else { return nil }
+            for case .string(let problem) in exported["problems"].array ?? [] { report(problem) }
             return try Theme(lua: exported, path: path)
         } catch {
             report("theme \(name): \(LuaError.shortenPaths(String(describing: error)))")
