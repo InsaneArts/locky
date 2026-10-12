@@ -293,7 +293,16 @@ final class LuaRuntime: @unchecked Sendable {
         do {
             guard let exported = try call("load_theme", [.string(name)], budget: Budget.theme).first else { return nil }
             for case .string(let problem) in exported["problems"].array ?? [] { report(problem) }
-            return try Theme(lua: exported, path: path)
+            do {
+                return try Theme(lua: exported, path: path)
+            } catch let error where exported["edited"].bool == true {
+                // settings.json's change names something that is not there, such as a shader: like any bad change,
+                // it is reported and the theme loads without it. If the theme fails on its own, that error counts.
+                guard let original = try call("load_theme", [.string(name), .bool(false)], budget: Budget.theme).first else { return nil }
+                let theme = try Theme(lua: original, path: path)
+                report("settings.json themes.\(name): \(LuaError.shortenPaths(String(describing: error)))")
+                return theme
+            }
         } catch {
             report("theme \(name): \(LuaError.shortenPaths(String(describing: error)))")
             return nil

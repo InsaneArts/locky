@@ -165,6 +165,7 @@ import Testing
         #expect(widgets[0]["anchor"] == .string("bottom"))
         #expect(widgets[0]["offset"] == .array([.int(1), .int(2)]))
         #expect(widgets[1]["card"] == .bool(true))
+        #expect(try loadTheme(runtime)["edited"] == .bool(true))
         // "two" keeps the options the theme gave it.
         #expect(try runtime.eval("return locky.theme.current.widgets[1].opts.size") == [.int(20)])
     }
@@ -196,6 +197,58 @@ import Testing
         // Nothing of the edit applies, the background included.
         #expect(theme["background"]["color"] == .string("#111111"))
         #expect(theme["widgets"].array?.map { $0["widget"] } == [.string("one"), .string("two")])
+        #expect(theme["edited"] == .bool(false))
+    }
+
+    /// Every field is checked, so a bad one never reaches the theme, where it failed the whole theme.
+    @Test(arguments: [
+        (#"{ "widgets": [ { "ref": 2, "widget": "two", "offset": [10] } ] }"#, ".widgets[1].offset"),
+        (#"{ "widgets": [ { "widget": "three", "size": "big" } ] }"#, ".widgets[1].size"),
+        (#"{ "widgets": [ { "widget": "three", "card": "fancy" } ] }"#, ".widgets[1].card"),
+        (#"{ "widgets": [ { "widget": "three", "align": 5 } ] }"#, ".widgets[1].align"),
+        (#"{ "widgets": [ { "widget": "three", "display": "every" } ] }"#, ".widgets[1].display"),
+        (#"{ "widgets": [ { "ref": "2", "widget": "two" } ] }"#, ".widgets[1].ref"),
+        (#"{ "widgets": { "a": { "widget": "three" } } }"#, ".widgets"),
+        ("5", ""),
+        (#"{ "background": { "blur": "soft" } }"#, ".background.blur"),
+        (##"{ "background": { "gradient": ["#000000", 5] } }"##, ".background.gradient"),
+    ])
+    func aBadFieldIsReportedAndTheThemeLoadsWithoutTheEdit(edit: String, field: String) async throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("settings.json", #"{ "themes": { "t": \#(edit) } }"#)
+        let runtime = runtime(sandbox)
+        let started = await runtime.start(theme: "t")
+        runtime.stop()
+        #expect(started.theme.id == "t")
+        #expect(started.theme.widgets.map(\.widget) == ["one", "two"])
+        #expect(started.theme.background == .color("#111111"))
+        #expect(started.problems.contains { $0.hasPrefix("settings.json themes.t\(field):") }, "\(started.problems)")
+    }
+
+    /// A file the edit names and that is not there fails only on the Swift side; the theme loads without the edit.
+    @Test(arguments: [#"{ "shader": "nope" }"#, #"{ "image": "nope.jpg" }"#])
+    func aMissingFileIsReportedAndTheThemeLoadsWithoutTheEdit(background: String) async throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("settings.json", #"{ "themes": { "t": { "background": \#(background), "widgets": [ { "widget": "three" } ] } } }"#)
+        let runtime = runtime(sandbox)
+        let started = await runtime.start(theme: "t")
+        runtime.stop()
+        #expect(started.theme.id == "t")
+        #expect(started.theme.background == .color("#111111"))
+        #expect(started.theme.widgets.map(\.widget) == ["one", "two"])
+        #expect(started.problems.count == 1)
+        #expect(started.problems.first?.hasPrefix("settings.json themes.t: background: no ") == true, "\(started.problems)")
+    }
+
+    @Test func theDefaultThemeSurvivesABadEdit() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "themes": { "default": { "widgets": [ { "widget": "clock", "size": "big" } ] } } }"#)
+        let runtime = runtime(sandbox)
+        let started = await runtime.start(theme: nil)
+        runtime.stop()
+        // Not the bare fallback, which has no clock.
+        #expect(started.theme.id == "default")
+        #expect(started.theme.widgets.contains { $0.widget == "clock" })
     }
 
     @Test func falseSurvivesTheTripToTheWindow() throws {

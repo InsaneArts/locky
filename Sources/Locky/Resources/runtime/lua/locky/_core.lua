@@ -839,27 +839,91 @@ local function placement_name(placement)
   return type(placement) == "table" and (placement.widget or placement[1]) or nil
 end
 
+-- What else a settings.json placement may say: see docs/themes.md.
+local alignments = {
+  center = true, leading = true, trailing = true, left = true, right = true, top = true, bottom = true,
+  ["top-leading"] = true, ["top-trailing"] = true, ["bottom-leading"] = true, ["bottom-trailing"] = true,
+  ["top-left"] = true, ["top-right"] = true, ["bottom-left"] = true, ["bottom-right"] = true,
+}
+local card_styles = { glass = true, solid = true, outline = true, none = true }
+
+-- The fields of a background table (docs/themes.md) and their types; a list holds values of its type.
+local background_fields = {
+  shader = "string", image = "string", video = "string", color = "string", tint = "string", wallpaper = "boolean",
+  blur = "number", dim = "number", speed = "number", resolution = "number", fps = "number", angle = "number",
+  noise = "number", tint_amount = "number",
+}
+local background_lists = { colors = "string", gradient = "string", params = "number" }
+
+-- A settings.json background with the fields Locky knows, each checked. Any other field is left out: it means
+-- nothing to this version, and one nested deep enough would stop the theme from reaching the host.
+local function settings_background(where, background)
+  validate(where, background, "table")
+  local result = {}
+  for key, kind in pairs(background_fields) do
+    validate(where .. "." .. key, background[key], kind, true)
+    result[key] = background[key]
+  end
+  for key, kind in pairs(background_lists) do
+    validate(where .. "." .. key, background[key], function(v)
+      if tbl.islist(v) then
+        for _, item in ipairs(v) do
+          if type(item) ~= kind then
+            return false, ("expected a list of %ss"):format(kind)
+          end
+        end
+        return true
+      end
+      return false, ("expected a list of %ss"):format(kind)
+    end, true)
+    result[key] = background[key] and tbl.deepcopy(background[key])
+  end
+  return result
+end
+
 -- What the window changed in `theme`: its background, and its widget list. A widget entry with `ref` is the
 -- theme's own placement number `ref` (keeping its options) with the entry's fields on top; an entry without
 -- `ref` adds a widget. Returns nil for no change; raises on a bad entry, so nothing half-applies.
 local function settings_edit(name, theme, edit)
-  if type(edit) ~= "table" then
+  local where = "settings.json themes." .. name
+  validate(where, edit, "table", true)
+  if edit == nil or (edit.background == nil and edit.widgets == nil) then
     return nil
   end
-  local where = "settings.json themes." .. name
-  validate(where .. ".background", edit.background, "table", true)
-  validate(where .. ".widgets", edit.widgets, "table", true)
-  local result = { background = edit.background and tbl.deepcopy(edit.background) }
-  if edit.widgets then
-    local original, used, list = theme.widgets or {}, {}, {}
+  local result = {}
+  if edit.background ~= nil then
+    result.background = settings_background(where .. ".background", edit.background)
+  end
+  if edit.widgets ~= nil then
+    validate(where .. ".widgets", edit.widgets, function(v)
+      return tbl.islist(v), "expected a list of widget entries"
+    end)
+    -- Every field is checked before anything applies: one the theme cannot use would fail the whole theme.
     for i, entry in ipairs(edit.widgets) do
       local at = ("%s.widgets[%d]"):format(where, i)
       validate(at, entry, "table")
+      validate(at .. ".ref", entry.ref, function(v)
+        return type(v) == "number" and v >= 1 and v % 1 == 0, "expected a placement number, such as 2"
+      end, true)
       validate(at .. ".widget", entry.widget, "string")
       validate(at .. ".anchor", entry.anchor, function(v)
-        return v == nil or anchors[v] ~= nil, "expected an anchor such as top or bottom-right"
-      end)
+        return anchors[v] ~= nil, "expected an anchor such as top or bottom-right"
+      end, true)
+      point(at .. ".offset", entry.offset)
+      point(at .. ".size", entry.size)
+      validate(at .. ".align", entry.align, function(v)
+        return alignments[v] ~= nil, "expected an alignment such as leading, top, or bottom-trailing"
+      end, true)
+      validate(at .. ".card", entry.card, function(v)
+        return type(v) == "boolean" or card_styles[v] ~= nil, "expected true, false, or a card style: glass, solid, outline, none"
+      end, true)
+      validate(at .. ".display", entry.display, function(v)
+        return v == "main" or v == "all", "expected \"main\" or \"all\""
+      end, true)
       validate(at .. ".opts", entry.opts, "table", true)
+    end
+    local original, used, list = theme.widgets or {}, {}, {}
+    for _, entry in ipairs(edit.widgets) do
       local base
       if entry.ref ~= nil then
         -- The theme's placement, if it is still there; after the theme changed, its first unused placement of
@@ -885,9 +949,15 @@ local function settings_edit(name, theme, edit)
           placement[1] = nil
         end
         placement.widget = entry.widget
-        for _, key in ipairs({ "anchor", "offset", "size", "align", "card", "display" }) do
+        for _, key in ipairs({ "anchor", "align", "card", "display" }) do
           if entry[key] ~= nil then
             placement[key] = entry[key]
+          end
+        end
+        -- x and y only: whatever else the list holds must not reach the host.
+        for _, key in ipairs({ "offset", "size" }) do
+          if entry[key] ~= nil then
+            placement[key] = { entry[key][1], entry[key][2] }
           end
         end
         if entry.opts then
@@ -901,19 +971,41 @@ local function settings_edit(name, theme, edit)
   return result
 end
 
-local function load_theme(name)
+-- An error without a position inside Locky's core, which says nothing to the user.
+local function without_core_position(message)
+  return (tostring(message):gsub("^locky/_core%.lua:%d+: ", ""))
+end
+
+-- The theme with settings.json's change, unless `with_edit` is false. A change that fails is reported in
+-- `problems` and left out, so the theme still loads; `edited` says whether one applied.
+local function load_theme(name, with_edit)
   local theme = read_theme(name)
   local problems = {}
-  local ok, edit = pcall(settings_edit, name, theme, settings_themes[name])
-  if not ok then
-    problems[1] = tostring(edit)
-    edit = nil
+  local edit
+  if with_edit ~= false then
+    local ok, result = pcall(settings_edit, name, theme, settings_themes[name])
+    if ok then
+      edit = result
+    else
+      problems[1] = without_core_position(result)
+    end
   end
   if edit then
-    theme.background = edit.background or theme.background
-    theme.widgets = edit.widgets or theme.widgets
+    local background, widgets = theme.background, theme.widgets
+    theme.background = edit.background or background
+    theme.widgets = edit.widgets or widgets
+    local ok, normalized = pcall(normalize_theme, name, theme, edit.background ~= nil)
+    if ok then
+      normalized.edited = true
+      normalized.problems = problems
+      return normalized
+    end
+    -- Checked above, so this should not happen; if it does, the theme still loads.
+    problems[#problems + 1] = ("settings.json themes.%s: %s"):format(name, without_core_position(normalized))
+    theme.background, theme.widgets = background, widgets
   end
-  local normalized = normalize_theme(name, theme, edit ~= nil and edit.background ~= nil)
+  local normalized = normalize_theme(name, theme, false)
+  normalized.edited = false
   normalized.problems = problems
   return normalized
 end
@@ -1084,8 +1176,10 @@ return {
     return failures
   end,
 
-  load_theme = function(name)
-    current_theme = load_theme(name)
+  -- `with_edit = false` leaves settings.json's change out: for a change only the host can find bad, such as a
+  -- shader that is not there. `edited` in the result says whether a change applied.
+  load_theme = function(name, with_edit)
+    current_theme = load_theme(name, with_edit)
     locky.theme.current = current_theme
     -- The host gets plain data; options stay here, so they may hold functions.
     local exported = tbl.extend("force", current_theme)
