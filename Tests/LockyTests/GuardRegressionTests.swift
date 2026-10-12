@@ -12,9 +12,10 @@ import Testing
     }
 
     private func expectStops(_ runtime: LuaRuntime, _ source: String, within seconds: Double = 1.5, sourceLocation: SourceLocation = #_sourceLocation) {
-        let start = Date()
-        #expect(throws: LuaError.self, sourceLocation: sourceLocation) { try runtime.eval(source, budget: 0.2) }
-        #expect(Date().timeIntervalSince(start) < seconds, "\(source)", sourceLocation: sourceLocation)
+        let cpu = cpuSeconds {
+            #expect(throws: LuaError.self, sourceLocation: sourceLocation) { try runtime.eval(source, budget: 0.2) }
+        }
+        #expect(cpu < seconds, "\(source)", sourceLocation: sourceLocation)
     }
 
     @Test func aPushNearTheHardLimitDoesNotAbort() throws {
@@ -39,9 +40,12 @@ import Testing
 
     @Test func trimIsLinear() throws {
         let runtime = try runtime()
-        let start = Date()
-        #expect(try runtime.eval("return locky.str.trim(string.rep(' ', 1000000) .. 'x' .. string.rep(' ', 1000000))", budget: 2) == [.string("x")])
-        #expect(Date().timeIntervalSince(start) < 1)
+        var trimmed: [LuaValue] = []
+        let cpu = try cpuSeconds {
+            trimmed = try runtime.eval("return locky.str.trim(string.rep(' ', 1000000) .. 'x' .. string.rep(' ', 1000000))", budget: 2)
+        }
+        #expect(trimmed == [.string("x")])
+        #expect(cpu < 1)
         #expect(try runtime.eval("return locky.str.trim('  a b  '), locky.str.trim('   ')") == [.string("a b"), .string("")])
     }
 

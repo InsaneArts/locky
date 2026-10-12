@@ -48,6 +48,15 @@ final class Recorder: @unchecked Sendable {
     }
 }
 
+/// Seconds of CPU time the calling thread spends in `body`. Lua budgets count CPU time, so tests about them
+/// measure it too: a parallel test run loads every core, and wall time then says little. (runtime.eval runs on
+/// the calling thread: DispatchQueue.sync runs its block there.)
+func cpuSeconds(_ body: () throws -> Void) rethrows -> Double {
+    let start = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+    try body()
+    return Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - start) / 1e9
+}
+
 /// Polls `condition` until it holds or `timeout` passes.
 func eventually(timeout: Double = 3, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)

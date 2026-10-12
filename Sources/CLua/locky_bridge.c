@@ -8,6 +8,17 @@ double locky_now(void) {
     return (double)clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1e9;
 }
 
+double locky_cpu_now(void) {
+    return (double)clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) / 1e9;
+}
+
+/* A budget counts the time the code ran, not time it waited for a busy CPU: a Mac busy with something else
+ * must not stop a widget that works. The wall clock is ten times cheaper to read, and CPU time never runs
+ * ahead of it, so the thread's CPU time is read only once the wall clock is past its deadline. */
+static int locky_expired(const LockyGuard *g) {
+    return g->deadline > 0 && locky_now() > g->deadline && locky_cpu_now() > g->cpu_deadline;
+}
+
 LockyGuard *locky_guard(lua_State *L) {
     void *ud = NULL;
     lua_getallocf(L, &ud);
@@ -56,7 +67,7 @@ static void locky_hook(lua_State *L, lua_Debug *ar) {
             luaL_error(L, "not enough memory: plugins may use %d MB in all", (int)(g->soft_limit >> 20));
         }
     }
-    if (g->deadline > 0 && (g->timed_out || locky_now() > g->deadline)) {
+    if (g->deadline > 0 && (g->timed_out || locky_expired(g))) {
         g->timed_out = 1;
         luaL_error(L, LOCKY_TIMEOUT);
     }
@@ -169,15 +180,20 @@ static int locky_traceback(lua_State *L) {
 
 int locky_pcall(lua_State *L, int nargs, int nresults, double budget) {
     LockyGuard *g = locky_guard(L);
-    double outer_deadline = g->deadline;
+    double outer_deadline = g->deadline, outer_cpu_deadline = g->cpu_deadline;
     int outer_timed_out = g->timed_out;
     int outer_memory_error = g->memory_error;
 
     double deadline = budget > 0 ? locky_now() + budget : 0;
+    double cpu_deadline = budget > 0 ? locky_cpu_now() + budget : 0;
     if (outer_deadline > 0 && (deadline == 0 || outer_deadline < deadline)) {
         deadline = outer_deadline;
     }
+    if (outer_deadline > 0 && (cpu_deadline == 0 || outer_cpu_deadline < cpu_deadline)) {
+        cpu_deadline = outer_cpu_deadline;
+    }
     g->deadline = deadline;
+    g->cpu_deadline = cpu_deadline;
     g->timed_out = outer_timed_out;
     g->memory_error = 0;
 
@@ -189,7 +205,7 @@ int locky_pcall(lua_State *L, int nargs, int nresults, double budget) {
 
     /* The count hook runs only between Lua instructions, so a long C function (table.move, a slow
      * pattern match) can finish past the deadline and return normally. Such a call still failed. */
-    if (status == LUA_OK && deadline > 0 && locky_now() > deadline) {
+    if (status == LUA_OK && locky_expired(g)) {
         lua_settop(L, base - 1);
         size_t hard = g->hard_limit;
         g->hard_limit = 0;  /* the message must not fail to allocate outside a protected call */
@@ -199,6 +215,7 @@ int locky_pcall(lua_State *L, int nargs, int nresults, double budget) {
     }
 
     g->deadline = outer_deadline;
+    g->cpu_deadline = outer_cpu_deadline;
     g->timed_out = outer_timed_out;
     g->memory_error = outer_memory_error;
     return status;
@@ -210,7 +227,7 @@ int locky_loadbuffer(lua_State *L, const char *source, size_t length, const char
 
 int locky_budget_exceeded(lua_State *L) {
     LockyGuard *g = locky_guard(L);
-    if (g->timed_out || (g->deadline > 0 && locky_now() > g->deadline)) {
+    if (g->timed_out || locky_expired(g)) {
         lua_pushliteral(L, LOCKY_TIMEOUT);
     } else if (g->memory_error) {
         lua_pushliteral(L, LOCKY_NO_MEMORY);

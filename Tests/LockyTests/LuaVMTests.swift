@@ -29,13 +29,30 @@ import Testing
         #expect(throws: LuaError.self) { try run(vm, "return function() end") }
     }
 
+    /// The budget counts running, not waiting: a busy Mac, or a native call that blocks, must not stop
+    /// code that works (a flaky test caught a widget stopped while the test run loaded every core).
+    @Test func waitingDoesNotCountAgainstTheBudget() throws {
+        let vm = try LuaVM()
+        let exported = try vm.runPrelude("""
+            local native = ...
+            native.wait()
+            return { done = true }
+            """, chunkName: "=wait", natives: ["wait": { _ in usleep(300_000); return [] }], budget: 0.1)
+        #expect(exported["done"] == .bool(true))
+        // Running past the budget still stops.
+        #expect {
+            try run(vm, "while true do end", budget: 0.1)
+        } throws: { ($0 as? LuaError)?.message.contains("time budget exceeded") == true }
+    }
+
     @Test func anEndlessLoopStopsAtItsBudget() throws {
         let vm = try LuaVM()
-        let start = Date()
-        #expect {
-            try run(vm, "while true do end", budget: 0.2)
-        } throws: { ($0 as? LuaError)?.message.contains("time budget exceeded") == true }
-        #expect(Date().timeIntervalSince(start) < 1)
+        let cpu = cpuSeconds {
+            #expect {
+                try run(vm, "while true do end", budget: 0.2)
+            } throws: { ($0 as? LuaError)?.message.contains("time budget exceeded") == true }
+        }
+        #expect(cpu < 1)
         // The state is still usable.
         #expect(try run(vm, "return 40 + 2") == [.int(42)])
     }

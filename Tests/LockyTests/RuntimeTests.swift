@@ -13,11 +13,12 @@ import Testing
             "local co = coroutine.create(function() while true do end end) while true do coroutine.resume(co) end",
             "local f = coroutine.wrap(function() while true do end end) while true do pcall(f) end",
         ] {
-            let start = Date()
-            #expect {
-                try runtime.eval(source, budget: 0.2)
-            } throws: { ($0 as? LuaError)?.message.contains("time budget exceeded") == true }
-            #expect(Date().timeIntervalSince(start) < 1.5, "\(source)")
+            let cpu = cpuSeconds {
+                #expect {
+                    try runtime.eval(source, budget: 0.2)
+                } throws: { ($0 as? LuaError)?.message.contains("time budget exceeded") == true }
+            }
+            #expect(cpu < 1.5, "\(source)")
         }
         #expect(try runtime.eval("return 1 + 1") == [.int(2)])
     }
