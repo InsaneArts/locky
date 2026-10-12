@@ -141,6 +141,10 @@ private struct WidgetInspector: View {
     let index: Int
     @Binding var selection: EditorItem?
     @Binding var draft: Settings?
+    /// Colors being picked: the preview shows them at once, and they save once the picking stops for a moment, with
+    /// the next change, or when the panel goes away.
+    @State private var picked: [String: LuaValue] = [:]
+    @State private var saving: Task<Void, Never>?
 
     var body: some View {
         let placement = editing.placements[index]
@@ -181,11 +185,8 @@ private struct WidgetInspector: View {
                         OptionRow(key: key, value: placement.opts[key] ?? inherited[key] ?? .nil, choices: info?.choices[key],
                                   own: info?.defaults[key], inherited: inherited[key],
                                   palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
-                                  live: { draft = settings(key, $0) },
-                                  commit: { value in
-                                      change { $0.opts[key] = value == inherited[key] ? nil : value }
-                                      draft = nil
-                                  })
+                                  pick: { pick(key, $0) },
+                                  commit: { value in change { $0.opts[key] = value == inherited[key] ? nil : value } })
                     }
                 } header: {
                     HStack {
@@ -201,31 +202,51 @@ private struct WidgetInspector: View {
             }
             Section {
                 Button("Remove Widget", role: .destructive) {
+                    // Its colors go with it.
+                    saving?.cancel()
+                    picked = [:]
+                    draft = nil
                     selection = nil
                     editing.remove(index)
                 }
             }
         }
         .formStyle(.grouped)
+        .onDisappear { if !picked.isEmpty { change() } }
     }
 
-    /// Changes this widget as it is now, so a change that saves a moment late (a color picked) never brings back an
-    /// older copy of it. An option set back to what the theme gives it leaves settings.json.
-    private func change(_ edit: (inout EditorPlacement) -> Void) {
+    /// Changes this widget as it is now, together with the colors picked so far, which save first: a color never
+    /// lands after a later change, nor brings back an older copy of the widget. An option set back to what the theme
+    /// gives it leaves settings.json.
+    private func change(_ edit: (inout EditorPlacement) -> Void = { _ in }) {
+        saving?.cancel()
+        saving = nil
+        let colors = picked
+        picked = [:]
+        draft = nil
         guard editing.placements.indices.contains(index) else { return }
         var placement = editing.placements[index]
+        let inherited = editing.inherited(placement)
+        for (key, value) in colors { placement.opts[key] = value == inherited[key] ? nil : value }
         edit(&placement)
         editing.set(index, placement)
     }
 
-    /// settings.json with an option changed, for the preview while a color is being picked.
-    private func settings(_ key: String, _ value: LuaValue) -> Settings? {
+    /// A color being picked: the preview shows it at once, and it saves once the picking stops for a moment.
+    private func pick(_ key: String, _ value: LuaValue) {
+        picked[key] = value
         var list = editing.placements
-        guard list.indices.contains(index) else { return nil }
-        list[index].opts[key] = value
-        var settings = model.store.settings
-        settings.setThemeEdit(editing.theme.id, "widgets", .array(list.map(\.settingsValue)))
-        return settings
+        if list.indices.contains(index) {
+            for (key, value) in picked { list[index].opts[key] = value }
+            var settings = model.store.settings
+            settings.setThemeEdit(editing.theme.id, "widgets", .array(list.map(\.settingsValue)))
+            draft = settings
+        }
+        saving?.cancel()
+        saving = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            if !Task.isCancelled { change() }
+        }
     }
 }
 
@@ -303,8 +324,8 @@ private struct OptionRow: View {
     /// The value before settings.json's: the theme's or init.lua's.
     let inherited: LuaValue?
     let palette: [String: String]
-    /// A change in progress, for the preview.
-    let live: (LuaValue) -> Void
+    /// A color being picked, which the panel saves.
+    let pick: (LuaValue) -> Void
     let commit: (LuaValue) -> Void
 
     static let weights = ["ultralight", "thin", "light", "regular", "medium", "semibold", "bold", "heavy", "black"]
@@ -329,7 +350,7 @@ private struct OptionRow: View {
                 }
             case .string(let text) where Self.isColor(key, text, palette):
                 LabeledContent(label) {
-                    ColorChoice(value: text, palette: palette, live: { live(.string($0)) }, commit: { commit(.string($0)) })
+                    ColorChoice(value: text, palette: palette, pick: { pick(.string($0)) }, commit: { commit(.string($0)) })
                 }
             case .string(let text):
                 LabeledContent(label) { TextOption(text: text) { commit(.string($0)) } }
@@ -376,7 +397,8 @@ private struct OptionRow: View {
 private struct ColorChoice: View {
     let value: String
     let palette: [String: String]
-    let live: (String) -> Void
+    /// A color picked in the well, which the panel saves; a role from the menu saves at once.
+    let pick: (String) -> Void
     let commit: (String) -> Void
 
     var body: some View {
@@ -391,7 +413,7 @@ private struct ColorChoice: View {
                 Text(palette[value] != nil ? value : "Custom")
             }
             .fixedSize()
-            DebouncedColorPicker(title: "", hex: palette[value] ?? value, live: live, commit: commit)
+            ColorWell(title: "", hex: palette[value] ?? value, pick: pick)
                 .labelsHidden()
         }
     }
@@ -599,6 +621,10 @@ private struct BackgroundEditor: View {
     let theme: Inspection.ThemeInfo
     let layout: ThemeLayout?
     @Binding var draft: Settings?
+    /// Colors being picked: shown at once, saved once the picking stops for a moment, with the next change, or when
+    /// the panel goes away.
+    @State private var picked: [String: LuaValue] = [:]
+    @State private var saving: Task<Void, Never>?
 
     enum Kind: String, CaseIterable, Identifiable {
         case theme, wallpaper, image, video, color, gradient
@@ -631,6 +657,7 @@ private struct BackgroundEditor: View {
         Picker("Background", selection: Binding(get: { kind }, set: { choose($0) })) {
             ForEach(Kind.allCases) { Text($0.title).tag($0) }
         }
+        .onDisappear { if !picked.isEmpty { save([:]) } }
         switch kind {
         case .theme:
             LabeledContent("Uses", value: summary(layout?.background ?? .nil))
@@ -654,6 +681,9 @@ private struct BackgroundEditor: View {
     }
 
     private func choose(_ kind: Kind) {
+        // Colors picked for the background being left go with it.
+        saving?.cancel()
+        picked = [:]
         let palette = theme.palette
         let value: LuaValue?
         switch kind {
@@ -678,21 +708,36 @@ private struct BackgroundEditor: View {
         return .table(table)
     }
 
-    /// Shows the change in the preview before it saves.
+    /// Shows the change, with the colors picked so far, in the preview before it saves.
     private func preview(_ fields: [String: LuaValue]) {
         var settings = store.settings
-        settings.setThemeEdit(theme.id, "background", patched(fields))
+        settings.setThemeEdit(theme.id, "background", patched(picked.merging(fields) { $1 }))
         draft = settings
     }
 
+    /// Saves the change, with the colors picked so far.
     private func save(_ fields: [String: LuaValue]) {
-        let value = patched(fields)
+        saving?.cancel()
+        saving = nil
+        let value = patched(picked.merging(fields) { $1 })
+        picked = [:]
         store.update { $0.setThemeEdit(theme.id, "background", value) }
         draft = nil
     }
 
+    /// A color being picked: the preview shows it at once, and it saves once the picking stops for a moment.
+    private func pick(_ fields: [String: LuaValue]) {
+        picked.merge(fields) { $1 }
+        preview([:])
+        saving?.cancel()
+        saving = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            if !Task.isCancelled { save([:]) }
+        }
+    }
+
     private func gradient(_ index: Int, _ hex: String) -> LuaValue {
-        var colors = edit["gradient"].array ?? [.string("#000000"), .string("#000000")]
+        var colors = (picked["gradient"] ?? edit["gradient"]).array ?? [.string("#000000"), .string("#000000")]
         while colors.count < 2 { colors.append(.string("#000000")) }
         colors[index] = .string(hex)
         return .array(colors)
@@ -719,7 +764,7 @@ private struct BackgroundEditor: View {
     }
 
     private func color(_ title: String, get: @escaping () -> String?, fields: @escaping (String) -> [String: LuaValue]) -> some View {
-        DebouncedColorPicker(title: title, hex: get() ?? "#000000", live: { preview(fields($0)) }, commit: { save(fields($0)) })
+        ColorWell(title: title, hex: get() ?? "#000000", pick: { pick(fields($0)) })
     }
 
     /// What the theme's own background is, in a few words.
@@ -777,31 +822,20 @@ private struct CommittingSlider: View {
     }
 }
 
-/// A color well that shows each color live, and saves a moment after the color stops changing, not on every step
-/// of a drag.
-private struct DebouncedColorPicker: View {
+/// A color well that reports each color as it is picked; the panel it is in saves it.
+private struct ColorWell: View {
     let title: String
     let hex: String
-    let live: (String) -> Void
-    let commit: (String) -> Void
+    let pick: (String) -> Void
     @State private var color = Color.black
-    @State private var pending: Task<Void, Never>?
 
     var body: some View {
         ColorPicker(title, selection: Binding(get: { color }, set: { new in
             color = new
-            guard let value = new.hexString else { return }
-            live(value)
-            pending?.cancel()
-            pending = Task {
-                try? await Task.sleep(for: .milliseconds(400))
-                if !Task.isCancelled { commit(value) }
-            }
+            if let value = new.hexString { pick(value) }
         }), supportsOpacity: false)
         .onAppear { color = Color(hex: hex) ?? .black }
         .onChange(of: hex) { color = Color(hex: hex) ?? .black }
-        // A control that goes away (another widget selected, a background picked) never saves late.
-        .onDisappear { pending?.cancel() }
     }
 }
 
