@@ -15,6 +15,16 @@ if let command = arguments.first, !command.hasPrefix("-") || CLI.commands.contai
     exit(CLI.run(arguments))
 }
 
+// One Locky per user: a second launch (`Locky window settings`, the binary run again) hands its request to the
+// one running and quits, instead of a second menu bar icon, auto-lock, and shortcut. A screenshot run
+// (--behind) is a tool and runs on its own.
+if !arguments.contains("--behind"), let id = Bundle.main.bundleIdentifier,
+   NSRunningApplication.runningApplications(withBundleIdentifier: id).contains(where: { $0.processIdentifier != getpid() }) {
+    DistributedNotificationCenter.default().postNotificationName(AppDelegate.request, object: nil, userInfo: ["arguments": arguments],
+                                                                 deliverImmediately: true)
+    exit(0)
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

@@ -36,17 +36,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { store.update { $0["theme"] = newValue.map(LuaValue.string) ?? .nil } }
     }
 
+    /// A second launch's request to this one: its arguments, as the command line gave them.
+    static let request = Notification.Name("com.tornikegomareli.Locky.request")
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         try? FileManager.default.createDirectory(at: store.config, withIntermediateDirectories: true)
         store.migrateMenuTheme()
         store.watch()
+        // `locky ... --behind` takes screenshots: no auto-lock, shortcut, or update checks of its own.
+        let tool = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst())).behind
         store.onChange = { [weak self] in
             guard let self else { return }
-            applyAppSettings()
+            if !tool { applyAppSettings() }
             if windowController?.window?.isVisible == true { model.refresh() }
         }
-        applyAppSettings()
-        scheduleUpdateChecks()
+        if !tool {
+            applyAppSettings()
+            scheduleUpdateChecks()
+            DistributedNotificationCenter.default().addObserver(self, selector: #selector(handleRequest(_:)), name: Self.request, object: nil,
+                                                                suspensionBehavior: .deliverImmediately)
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locky")
         let menu = NSMenu()
@@ -104,6 +113,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if store.settings["update_check"].bool != false, session?.mode != .lock { model.checkForUpdates() }
                 try? await Task.sleep(for: .seconds(24 * 3600))
             }
+        }
+    }
+
+    /// Another launch's arguments: open the window at a page, preview, or lock, as that launch would have.
+    @objc private func handleRequest(_ notification: Notification) {
+        let arguments = notification.userInfo?["arguments"] as? [String] ?? []
+        let launch = CLI.GUILaunch.parse(arguments)
+        LogFile.shared.write(level: "info", message: "request from another launch: \(arguments.joined(separator: " "))", source: "locky")
+        switch launch.mode {
+        case .lock?:
+            if session?.mode == .preview { session?.end("locking") }
+            start(.lock, options: LockSession.Options(theme: launch.theme ?? scheduledTheme(), settings: store.settings))
+        case .preview?: preview(theme: launch.theme)
+        default:
+            if let theme = launch.theme { model.selectedTheme = theme }
+            showWindow(launch.window ?? .dashboard)
         }
     }
 
