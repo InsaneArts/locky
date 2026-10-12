@@ -57,7 +57,17 @@ final class ThemeEditing {
 
     /// Whether a placement sits on the theme's card: its own choice, else the theme's placement's, else the widget's.
     func card(_ placement: EditorPlacement) -> Bool {
-        if let card = placement.card.flatMap(EditorPlacement.isCard) { return card }
+        placement.card.flatMap(EditorPlacement.isCard) ?? ownCard(placement)
+    }
+
+    /// The card value the card switch saves: none when the theme's placement (or the widget) already does what the
+    /// switch says, which keeps the theme's card style.
+    func cardValue(_ on: Bool, for placement: EditorPlacement) -> LuaValue? {
+        on == ownCard(placement) ? nil : .bool(on)
+    }
+
+    /// Whether a placement sits on a card without settings.json's say: the theme's placement's choice, or the widget's.
+    private func ownCard(_ placement: EditorPlacement) -> Bool {
         if let base = placement.base, let widgets = layout?.widgets, widgets.indices.contains(base),
            let card = EditorPlacement.isCard(widgets[base]["card"]) {
             return card

@@ -172,7 +172,7 @@ private struct WidgetInspector: View {
             }
             if editing.layout?.cardStyle != "none" {
                 Section {
-                    Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = .bool(value) } }))
+                    Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
                 }
             }
             if !keys.isEmpty {

@@ -250,4 +250,22 @@ import Testing
         #expect(editing.inherited(added) == ["size": .int(12), "label": .string("w")])
         #expect(editing.card(added))
     }
+
+    /// Off and on again, a widget goes back to the theme's card, in the theme's style: the switch saves only a change.
+    @Test func theCardSwitchKeepsTheThemesStyle() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'w', card = 'outline' } } }")
+        try sandbox.write("plugin/w.lua", "locky.widget.define('w', { render = function() end })")
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        let editing = ThemeEditing(theme: Inspection.ThemeInfo(id: "t", name: "t"), model: model)
+        await editing.load()
+        var placement = try #require(editing.placements.first)
+        #expect(editing.card(placement))
+        placement.card = editing.cardValue(false, for: placement)
+        #expect(placement.card == .bool(false) && !editing.card(placement))
+        placement.card = editing.cardValue(true, for: placement)
+        #expect(placement.card == nil && editing.card(placement))
+        #expect(placement.settingsValue["card"] == .nil)
+    }
 }
