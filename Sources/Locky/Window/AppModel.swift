@@ -103,7 +103,7 @@ final class AppModel {
             // What was checked no longer holds: Update All brought every plugin up to date, and a removed one has
             // no update. A new check gives the rest again.
             switch action {
-            case .update: updates = []
+            case .update where report.ok: updates = []
             case .clean: updates.removeAll { !FileManager.default.fileExists(atPath: RuntimePath.defaultPacks.appending(path: $0.name).path) }
             default: break
             }
