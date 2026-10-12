@@ -20,6 +20,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         var settings = Settings()
         /// Embedded only: the view the screen goes into, with bounds of previewSize.
         weak var container: NSView?
+        /// Keeps this lock's privacy mode for the next launch's first lock; false for tool runs (screenshots).
+        var remembers = true
     }
 
     let mode: Mode
@@ -377,7 +379,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         if mode != .embedded {
             Self.lastLook = (theme.auth, theme.palette, theme.font)
-            Self.lastPrivacy = started.privacy
+            if options.remembers { Self.lastPrivacy = started.privacy }
         }
         buildScreens(started)
         startTouchID()

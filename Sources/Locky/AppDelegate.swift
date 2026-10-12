@@ -10,7 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The themes the Theme menu lists, worked out in the background (it runs init.lua).
     private var themeNames: [String] = []
     /// settings.json: what the menu and the window change.
-    private let store = SettingsStore(lastGood: SettingsStore.defaultLastGood)
+    /// A screenshot run (`--behind`) or one against the source tree (LOCKY_RESOURCES): a tool, not the user's
+    /// Locky. It starts no auto-lock, shortcut, or update checks, and leaves the user's last good settings, the
+    /// remembered privacy, and the menu's old theme choice alone.
+    static let isTool = CommandLine.arguments.contains("--behind") || ProcessInfo.processInfo.environment["LOCKY_RESOURCES"] != nil
+    private let store = SettingsStore(lastGood: isTool ? nil : SettingsStore.defaultLastGood)
     private lazy var model: AppModel = {
         let model = AppModel(store: store)
         model.lockNow = { [weak self] in self?.lockNow() }
@@ -41,10 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         try? FileManager.default.createDirectory(at: store.config, withIntermediateDirectories: true)
-        store.migrateMenuTheme()
+        if !Self.isTool { store.migrateMenuTheme() }
         store.watch()
-        // `locky ... --behind` takes screenshots: no auto-lock, shortcut, or update checks of its own.
-        let tool = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst())).behind
+        let tool = Self.isTool
         store.onChange = { [weak self] in
             guard let self else { return }
             if !tool { applyAppSettings() }
@@ -292,6 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {
         guard session == nil else { return }
+        var options = options
+        if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)
         session.onEnd = { [weak self, weak session] in
             guard let self else { return }
