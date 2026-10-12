@@ -22,10 +22,20 @@ final class LockSession: NSObject, NSWindowDelegate {
         weak var container: NSView?
         /// Keeps this lock's privacy mode for the next launch's first lock; false for tool runs (screenshots).
         var remembers = true
+        /// Embedded only: when a shader's animation starts. A preview that replaces its session passes the same
+        /// one, so the animation goes on where it was.
+        var epoch: CFTimeInterval?
+        /// Where Lua finds the config, plugins, and themes; tests pass their own.
+        var path = RuntimePath.standard()
     }
 
     let mode: Mode
     var onEnd: (() -> Void)?
+    /// Embedded only: called once, when the theme shows with each widget drawn and the background loaded (or
+    /// after two seconds at most), so a preview can swap this session in without a blank moment.
+    var onReady: (() -> Void)?
+    /// Instances that have drawn or failed at least once.
+    private var heard = Set<Int>()
 
     private let options: Options
     private var runtime: LuaRuntime?
@@ -104,7 +114,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         ) { _ in MainActor.assumeIsolated { environment.keyboard = Keyboard.current() } }
 
         // The app's copy of settings.json: while the file has an error, that is the last one that read without one.
-        let runtime = LuaRuntime(environment: environment, settings: options.settings, delegate: LuaRuntime.Delegate(
+        let runtime = LuaRuntime(path: options.path, environment: environment, settings: options.settings, delegate: LuaRuntime.Delegate(
             present: { [weak self] id, node in Task { @MainActor in self?.deliver(id, replacingViews: true) { $0.present(node) } } },
             failed: { [weak self] id, message, disabled in Task { @MainActor in self?.deliver(id, replacingViews: false) { $0.fail(message, disabled: disabled) } } }
         ))
@@ -149,13 +159,36 @@ final class LockSession: NSObject, NSWindowDelegate {
             let started = await runtime.start(theme: options.theme)
             guard !ended else { return }
             apply(started)
+            if mode == .embedded { await announceReady() }
         }
     }
 
     private func deliver(_ id: Int, replacingViews: Bool, _ update: @escaping (WidgetHost) -> Void) {
+        heard.insert(id)
         // Keep the latest view, and failures after it, for widgets made later.
         if replacingViews { latest[id] = [update] } else { latest[id, default: []].append(update) }
         hosts[id]?.forEach(update)
+    }
+
+    /// Calls onReady once the theme shows whole, or after two seconds; from then on, widgets the editor adds
+    /// fade in.
+    private func announceReady() async {
+        let deadline = Date().addingTimeInterval(2)
+        while !ended, !isReady, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(30))
+        }
+        guard !ended else { return }
+        screens.first?.fadesIn = true
+        let ready = onReady
+        onReady = nil
+        ready?()
+    }
+
+    /// Every widget has drawn (or failed) and measured itself, and the background has loaded.
+    private var isReady: Bool {
+        guard let started, let screen = screens.first else { return false }
+        return started.instances.allSatisfy { $0.map(heard.contains) ?? true } && screen.widgets.allSatisfy(\.isSettled)
+            && ((screen.background as? BackgroundLoading)?.isLoaded ?? true)
     }
 
     func end(_ reason: String) {
@@ -287,6 +320,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         case .embedded:
             guard let container = options.container else { return }
             let screen = LockScreenView(frame: CGRect(origin: .zero, size: options.previewSize))
+            // The preview fades the whole screen in once it is ready.
+            screen.fadesIn = false
             container.addSubview(screen)
             screens = [screen]
         case .lock:
@@ -437,9 +472,9 @@ final class LockSession: NSObject, NSWindowDelegate {
             let style = LockyStyle(palette: theme.palette, font: theme.font, scale: scale, hour24: started.hour24, still: still)
             screen.style = style
             let display = windows.indices.contains(index) ? windows[index].screen : NSScreen.main
-            screen.background = Backgrounds.makeView(theme.background, screen: display, still: still)
+            screen.background = Backgrounds.makeView(theme.background, screen: display, still: still, epoch: options.epoch)
             if let overlay = theme.overlay {
-                screen.overlay = Backgrounds.makeView(overlay, screen: display, overlay: true, still: still)
+                screen.overlay = Backgrounds.makeView(overlay, screen: display, overlay: true, still: still, epoch: options.epoch)
             }
             for (offset, placement) in theme.widgets.enumerated() where main || placement.allDisplays {
                 let host = WidgetHost(placement: placement, theme: theme, style: style, showsErrors: mode != .lock)
@@ -459,6 +494,77 @@ final class LockSession: NSObject, NSWindowDelegate {
                 }
             }
             screen.reveal()
+        }
+    }
+
+    // MARK: The theme editor
+
+    /// Embedded only: shows new settings.json changes to this theme in place: its background, its widgets, and the
+    /// password field's place. Each widget keeps its view, and one whose options changed draws anew in it. false
+    /// when the change needs a new session: the theme no longer loads, or more than those changed.
+    func reload(settings: Settings) async -> Bool {
+        guard mode == .embedded, !ended, let runtime, let old = started, let screen = screens.first else { return false }
+        guard let next = await runtime.reload(theme: old.theme.id, settings: settings, previous: old), !ended else { return false }
+        var rest = next.theme
+        rest.background = old.theme.background
+        rest.widgets = old.theme.widgets
+        rest.auth.anchor = old.theme.auth.anchor
+        rest.auth.offset = old.theme.auth.offset
+        guard rest == old.theme else { return false }
+        started = next
+        if next.theme.background != old.theme.background,
+           !(screen.background.map { Backgrounds.update($0, from: old.theme.background, to: next.theme.background) } ?? false) {
+            screen.replaceBackground(with: Backgrounds.makeView(next.theme.background, screen: NSScreen.main, still: still, epoch: options.epoch))
+        }
+        if next.theme.auth != old.theme.auth, let field = screen.auth {
+            screen.auth = (field.view, next.theme.auth)
+            auth = next.theme.auth
+        }
+        reconcileWidgets(from: old, to: next, on: screen)
+        if next.problems != old.problems {
+            screen.banner = next.problems.isEmpty ? nil : NSHostingView(rootView: ProblemsBanner(problems: next.problems))
+        }
+        screen.layoutAnimated()
+        return true
+    }
+
+    /// Gives each widget's view its new placement. A widget whose instance changed keeps its view, which shows the
+    /// old drawing until the new instance draws; new widgets get new views, and views no placement keeps fade out.
+    private func reconcileWidgets(from old: LuaRuntime.Started, to next: LuaRuntime.Started, on screen: LockScreenView) {
+        let views = screen.widgets
+        var taken = Set<Int>()
+        var list: [WidgetHost] = []
+        for (index, placement) in next.theme.widgets.enumerated() {
+            // The view of the same instance, else the view at the same place for the same widget.
+            var reuse: Int?
+            if let id = next.instances[index], let at = old.instances.firstIndex(of: id), views.indices.contains(at), !taken.contains(at) {
+                reuse = at
+            } else if views.indices.contains(index), !taken.contains(index), old.theme.widgets.indices.contains(index),
+                      old.theme.widgets[index].widget == placement.widget {
+                reuse = index
+            }
+            if let reuse {
+                taken.insert(reuse)
+                views[reuse].update(placement: placement, theme: next.theme, style: screen.style)
+                list.append(views[reuse])
+            } else {
+                let host = WidgetHost(placement: placement, theme: next.theme, style: screen.style, showsErrors: true)
+                screen.add(host)
+                list.append(host)
+            }
+        }
+        for (index, view) in views.enumerated() where !taken.contains(index) { screen.remove(view) }
+        screen.arrange(list)
+        hosts = [:]
+        let running = Set(next.instances.compactMap { $0 })
+        latest = latest.filter { running.contains($0.key) }
+        for (index, host) in list.enumerated() {
+            if let id = next.instances[index] {
+                hosts[id] = [host]
+                if !old.instances.contains(id) { latest[id]?.forEach { $0(host) } }
+            } else {
+                host.fail("theme \(next.theme.id): no widget named \"\(next.theme.widgets[index].widget)\"", disabled: true)
+            }
         }
     }
 
@@ -559,11 +665,17 @@ final class LockScreenView: NSView {
     var style = LockyStyle()
     var background: NSView? {
         didSet {
+            guard oldValue !== background else { return }
             oldValue?.removeFromSuperview()
+            // The password field's dim goes onto the new background at the next layout.
+            dimLayer.removeFromSuperlayer()
             if let background { addSubview(background, positioned: .below, relativeTo: nil) }
             needsLayout = true
         }
     }
+    /// Widgets fade in once they know their size. Off, they show at once: the theme editor's preview fades in
+    /// whole.
+    var fadesIn = true
     private(set) var widgets: [WidgetHost] = []
     /// Above the widgets, below the password field and banners.
     var overlay: NSView? {
@@ -578,9 +690,11 @@ final class LockScreenView: NSView {
     }
     var auth: (view: NSView, spec: Theme.Auth)? {
         didSet {
+            needsLayout = true
+            // A new place for the same field moves it; a new field replaces it.
+            guard oldValue?.view !== auth?.view else { return }
             oldValue?.view.removeFromSuperview()
             if let auth { addSubview(auth.view) }
-            needsLayout = true
         }
     }
     var authSize: CGSize = .zero { didSet { needsLayout = true } }
@@ -639,6 +753,67 @@ final class LockScreenView: NSView {
         if let overlay { addSubview(widget, positioned: .below, relativeTo: overlay) } else { addSubview(widget) }
     }
 
+    /// Takes a widget off the screen, fading it out.
+    func remove(_ widget: WidgetHost) {
+        widgets.removeAll { $0 === widget }
+        shown.remove(ObjectIdentifier(widget))
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            widget.animator().alphaValue = 0
+        }, completionHandler: {
+            MainActor.assumeIsolated { widget.removeFromSuperview() }
+        })
+    }
+
+    /// The widgets in this order, the last one in front: the theme editor's list after a change.
+    func arrange(_ list: [WidgetHost]) {
+        let reordered = list.map(ObjectIdentifier.init) != widgets.map(ObjectIdentifier.init)
+        widgets = list
+        guard reordered else { return }
+        let above = overlay ?? auth?.view ?? message?.view ?? banner
+        for widget in list where widget.superview === self {
+            if let above { addSubview(widget, positioned: .below, relativeTo: above) } else { addSubview(widget) }
+        }
+    }
+
+    /// A new background over the old one, faded in once it has loaded, so the screen never goes blank.
+    func replaceBackground(with view: NSView) {
+        guard let old = background else {
+            background = view
+            return
+        }
+        view.alphaValue = 0
+        view.frame = bounds
+        addSubview(view, positioned: .above, relativeTo: old)
+        Task { [weak self] in
+            // Two seconds at most for a picture or a video to load.
+            let deadline = Date().addingTimeInterval(2)
+            while !((view as? BackgroundLoading)?.isLoaded ?? true), Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(30))
+            }
+            guard let self, view.superview === self else { return }
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.3
+                view.animator().alphaValue = 1
+            }, completionHandler: {
+                MainActor.assumeIsolated { [weak self] in
+                    guard let self, view.superview === self else { return }
+                    background = view
+                }
+            })
+        }
+    }
+
+    /// Lays out at once, with the changes animated: a widget the editor moved glides to its new place.
+    func layoutAnimated() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.allowsImplicitAnimation = true
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+        }
+    }
+
     /// Lets the themed content fade in, each widget once it knows its size.
     func reveal() {
         revealed = true
@@ -662,9 +837,13 @@ final class LockScreenView: NSView {
             let measured = widget.placement.size != nil || widget.model.contentSize.width > 0
             if revealed, measured, !shown.contains(ObjectIdentifier(widget)) {
                 shown.insert(ObjectIdentifier(widget))
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.35
-                    widget.animator().alphaValue = 1
+                if fadesIn {
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = 0.35
+                        widget.animator().alphaValue = 1
+                    }
+                } else {
+                    widget.alphaValue = 1
                 }
             }
         }

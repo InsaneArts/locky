@@ -123,6 +123,24 @@ struct RuntimePath: Sendable {
         }
     }
 
+    /// A digest of every file under the roots (its path, size, and modification time), without settings.json and
+    /// hidden files: it changes when init.lua, a plugin, a theme, or an asset changes, and the window's previews
+    /// start again.
+    func fingerprint() -> Int {
+        var hasher = Hasher()
+        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        for root in roots {
+            guard let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { continue }
+            for case let url as URL in files where url.lastPathComponent != "settings.json" {
+                guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+                hasher.combine(url.path)
+                hasher.combine(values.fileSize)
+                hasher.combine(values.contentModificationDate)
+            }
+        }
+        return hasher.finalize()
+    }
+
     /// A relative path that stays inside its root.
     static func isSafe(_ relative: String) -> Bool {
         !relative.hasPrefix("/") && !relative.split(separator: "/").contains("..")

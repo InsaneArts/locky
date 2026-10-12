@@ -14,26 +14,45 @@ final class WidgetModel {
 /// One widget on one screen. Widgets never take the mouse or the keyboard: the password field keeps both.
 @MainActor
 final class WidgetHost: NSView {
-    let placement: Theme.Placement
+    private(set) var placement: Theme.Placement
     let model = WidgetModel()
     var onResize: (() -> Void)?
+    private let showsErrors: Bool
     private var hosting: NSHostingView<WidgetView>!
 
     init(placement: Theme.Placement, theme: Theme, style: LockyStyle, showsErrors: Bool) {
         self.placement = placement
+        self.showsErrors = showsErrors
         super.init(frame: .zero)
-        let card = placement.card.map { Theme.Card(style: $0, radius: theme.card.radius, fill: theme.card.fill, border: theme.card.border) }
-        let view = WidgetView(model: model, placement: placement, card: card, showsErrors: showsErrors, style: style) { [weak self] size in
-            guard let self, size != model.contentSize else { return }
-            model.contentSize = size
-            onResize?()
-        }
-        hosting = NSHostingView(rootView: view)
+        hosting = NSHostingView(rootView: view(theme: theme, style: style))
         hosting.sizingOptions = []
         addSubview(hosting)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    private func view(theme: Theme, style: LockyStyle) -> WidgetView {
+        let card = placement.card.map { Theme.Card(style: $0, radius: theme.card.radius, fill: theme.card.fill, border: theme.card.border) }
+        return WidgetView(model: model, placement: placement, card: card, showsErrors: showsErrors, style: style) { [weak self] size in
+            guard let self, size != model.contentSize else { return }
+            model.contentSize = size
+            onResize?()
+        }
+    }
+
+    /// A new place, card, or size for the widget, keeping what it shows: the theme editor's changes.
+    func update(placement new: Theme.Placement, theme: Theme, style: LockyStyle) {
+        guard new != placement else { return }
+        let restyle = new.card != placement.card || new.size != placement.size || new.align != placement.align || new.anchor != placement.anchor
+        placement = new
+        if restyle { hosting.rootView = view(theme: theme, style: style) }
+        onResize?()
+    }
+
+    /// Whether the widget is ready to show: drawn and measured, or with nothing to draw.
+    var isSettled: Bool {
+        (model.node == nil && model.error == nil) || placement.size != nil || model.contentSize.width > 0
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 

@@ -51,6 +51,8 @@ struct Inspection: Sendable {
     var base: LuaValue = .nil
     /// Errors from settings.json, init.lua, and plugin scripts.
     var problems: [String] = []
+    /// Changes when a Lua file or an asset in the config, a plugin, or a theme changes: RuntimePath.fingerprint.
+    var sources = 0
     var loaded = false
 
     func theme(_ id: String) -> ThemeInfo? { themes.first { $0.id == id } }
@@ -66,6 +68,7 @@ struct Inspection: Sendable {
             runtime.sync {
                 try? runtime.boot()
                 result.problems = runtime.problemsSoFar
+                result.sources = runtime.path.fingerprint()
                 result.config = (try? runtime.call("config", budget: 1).first) ?? .nil
                 result.themes = ((try? runtime.call("theme_infos", budget: 5).first?.array) ?? []).map { info in
                     ThemeInfo(id: info["id"].string ?? "?", name: info["name"].string ?? info["id"].string ?? "?",
