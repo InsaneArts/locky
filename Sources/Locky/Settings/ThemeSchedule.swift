@@ -32,18 +32,15 @@ struct ThemeSchedule: Equatable, Sendable {
         dark = value["dark"].string
     }
 
+    /// Every field, the other mode's too, so switching modes back and forth keeps both.
     var settingsValue: LuaValue {
         var table: [String: LuaValue] = ["mode": .string(mode.rawValue)]
-        switch mode {
-        case .time:
-            table["day"] = day.map(LuaValue.string)
-            table["night"] = night.map(LuaValue.string)
-            table["day_starts"] = .string(Self.clock(dayStarts))
-            table["night_starts"] = .string(Self.clock(nightStarts))
-        case .appearance:
-            table["light"] = light.map(LuaValue.string)
-            table["dark"] = dark.map(LuaValue.string)
-        }
+        table["day"] = day.map(LuaValue.string)
+        table["night"] = night.map(LuaValue.string)
+        table["day_starts"] = .string(Self.clock(dayStarts))
+        table["night_starts"] = .string(Self.clock(nightStarts))
+        table["light"] = light.map(LuaValue.string)
+        table["dark"] = dark.map(LuaValue.string)
         return .table(table)
     }
 

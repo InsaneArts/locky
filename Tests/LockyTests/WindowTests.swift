@@ -85,6 +85,17 @@ import Testing
 }
 
 @Suite struct ReviewFollowUpTests {
+    @Test func switchingTheScheduleModeKeepsTheOtherModesThemes() {
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "glass"
+        schedule.night = "default"
+        schedule.dayStarts = 6 * 60 + 30
+        schedule.mode = .appearance
+        schedule.light = "station"
+        let back = ThemeSchedule(settings: schedule.settingsValue)
+        #expect(back?.day == "glass" && back?.night == "default" && back?.dayStarts == 390 && back?.light == "station")
+    }
+
     @MainActor
     @Test func aLongMessageStaysOnScreenNextToAFieldAtTheEdge() {
         let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
