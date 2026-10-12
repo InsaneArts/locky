@@ -248,6 +248,22 @@ import Testing
         #expect(try runtime.eval("return locky.theme.current.widgets[1].opts.size") == [.int(20)])
     }
 
+    /// Saved when the theme had { one, two, one }: entry 1 was placement 3, now gone, and entry 2 is placement 1,
+    /// still there. A stale ref looks for its widget by name only among placements no exact ref names.
+    @Test func anExactRefKeepsItsPlacement() throws {
+        let sandbox = try themeSandbox()
+        try Settings(["themes": .table(["t": .table(["widgets": .array([
+            .table(["ref": .int(3), "widget": .string("one"), "anchor": .string("bottom-right")]),
+            .table(["ref": .int(1), "widget": .string("one"), "anchor": .string("top-left")]),
+            .table(["ref": .int(5), "widget": .string("two"), "anchor": .string("bottom")]),
+        ])])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        let widgets = try loadTheme(runtime)["widgets"].array ?? []
+        #expect(widgets.map { $0["widget"] } == [.string("one"), .string("two")])
+        #expect(widgets.map { $0["anchor"] } == [.string("top-left"), .string("bottom")])
+    }
+
     @Test func aBadEditIsReportedAndTheThemeLoadsWithoutIt() throws {
         let sandbox = try themeSandbox()
         try Settings(["themes": .table(["t": .table([

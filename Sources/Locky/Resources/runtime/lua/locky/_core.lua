@@ -932,27 +932,30 @@ local function settings_edit(name, theme, edit)
       end, true)
       validate(at .. ".opts", entry.opts, "table", true)
     end
-    local original, used, list = theme.widgets or {}, {}, {}
-    for _, entry in ipairs(edit.widgets) do
-      local base
-      if entry.ref ~= nil then
-        -- The theme's placement, if it is still there; after the theme changed, its first unused placement of
-        -- the same widget. A widget the theme no longer has is dropped.
-        if placement_name(original[entry.ref]) == entry.widget and not used[entry.ref] then
-          base = entry.ref
-        else
-          for j, placement in ipairs(original) do
-            if not used[j] and placement_name(placement) == entry.widget then
-              base = j
-              break
-            end
+    -- An entry with `ref` keeps the theme's placement, if it is still there. After the theme changed, it takes
+    -- the first unused placement of the same widget, once every exact ref has taken its own: a stale ref must
+    -- not take a placement another entry names. A widget the theme no longer has is dropped.
+    local original, used, bases, list = theme.widgets or {}, {}, {}, {}
+    for i, entry in ipairs(edit.widgets) do
+      if entry.ref ~= nil and placement_name(original[entry.ref]) == entry.widget and not used[entry.ref] then
+        bases[i], used[entry.ref] = entry.ref, true
+      end
+    end
+    for i, entry in ipairs(edit.widgets) do
+      if entry.ref ~= nil and not bases[i] then
+        for j, placement in ipairs(original) do
+          if not used[j] and placement_name(placement) == entry.widget then
+            bases[i], used[j] = j, true
+            break
           end
         end
       end
+    end
+    for i, entry in ipairs(edit.widgets) do
+      local base = bases[i]
       if entry.ref == nil or base then
         local placement = {}
         if base then
-          used[base] = true
           for key, value in pairs(original[base]) do
             placement[key] = value
           end
