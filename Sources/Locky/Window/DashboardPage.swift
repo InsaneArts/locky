@@ -11,7 +11,8 @@ struct DashboardPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 hero
-                IntruderPhotos(revision: model.revision)
+                // Screenshots never show someone's photo.
+                if !model.screenshots { IntruderPhotos(revision: model.revision) }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14)], spacing: 14) {
                     configCard
                     pluginsCard
