@@ -24,8 +24,25 @@ struct Inspection: Sendable {
         var card = false
     }
 
+    /// A package from locky.pack.add (init.lua) or settings.json's packs (the window).
+    struct PackInfo: Identifiable, Hashable, Sendable {
+        var id: String { name }
+        var name: String
+        var src: String?
+        var version: String?
+        /// A local folder, for a plugin being written.
+        var dir: URL?
+        /// Added by the window (settings.json), not by init.lua.
+        var fromSettings: Bool
+        /// Added by both; settings.json's entry wins.
+        var alsoInConfig: Bool
+        var folder: URL
+        var installed: Bool
+    }
+
     var themes: [ThemeInfo] = []
     var widgets: [WidgetInfo] = []
+    var packs: [PackInfo] = []
     /// Lua's config with settings.json applied: what a lock uses.
     var config: LuaValue = .nil
     /// The same without settings.json: what init.lua (or the default) says.
@@ -51,6 +68,14 @@ struct Inspection: Sendable {
                               description: info["description"].string, author: info["author"].string,
                               directory: info["dir"].string.map { URL(fileURLWithPath: $0) },
                               palette: (info["palette"].table ?? [:]).compactMapValues(\.string), error: info["error"].string)
+                }
+                result.packs = ((try? runtime.call("pack_specs", budget: 1).first?.array) ?? []).map { spec in
+                    let name = spec["name"].string ?? "?"
+                    let dir = spec["dir"].string.map { URL(fileURLWithPath: $0) }
+                    let folder = dir ?? path.packs.appending(path: name)
+                    return PackInfo(name: name, src: spec["src"].string, version: spec["version"].string, dir: dir,
+                                    fromSettings: spec["from"].string == "settings", alsoInConfig: spec["in_config"].bool ?? false,
+                                    folder: folder, installed: FileManager.default.fileExists(atPath: folder.path))
                 }
                 result.widgets = ((try? runtime.call("widget_catalog", budget: 1).first?.array) ?? []).map { info in
                     WidgetInfo(name: info["name"].string ?? "?", description: info["description"].string,
