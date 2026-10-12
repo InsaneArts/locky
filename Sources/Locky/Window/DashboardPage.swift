@@ -81,9 +81,12 @@ struct DashboardPage: View {
     private var pluginsCard: some View {
         let packs = model.inspection.packs
         let missing = packs.filter { !$0.installed }.count
+        let updates = model.available.count
+        let detail = missing > 0 ? "\(missing) not installed yet"
+            : updates > 0 ? (updates == 1 ? "1 update available" : "\(updates) updates available")
+            : "\(model.inspection.themes.count) themes, \(model.inspection.widgets.count) widgets"
         return StatusCard(symbol: "puzzlepiece.extension.fill", tint: missing > 0 ? .orange : .blue, title: "Plugins",
-                          value: packs.isEmpty ? "None added" : packs.count == 1 ? "1 plugin" : "\(packs.count) plugins",
-                          detail: missing > 0 ? "\(missing) not installed yet" : "\(model.inspection.themes.count) themes, \(model.inspection.widgets.count) widgets") {
+                          value: packs.isEmpty ? "None added" : packs.count == 1 ? "1 plugin" : "\(packs.count) plugins", detail: detail) {
             model.section = .plugins
         }
     }

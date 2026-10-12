@@ -70,6 +70,8 @@ struct PluginsPage: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Remove Unused", systemImage: "trash") { model.runPack(.clean) }
                     .help("Delete installed plugins that neither init.lua nor this window adds")
+                Button("Check for Updates", systemImage: "arrow.clockwise") { model.checkForUpdates() }
+                    .help(model.lastUpdateCheck.map { "Last checked \($0.formatted(.relative(presentation: .named)))" } ?? "Fetch every plugin and compare it with the pinned commit")
                 Button("Update All", systemImage: "arrow.down.circle") { model.runPack(.update) }
                     .help("Fetch every plugin's newest version and pin it")
                 Button("Install Plugin…", systemImage: "plus") { installing = true }
@@ -97,6 +99,7 @@ struct PluginsPage: View {
         case .sync: "Installing…"
         case .update: "Updating every plugin…"
         case .clean: "Removing unused plugins…"
+        case .check: "Checking for updates…"
         default: "Working…"
         }
     }
@@ -106,6 +109,7 @@ struct PluginsPage: View {
         case .sync: "Installed"
         case .update: "Updated"
         case .clean: "Removed unused plugins"
+        case .check: "Checked for updates"
         default: "Done"
         }
     }
@@ -128,6 +132,9 @@ private struct PluginRow: View {
                 HStack(spacing: 8) {
                     Text(pack.name).font(.body.weight(.semibold))
                     if !pack.installed { Tag("Not Installed", color: .orange) }
+                    if let update = model.available.first(where: { $0.name == pack.name }), let latest = update.latest {
+                        Tag("Update: \(latest.prefix(7))", color: .blue)
+                    }
                     if pack.dir != nil { Tag("Local", color: .purple) }
                     if pack.alsoInConfig { Tag("Also in init.lua", color: .secondary) }
                 }

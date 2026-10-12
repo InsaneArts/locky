@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self, windowController?.window?.isVisible == true else { return }
             model.refresh()
         }
+        scheduleUpdateChecks()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locky")
         let menu = NSMenu()
@@ -50,6 +51,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.selectedTheme = launch.theme
             model.screenshots = launch.behind
             showWindow(section, behind: launch.behind, size: launch.size)
+        }
+    }
+
+    /// Once a day, a minute after launch first, if settings.json's update_check is not off: fetch the plugins
+    /// and compare. It changes nothing; the menu and the window say what is new.
+    private func scheduleUpdateChecks() {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(60))
+            while !Task.isCancelled {
+                guard let self else { return }
+                if store.settings["update_check"].bool != false, session?.mode != .lock { model.checkForUpdates() }
+                try? await Task.sleep(for: .seconds(24 * 3600))
+            }
         }
     }
 
@@ -95,7 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         plugins.addItem(.separator())
         plugins.addItem(item("Open Plugins Folder", #selector(openPlugins)))
-        menu.addItem(submenu("Plugins", plugins))
+        let updates = model.available.count
+        menu.addItem(submenu(updates == 0 ? "Plugins" : updates == 1 ? "Plugins (1 update)" : "Plugins (\(updates) updates)", plugins))
 
         menu.addItem(.separator())
         menu.addItem(item("Dashboard…", #selector(openDashboard)))

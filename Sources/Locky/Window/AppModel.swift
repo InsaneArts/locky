@@ -43,6 +43,11 @@ final class AppModel {
     /// A package run in progress, and the last one's report.
     private(set) var packRunning: PackManager.Action?
     private(set) var packReport: (action: PackManager.Action, report: PackManager.Report)?
+    /// The last update check's results, and when it ran.
+    private(set) var updates: [PackUpdate] = []
+    private(set) var lastUpdateCheck: Date?
+    /// Packages with a newer commit upstream than the one pinned.
+    var available: [PackUpdate] { updates.filter { $0.error == nil && $0.current != nil && $0.latest != nil && $0.current != $0.latest } }
 
     /// What the window asks the app to do.
     @ObservationIgnored var lockNow: () -> Void = {}
@@ -85,6 +90,15 @@ final class AppModel {
             packReport = (action, report)
             refresh()
             done?(report)
+        }
+    }
+
+    /// Fetches every installed plugin and compares it with the pinned commit; changes nothing.
+    func checkForUpdates(then done: (() -> Void)? = nil) {
+        runPack(.check) { [weak self] report in
+            self?.updates = report.updates
+            self?.lastUpdateCheck = Date()
+            done?()
         }
     }
 
