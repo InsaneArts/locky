@@ -108,6 +108,22 @@ import Testing
         #expect(!shown.shows(theme: "broken"))
     }
 
+    /// A background picked while another still loads: the one picked last stays, whichever loads first.
+    @Test func theLastBackgroundPickedStays() async throws {
+        final class Slow: NSView, BackgroundLoading { var isLoaded = false }
+        let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        let first = NSView(), slow = Slow(), last = NSView()
+        screen.background = first
+        screen.replaceBackground(with: slow)
+        #expect(screen.latestBackground === slow)
+        screen.replaceBackground(with: last)
+        #expect(screen.latestBackground === last && slow.superview == nil)
+        #expect(await wait { screen.background === last })
+        slow.isLoaded = true
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(screen.background === last && first.superview == nil)
+    }
+
     @Test func onlyTheThemesOwnChangesReloadInPlace() {
         let base = ThemePreviewView.Key(theme: "t", settings: Settings(["theme": .string("t")]), sources: 5)
         var edited = base

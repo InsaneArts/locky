@@ -516,7 +516,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         guard rest == old.theme else { return false }
         started = next
         if next.theme.background != old.theme.background,
-           !(screen.background.map { Backgrounds.update($0, from: old.theme.background, to: next.theme.background) } ?? false) {
+           !(screen.latestBackground.map { Backgrounds.update($0, from: old.theme.background, to: next.theme.background) } ?? false) {
             screen.replaceBackground(with: Backgrounds.makeView(next.theme.background, screen: NSScreen.main, still: still, epoch: options.epoch))
         }
         if next.theme.auth != old.theme.auth, let field = screen.auth {
@@ -722,6 +722,10 @@ final class LockScreenView: NSView {
             needsLayout = true
         }
     }
+    /// A background fading in over `background` once it has loaded.
+    private var incomingBackground: NSView?
+    /// The background the screen shows, or is about to: the one a change applies to.
+    var latestBackground: NSView? { incomingBackground ?? background }
     /// Widgets fade in once they know their size. Off, they show at once: the theme editor's preview fades in
     /// whole.
     var fadesIn = true
@@ -827,8 +831,11 @@ final class LockScreenView: NSView {
         }
     }
 
-    /// A new background over the old one, faded in once it has loaded, so the screen never goes blank.
+    /// A new background over the old one, faded in once it has loaded, so the screen never goes blank. It replaces
+    /// one still loading.
     func replaceBackground(with view: NSView) {
+        incomingBackground?.removeFromSuperview()
+        incomingBackground = nil
         guard let old = background else {
             background = view
             return
@@ -836,19 +843,21 @@ final class LockScreenView: NSView {
         view.alphaValue = 0
         view.frame = bounds
         addSubview(view, positioned: .above, relativeTo: old)
+        incomingBackground = view
         Task { [weak self] in
             // Two seconds at most for a picture or a video to load.
             let deadline = Date().addingTimeInterval(2)
             while !((view as? BackgroundLoading)?.isLoaded ?? true), Date() < deadline {
                 try? await Task.sleep(for: .milliseconds(30))
             }
-            guard let self, view.superview === self else { return }
+            guard let self, incomingBackground === view else { return }
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.3
                 view.animator().alphaValue = 1
             }, completionHandler: {
                 MainActor.assumeIsolated { [weak self] in
-                    guard let self, view.superview === self else { return }
+                    guard let self, incomingBackground === view else { return }
+                    incomingBackground = nil
                     background = view
                 }
             })
@@ -874,6 +883,7 @@ final class LockScreenView: NSView {
     override func layout() {
         super.layout()
         background?.frame = bounds
+        incomingBackground?.frame = bounds
         overlay?.frame = bounds
         if dimLayer.superlayer == nil, let backgroundLayer = background?.layer {
             backgroundLayer.addSublayer(dimLayer)
