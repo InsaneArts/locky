@@ -39,6 +39,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var touchIDFallback: Task<Void, Never>?
     private var safetyExit: DispatchWorkItem?
     private var autoUnlock: Task<Void, Never>?
+    /// The safety timer's length while it is armed, to arm it again after a sleep.
+    private var safetySeconds: Double?
     private var keyMonitor: Any?
     private var keyboardObserver: NSObjectProtocol?
     private var activityMonitor: Any?
@@ -196,6 +198,11 @@ final class LockSession: NSObject, NSWindowDelegate {
             guard session.windows.first?.isKeyWindow == true, session.authModel.needsClick else { return }
             session.authModel.needsClick = false
             session.authModel.focusRequest += 1
+        }
+        // The safety timer counts time awake; after a sleep it starts again, so a lock made before the sleep
+        // does not open by itself on wake.
+        observe(workspace, NSWorkspace.didWakeNotification) { session in
+            if let seconds = session.safetySeconds { session.armSafety(after: seconds) }
         }
     }
 
@@ -356,7 +363,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             for problem in started.problems { LogFile.shared.write(level: "warn", message: problem, source: "preview") }
         }
         if mode == .lock, started.autoUnlock > 0 { armSafety(after: started.autoUnlock) }
-        else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel() }
+        else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel(); safetySeconds = nil }
         privacy = started.privacy
         if mode != .embedded {
             Self.lastLook = (theme.auth, theme.palette, theme.font)
@@ -475,6 +482,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q quits at once, unless settings.json's
     /// emergency_exit is false.
     private func armSafety(after seconds: Double) {
+        safetySeconds = seconds
         banner.quits = options.settings["emergency_exit"].bool != false
         if keyMonitor == nil, banner.quits {
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -490,7 +498,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         DispatchQueue.global().asyncAfter(deadline: .now() + seconds + 5, execute: exitLater)
         banner.opensAt = Date().addingTimeInterval(seconds)
         autoUnlock = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(seconds))
+            // The suspending clock stops while the Mac sleeps; the default continuous one does not.
+            try? await Task.sleep(for: .seconds(seconds), clock: .suspending)
             if !Task.isCancelled { self?.end("auto_unlock") }
         }
     }
