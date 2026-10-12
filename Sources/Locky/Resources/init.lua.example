@@ -1,0 +1,29 @@
+-- Locky's config. Lua, like Neovim's init.lua. Locky runs it each time the screen locks.
+-- Check it with `locky check`; read the log with the menu's Open Log.
+
+locky.setup({
+  -- A theme from `locky themes`, or one of your own in themes/<name>.lua next to this file.
+  theme = "default",
+
+  -- Prototype safety: the lock opens by itself after this many seconds. 0 turns it off.
+  auto_unlock = 60,
+
+  -- Override any theme's colors, background, or widget options:
+  -- palette = { accent = "#ff79c6" },
+  -- background = { wallpaper = true, blur = 30, dim = 0.3 },
+  -- widgets = { clock = { format = "HH:mm" } },
+})
+
+-- Plugins from git, installed with `locky pack sync` and pinned in locky-pack-lock.json:
+-- locky.pack.add({ "someone/locky-weather" })
+-- require("weather").setup({ city = "Tbilisi" })
+
+-- Change a theme without copying it:
+-- locky.theme.extend("default", function(theme)
+--   table.insert(theme.widgets, { "date", anchor = "bottom-left", offset = { 32, -32 } })
+-- end)
+
+-- Your own widget, right here (or in lua/ and plugin/ next to this file):
+-- locky.widget.define("hello", {
+--   render = function(self) return locky.ui.text("Hello, " .. locky.sys.user().full_name) end,
+-- })

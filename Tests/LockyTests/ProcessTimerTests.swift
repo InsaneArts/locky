@@ -1,0 +1,59 @@
+import Foundation
+import Testing
+@testable import Locky
+
+@Suite struct ProcessTimerTests {
+    /// Running programs must not stop timers: a widget polls a program while a clock ticks.
+    @Test func timersKeepFiringWhileProgramsRun() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/both.lua", """
+            locky.widget.define("both", {
+              init = function(self)
+                self:every(0.1, function(self) self.state.ticks = (self.state.ticks or 0) + 1 end)
+                self:every(0.3, function(self)
+                  self:system({ "echo", "hi" }, function(self, r) self:set({ exits = (self.state.exits or 0) + 1 }) end)
+                end)
+              end,
+              render = function(self) return locky.ui.text((self.state.ticks or 0) .. "/" .. (self.state.exits or 0)) end,
+            })
+            """)
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'both' } } }")
+        let recorder = Recorder()
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: recorder.delegate)
+        let started = await runtime.start(theme: "t")
+        let id = try #require(started.instances[0])
+        try await Task.sleep(for: .seconds(3))
+        guard case .text(let text)? = (recorder.views[id] ?? nil)?.kind else { Issue.record("no view"); return }
+        let parts = text.split(separator: "/").compactMap { Int($0) }
+        #expect(parts.count == 2 && parts[0] >= 25 && parts[1] >= 8, "ticks/exits after 3 s: \(text)")
+        runtime.stop()
+    }
+}
+
+@Suite struct ChildProcessTests {
+    /// A program that leaves a background child holding its output pipe still reports soon after it exits.
+    @Test func aBackgroundChildDoesNotHoldTheResult() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/bg.lua", """
+            locky.widget.define("bg", {
+              init = function(self)
+                self.state.started = locky.now()
+                self:system({ "sh", "-c", "sleep 3 & echo hi" }, function(self, r)
+                  self:set({ took = locky.now() - self.state.started, out = r.stdout })
+                end)
+              end,
+              render = function(self) return self.state.took and locky.ui.text(("%.1f"):format(self.state.took)) or nil end,
+            })
+            """)
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'bg' } } }")
+        let recorder = Recorder()
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: recorder.delegate)
+        let started = await runtime.start(theme: "t")
+        let id = try #require(started.instances[0])
+        // views[id] holds nil while the widget draws nothing: wait for an actual view.
+        #expect(await eventually(timeout: 2.5) { (recorder.views[id] ?? nil) != nil }, "the result should not wait for the 3 s background child")
+        guard case .text(let took)? = (recorder.views[id] ?? nil)?.kind else { Issue.record("no result"); return }
+        #expect((Double(took) ?? 9) < 1.5, "took \(took) s")
+        runtime.stop()
+    }
+}
