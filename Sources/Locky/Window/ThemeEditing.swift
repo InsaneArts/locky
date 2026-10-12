@@ -57,13 +57,10 @@ final class ThemeEditing {
 
     /// Whether a placement sits on the theme's card: its own choice, else the theme's placement's, else the widget's.
     func card(_ placement: EditorPlacement) -> Bool {
-        if let card = placement.card { return card }
-        if let base = placement.base, let widgets = layout?.widgets, widgets.indices.contains(base) {
-            switch widgets[base]["card"] {
-            case .bool(let on): return on
-            case .string(let style): return style != "none"
-            default: break
-            }
+        if let card = placement.card.flatMap(EditorPlacement.isCard) { return card }
+        if let base = placement.base, let widgets = layout?.widgets, widgets.indices.contains(base),
+           let card = EditorPlacement.isCard(widgets[base]["card"]) {
+            return card
         }
         return info(placement)?.card ?? false
     }
@@ -158,8 +155,9 @@ struct EditorPlacement: Equatable {
     var anchor = "center"
     var x = 0.0
     var y = 0.0
-    /// true or false for a card; nil leaves it to the theme and the widget.
-    var card: Bool?
+    /// true, false, or a card style such as "outline", kept as settings.json has it; nil leaves it to the theme and
+    /// the widget.
+    var card: LuaValue?
     /// Fields the editor does not show (size, align, display), and opts, kept as they are.
     var rest: [String: LuaValue] = [:]
 
@@ -167,11 +165,12 @@ struct EditorPlacement: Equatable {
         self.widget = widget
     }
 
-    /// From the theme's own placement.
+    /// From the theme's own placement. Its card and the rest stay the theme's: Lua takes them from the placement.
     init(original: LuaValue, ref: Int) {
         self.init(entry: original)
         self.ref = ref
         base = ref - 1
+        card = nil
         rest = [:]
     }
 
@@ -182,11 +181,7 @@ struct EditorPlacement: Equatable {
         anchor = entry["anchor"].string ?? "center"
         x = Self.coordinate(entry["offset"][0].number)
         y = Self.coordinate(entry["offset"][1].number)
-        switch entry["card"] {
-        case .bool(let value): card = value
-        case .string(let style): card = style != "none"
-        default: card = nil
-        }
+        card = entry["card"].isNil ? nil : entry["card"]
         let shown: Set<String> = ["ref", "widget", "anchor", "offset", "card"]
         rest = (entry.table ?? [:]).filter { !shown.contains($0.key) }
     }
@@ -197,8 +192,17 @@ struct EditorPlacement: Equatable {
         if let ref { table["ref"] = .int(ref) }
         table["anchor"] = .string(anchor)
         table["offset"] = .array([Self.number(x), Self.number(y)])
-        if let card { table["card"] = .bool(card) }
+        if let card { table["card"] = card }
         return .table(table)
+    }
+
+    /// Whether a card value puts the widget on a card: true, or a style other than "none".
+    static func isCard(_ value: LuaValue) -> Bool? {
+        switch value {
+        case .bool(let on): on
+        case .string(let style): style != "none"
+        default: nil
+        }
     }
 
     /// settings.json's options for this widget, over the theme's and init.lua's.

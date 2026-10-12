@@ -172,7 +172,7 @@ private struct WidgetInspector: View {
                 Section {
                     Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in
                         var changed = placement
-                        changed.card = value
+                        changed.card = .bool(value)
                         editing.set(index, changed)
                     }))
                 }

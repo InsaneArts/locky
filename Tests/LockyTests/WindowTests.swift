@@ -11,7 +11,7 @@ import Testing
             "size": .array([.int(100), .int(40)]), "opts": .table(["size": .int(30)]),
         ])
         let placement = EditorPlacement(entry: entry)
-        #expect(placement.ref == 2 && placement.anchor == "top-left" && placement.x == 12 && placement.y == -3.5 && placement.card == false)
+        #expect(placement.ref == 2 && placement.anchor == "top-left" && placement.x == 12 && placement.y == -3.5 && placement.card == .bool(false))
         // Fields the editor does not show are kept.
         #expect(placement.settingsValue == entry)
     }
@@ -25,6 +25,17 @@ import Testing
         // Lua copies the rest from the theme's placement, so the editor does not write it.
         #expect(saved["size"] == .nil)
         #expect(saved["card"] == .nil)
+    }
+
+    /// A card style stays the style: written back as true, it would put the widget on the theme's default card.
+    @Test func aCardStyleSurvivesAnEdit() {
+        var placement = EditorPlacement(entry: .table(["widget": .string("clock"), "card": .string("outline")]))
+        placement.x = 40
+        #expect(placement.settingsValue["card"] == .string("outline"))
+        #expect(EditorPlacement.isCard(.string("outline")) == true && EditorPlacement.isCard(.string("none")) == false)
+        // The theme's own placement leaves the card to the theme.
+        let original = EditorPlacement(original: .table(["widget": .string("clock"), "card": .string("outline")]), ref: 1)
+        #expect(original.settingsValue["card"] == .nil)
     }
 
     @Test func themeEditsLeaveNoEmptyTables() {
