@@ -59,6 +59,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// settings.json's display_off: the displays go dark after that many seconds without input.
     private var displayOff: DisplayOff?
     private var inputMonitor: Any?
+    /// Asks to activate Locky at the lock's first input, so its kiosk options apply.
+    private var activationMonitor: Any?
     /// When to take a photo of whoever types wrong passwords, and the photos this lock took.
     private lazy var intruder = IntruderPolicy(settings: options.settings)
     private(set) var photos: [URL] = []
@@ -125,6 +127,16 @@ final class LockSession: NSObject, NSWindowDelegate {
             armSafety(after: 60)
             reclaimKeyboardSoon()
             startDisplayOff()
+            // The kiosk options (no app switching, no Force Quit) apply only while Locky is the active app, and a
+            // non-activating shield does not activate it, even when clicked. Input to the lock is the moment macOS
+            // grants an activation: ask then.
+            activationMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { event in
+                if !NSApp.isActive {
+                    NSApp.activate()
+                    NSApp.presentationOptions = Self.kioskOptions
+                }
+                return event
+            }
         }
         // Touch ID starts with the theme's field, or after a second with this one if the theme is slow.
         touchIDFallback = Task { [weak self] in
@@ -158,6 +170,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
+        if let activationMonitor { NSEvent.removeMonitor(activationMonitor) }
         displayOff?.stop()
         powerObserver = nil
         idleTimer?.cancel()
@@ -279,8 +292,10 @@ final class LockSession: NSObject, NSWindowDelegate {
         case .lock:
             for (index, screen) in NSScreen.screens.enumerated() {
                 let window = ShieldWindow(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-                // A panel hides when its app deactivates, and Locky is often not the active app during a lock.
+                // A panel hides when its app deactivates, and Locky is often not the active app during a lock;
+                // nor may anything hide it on purpose.
                 window.hidesOnDeactivate = false
+                window.canHide = false
                 window.becomesKeyOnlyIfNeeded = false
                 window.worksWhenModal = true
                 // Only the main display's shield takes the keyboard: a click on another display must not send
