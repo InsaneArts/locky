@@ -170,8 +170,9 @@ final class ThemePreviewView: NSView {
         Task {
             let shown = await session.reload(settings: wanted.settings)
             reloading = false
-            guard self.current?.session === session else { return }
-            if shown { self.current?.key = wanted } else { begin(wanted) }
+            if self.current?.session === session {
+                if shown { self.current?.key = wanted } else { begin(wanted) }
+            }
             advance()
         }
     }
