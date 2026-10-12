@@ -1055,7 +1055,7 @@ end
 -- A copy with only strings, numbers, booleans, and tables: for data the host reads. The host takes string keys
 -- and a list without gaps, nothing else, and a table 16 levels down is left out, so a cycle ends. Raw access:
 -- a metamethod must not fail the copy.
-local function plain(value, depth)
+local function plain(value, depth, seen)
   depth = depth or 0
   local kind = type(value)
   if kind == "string" or kind == "number" or kind == "boolean" then
@@ -1063,14 +1063,20 @@ local function plain(value, depth)
   elseif kind ~= "table" or depth >= 16 then
     return nil
   end
+  -- Each table is copied once: a table that refers to itself, even many times over, cannot grow the copy.
+  seen = seen or {}
+  if seen[value] then
+    return nil
+  end
+  seen[value] = true
   local copy = {}
   for key, item in next, value do
     if type(key) == "string" then
-      copy[key] = plain(item, depth + 1)
+      copy[key] = plain(item, depth + 1, seen)
     end
   end
   for i = 1, rawlen(value) do
-    copy[i] = plain(rawget(value, i), depth + 1)
+    copy[i] = plain(rawget(value, i), depth + 1, seen)
     if copy[i] == nil then
       break
     end

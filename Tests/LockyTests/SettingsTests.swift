@@ -714,3 +714,17 @@ import Testing
         #expect(ThemeSchedule.clock(425) == "07:05")
     }
 }
+
+@Suite struct SettingsOrderFollowUpTests {
+    @Test func aPaletteThatRefersToItselfManyTimesStillLists() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { name = 'T' }")
+        try sandbox.write("themes/cycle3.lua", "local p = { accent = '#ff0000' } p.a = p p.b = p p.c = p return { palette = p }")
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        _ = runtime.bootForTest()
+        let list = try runtime.sync { try runtime.call("theme_infos", budget: 2) }.first?.array ?? []
+        runtime.stop()
+        #expect(list.contains { $0["id"] == .string("t") })
+        #expect(list.first { $0["id"] == .string("cycle3") }?["palette"]["accent"] == .string("#ff0000"))
+    }
+}
