@@ -91,6 +91,8 @@ import Testing
         #expect(PackSpec.name(of: .string("someone/locky.github-stars")) == "locky.github-stars")
         #expect(PackSpec.name(of: .string("https://example.com/x/theme.git")) == "theme")
         #expect(PackSpec.name(of: .table(["dir": .string("~/code/my-plugin")])) == "my-plugin")
+        // A folder keeps ".git" in its name, as Lua names it.
+        #expect(PackSpec.name(of: .table(["dir": .string("~/code/theme.git")])) == "theme.git")
     }
 
     @Test func switchingTheScheduleModeKeepsTheOtherModesThemes() {
