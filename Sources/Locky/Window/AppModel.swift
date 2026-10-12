@@ -74,11 +74,14 @@ final class AppModel {
         return store.settings.schedule?.theme(at: Date(), dark: dark) ?? inspection.config["theme"].string ?? store.settings["theme"].string ?? "default"
     }
 
-    /// Reads the config again in the background. Calls that arrive while one runs fold into the next.
+    /// Reads the config again in the background. A burst of calls (a save, then the file events it causes)
+    /// reads once, after the burst; a call while a read runs folds into the next.
     func refresh() {
         refreshing?.cancel()
         let config = store.config
         refreshing = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
             let result = await Inspection.load(config: config)
             guard !Task.isCancelled else { return }
             inspection = result
