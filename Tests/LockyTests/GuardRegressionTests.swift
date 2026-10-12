@@ -130,6 +130,23 @@ import Testing
         #expect(LogFile.shared.recent.contains { $0.contains("eval:1: \(marker)") })
     }
 
+    /// A tail call keeps the caller's frame, as with Lua's own getinfo: a Lua wrapper would have lost it.
+    @Test func getinfoInATailCallReportsLikeLuas() throws {
+        let source = """
+            local function f()
+              return debug.getinfo(1, "l").currentline
+            end
+            return f()
+            """
+        let vm = try LuaVM()
+        let chunk = try vm.load(source, chunkName: "=eval")
+        let plain = try vm.call(chunk, budget: 1)
+        vm.release(chunk)
+        let runtime = try runtime()
+        #expect(try runtime.eval(source) == plain)
+        #expect(plain == [.int(2)])
+    }
+
     @Test func pipesAreRefused() throws {
         let runtime = try runtime()
         let fifo = FileManager.default.temporaryDirectory.appending(path: "locky-fifo-\(UUID().uuidString)").path

@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 double locky_now(void) {
@@ -104,6 +105,99 @@ static void locky_drop(lua_State *L, const char *library, const char *name) {
     lua_pop(L, 1);
 }
 
+static void locky_setfield_string(lua_State *L, const char *key, const char *value) {
+    lua_pushstring(L, value);
+    lua_setfield(L, -2, key);
+}
+
+static void locky_setfield_integer(lua_State *L, const char *key, lua_Integer value) {
+    lua_pushinteger(L, value);
+    lua_setfield(L, -2, key);
+}
+
+static void locky_setfield_boolean(lua_State *L, const char *key, int value) {
+    lua_pushboolean(L, value);
+    lua_setfield(L, -2, key);
+}
+
+/* debug.getinfo as Lua's ldblib.c has it, without the "f" option: a function on the stack can be the C pcall under
+ * Locky's pcall, and called directly it would catch the timeout error and keep going. In C, so that a tail call to
+ * it keeps its caller's frame, and levels count exactly as in Lua's. */
+static int locky_getinfo(lua_State *L) {
+    lua_Debug ar;
+    int arg = 0;
+    lua_State *L1 = L;
+    if (lua_isthread(L, 1)) {
+        arg = 1;
+        L1 = lua_tothread(L, 1);
+    }
+    const char *asked = luaL_optstring(L, arg + 2, "lnSrtu");
+    luaL_argcheck(L, asked[0] != '>', arg + 2, "invalid option '>'");
+    char options[16];  /* ">" and every option letter once fit with room to spare */
+    size_t n = 0;
+    if (lua_isfunction(L, arg + 1)) {
+        options[n++] = '>';
+    }
+    for (const char *c = asked; *c != '\0' && n < sizeof options - 1; c++) {
+        if (*c != 'f') {
+            options[n++] = *c;
+        }
+    }
+    options[n] = '\0';
+    if (L != L1 && !lua_checkstack(L1, 3)) {
+        return luaL_error(L, "stack overflow");
+    }
+    if (lua_isfunction(L, arg + 1)) {
+        lua_pushvalue(L, arg + 1);
+        lua_xmove(L, L1, 1);
+    } else if (!lua_getstack(L1, (int)luaL_checkinteger(L, arg + 1), &ar)) {
+        luaL_pushfail(L);  /* level out of range */
+        return 1;
+    }
+    if (!lua_getinfo(L1, options, &ar)) {
+        return luaL_argerror(L, arg + 2, "invalid option");
+    }
+    lua_newtable(L);
+    if (strchr(options, 'S')) {
+        lua_pushlstring(L, ar.source, ar.srclen);
+        lua_setfield(L, -2, "source");
+        locky_setfield_string(L, "short_src", ar.short_src);
+        locky_setfield_integer(L, "linedefined", ar.linedefined);
+        locky_setfield_integer(L, "lastlinedefined", ar.lastlinedefined);
+        locky_setfield_string(L, "what", ar.what);
+    }
+    if (strchr(options, 'l')) {
+        locky_setfield_integer(L, "currentline", ar.currentline);
+    }
+    if (strchr(options, 'u')) {
+        locky_setfield_integer(L, "nups", ar.nups);
+        locky_setfield_integer(L, "nparams", ar.nparams);
+        locky_setfield_boolean(L, "isvararg", ar.isvararg);
+    }
+    if (strchr(options, 'n')) {
+        locky_setfield_string(L, "name", ar.name);
+        locky_setfield_string(L, "namewhat", ar.namewhat);
+    }
+    if (strchr(options, 'r')) {
+        locky_setfield_integer(L, "ftransfer", ar.ftransfer);
+        locky_setfield_integer(L, "ntransfer", ar.ntransfer);
+    }
+    if (strchr(options, 't')) {
+        locky_setfield_boolean(L, "istailcall", ar.istailcall);
+        locky_setfield_integer(L, "extraargs", ar.extraargs);
+    }
+    if (strchr(options, 'L')) {
+        /* lua_getinfo left the line table on L1's stack: put it under the result table, then into it. */
+        if (L == L1) {
+            lua_rotate(L, -2, 1);
+        } else {
+            lua_xmove(L1, L, 1);
+        }
+        lua_setfield(L, -2, "activelines");
+    }
+    return 1;
+}
+
 void locky_openlibs(lua_State *L) {
     luaL_openlibs(L);
 
@@ -138,12 +232,12 @@ void locky_openlibs(lua_State *L) {
     }
     lua_pop(L, 1);
 
-    /* debug: traceback and getinfo only. sethook would switch off the time budget. */
+    /* debug: traceback, and getinfo without functions. sethook would switch off the time budget. */
     if (lua_getglobal(L, "debug") == LUA_TTABLE) {
         lua_createtable(L, 0, 2);
         lua_getfield(L, -2, "traceback");
         lua_setfield(L, -2, "traceback");
-        lua_getfield(L, -2, "getinfo");
+        lua_pushcfunction(L, locky_getinfo);
         lua_setfield(L, -2, "getinfo");
         lua_pushvalue(L, -1);
         lua_setglobal(L, "debug");
