@@ -86,6 +86,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         let themes = NSMenu()
+        if store.settings.schedule != nil {
+            let note = NSMenuItem(title: "The theme schedule picks the theme", action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            themes.addItem(note)
+            themes.addItem(item("Change the Schedule…", #selector(openSettings)))
+            themes.addItem(.separator())
+        }
         let follow = item("Use init.lua's Theme", #selector(followConfig))
         follow.state = pickedTheme == nil ? .on : .off
         themes.addItem(follow)
