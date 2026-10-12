@@ -301,6 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let waiting = pendingMessages
             pendingMessages = []
             for message in waiting { show(title: message.title, text: message.text) }
+            if mode == .lock { autoLock.noteUnlock() }
             // Someone typed wrong passwords and the camera caught them: show the photos.
             if mode == .lock, let session {
                 Task { [weak self] in

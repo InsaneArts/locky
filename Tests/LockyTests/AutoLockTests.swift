@@ -175,4 +175,14 @@ import Testing
         try await Task.sleep(for: .milliseconds(100))
         #expect(reasons == ["system sleep", "display sleep"])
     }
+
+    /// A lock the shortcut started and Touch ID opened, between two checks and with no key pressed: the count
+    /// starts at the unlock (noteUnlock), not at the last key press 297 s before.
+    @Test func anUnlockBetweenChecksRestartsTheCount() {
+        var count = AutoLock.IdleCount(restartedAt: 0)
+        // What noteUnlock does at the unlock, 297 s after the last input.
+        count.restartedAt = 297
+        let decision = AutoLock.idleDecision(now: 301, idle: 301, threshold: 300, locked: false, keptAwake: false, count: &count)
+        #expect(decision == .wait(296))
+    }
 }

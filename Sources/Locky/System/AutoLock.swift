@@ -123,6 +123,13 @@ final class AutoLock: NSObject {
         Self.onMainNow { self.fire("screen saver") }
     }
 
+    /// A lock ended, whoever started it (the shortcut, the menu): the idle count starts again now. Without this,
+    /// a lock between two checks went unseen, and an unlock without a key press (Touch ID) locked again at once.
+    func noteUnlock() {
+        count.hold = nil
+        count.restartedAt = Self.now()
+    }
+
     private func fire(_ reason: String) {
         guard !isLocked() else { return }
         lock(reason)
