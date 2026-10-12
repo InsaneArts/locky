@@ -23,8 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return model
     }()
     private var windowController: LockyWindowController?
-    /// The Lock Now shortcut, from settings.json.
+    /// The Lock Now shortcut, and auto-lock's triggers, both from settings.json.
     private lazy var hotkeys = HotkeyCenter { [weak self] in self?.lockNow() }
+    private lazy var autoLock = AutoLock(isLocked: { [weak self] in self?.session?.mode == .lock },
+                                         lock: { [weak self] reason in self?.lock(because: reason) })
     /// While Settings records a new shortcut, the old one stays free so the recorder sees the keys.
     private var recordingShortcut = false
     /// The theme picked in the menu (settings.json's theme). It wins over init.lua's until "Use init.lua's
@@ -65,8 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// The settings the app itself acts on: the Lock Now shortcut.
+    /// The settings the app itself acts on: auto-lock's triggers and the Lock Now shortcut.
     private func applyAppSettings() {
+        autoLock.apply(store.settings.autoLock)
         applyShortcut()
     }
 
@@ -84,6 +87,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             model.shortcutProblem = error.localizedDescription
         }
+    }
+
+    private func lock(because reason: String) {
+        LogFile.shared.write(level: "info", message: "auto-lock: \(reason)", source: "locky")
+        lockNow()
     }
 
     /// Once a day, a minute after launch first, if settings.json's update_check is not off: fetch the plugins
