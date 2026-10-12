@@ -245,12 +245,42 @@ private struct MessageField: View {
     }
 }
 
-/// The Lock Now shortcut.
+/// Launch at login and the Lock Now shortcut.
 private struct GeneralSettings: View {
     let model: AppModel
+    @State private var login = LoginItem.status
+    @State private var loginError: String?
 
     var body: some View {
         Section("General") {
+            Toggle(isOn: Binding(get: { login == .enabled || login == .requiresApproval }, set: { on in
+                do {
+                    try LoginItem.set(on)
+                    loginError = nil
+                } catch {
+                    loginError = error.localizedDescription
+                }
+                login = LoginItem.status
+            })) {
+                Text("Open Locky at login")
+                Text("Locky has to run to lock by itself and to answer the shortcut.")
+            }
+            .disabled({ if case .unavailable = login { return true } else { return false } }())
+            switch login {
+            case .requiresApproval:
+                HStack {
+                    Label("Allow Locky in System Settings › Login Items", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Spacer()
+                    Button("Open Login Items") { LoginItem.openSystemSettings() }
+                }
+            case .unavailable(let message):
+                Label(message, systemImage: "info.circle").foregroundStyle(.secondary)
+            default:
+                EmptyView()
+            }
+            if let loginError {
+                Label(loginError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
             ShortcutRecorder(shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
                 model.store.update { $0.shortcut = shortcut }
             }), onRecordingChange: model.recordingShortcut) {
@@ -261,6 +291,7 @@ private struct GeneralSettings: View {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in login = LoginItem.status }
     }
 }
 

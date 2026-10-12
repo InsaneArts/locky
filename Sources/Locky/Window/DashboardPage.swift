@@ -15,6 +15,7 @@ struct DashboardPage: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14)], spacing: 14) {
                     configCard
                     pluginsCard
+                    startCard
                     autoLockCard
                     unlockCard
                     lockScreenCard
@@ -88,6 +89,22 @@ struct DashboardPage: View {
         return StatusCard(symbol: "puzzlepiece.extension.fill", tint: missing > 0 ? .orange : .blue, title: "Plugins",
                           value: packs.isEmpty ? "None added" : packs.count == 1 ? "1 plugin" : "\(packs.count) plugins", detail: detail) {
             model.section = .plugins
+        }
+    }
+
+    private var startCard: some View {
+        let login = LoginItem.status
+        let shortcut = settings.shortcut.map { "Lock Now: \($0.display)" } ?? "No Lock Now shortcut"
+        let value: String
+        switch login {
+        case .enabled: value = "Opens at login"
+        case .requiresApproval: value = "Login item needs approval"
+        case .notRegistered: value = "Not at login"
+        case .unavailable: value = "Login item unavailable"
+        }
+        return StatusCard(symbol: "power", tint: login == .enabled ? .green : .orange, title: "Start and Shortcut", value: value,
+                          detail: login == .enabled ? shortcut : "Locky locks by itself only while it runs. \(shortcut).") {
+            model.section = .settings
         }
     }
 
