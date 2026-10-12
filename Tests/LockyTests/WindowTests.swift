@@ -85,6 +85,12 @@ import Testing
 }
 
 @Suite struct ReviewFollowUpTests {
+    @Test func aPackageNameMatchesLuas() {
+        #expect(PackSpec.name(of: .string("someone/locky.github-stars")) == "locky.github-stars")
+        #expect(PackSpec.name(of: .string("https://example.com/x/theme.git")) == "theme")
+        #expect(PackSpec.name(of: .table(["dir": .string("~/code/my-plugin")])) == "my-plugin")
+    }
+
     @Test func switchingTheScheduleModeKeepsTheOtherModesThemes() {
         var schedule = ThemeSchedule(mode: .time)
         schedule.day = "glass"

@@ -212,11 +212,13 @@ enum Provides {
 
 /// Spec checks shared by the install sheet and removal: the same rules locky.pack.add applies.
 enum PackSpec {
-    /// The folder name a spec installs to: its name, or the repository's last path part.
+    /// The folder name a spec installs to, as locky.pack.add names it: its name, or the last path part of its
+    /// folder or repository, without a trailing ".git".
     static func name(of spec: LuaValue) -> String? {
         if let name = spec["name"].string { return name }
-        let src = spec.string ?? spec["src"].string
-        return src.flatMap { $0.split(separator: "/").last.map { String($0).replacingOccurrences(of: ".git", with: "") } }
+        guard let source = spec.string ?? spec["dir"].string ?? spec["src"].string,
+              let last = source.split(separator: "/").last.map(String.init) else { return nil }
+        return last.hasSuffix(".git") ? String(last.dropLast(4)) : last
     }
 
     /// Why `text` is not a source locky.pack.add takes, or nil when it is.
