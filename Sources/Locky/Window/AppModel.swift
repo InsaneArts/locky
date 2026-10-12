@@ -99,6 +99,13 @@ final class AppModel {
             let report = await Task.detached { PackManager(path: .standard(config: config)).run(action) }.value
             packRunning = nil
             packReport = (action, report)
+            // What was checked no longer holds: Update All brought every plugin up to date, and a removed one has
+            // no update. A new check gives the rest again.
+            switch action {
+            case .update: updates = []
+            case .clean: updates.removeAll { !FileManager.default.fileExists(atPath: RuntimePath.defaultPacks.appending(path: $0.name).path) }
+            default: break
+            }
             refresh()
             done?(report)
         }
