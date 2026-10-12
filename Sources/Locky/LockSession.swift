@@ -36,6 +36,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     var onReady: (() -> Void)?
     /// Instances that have drawn or failed at least once.
     private var heard = Set<Int>()
+    /// Embedded only: called after each layout of the screen, so the theme editor's canvas follows the widgets.
+    var onLayout: (() -> Void)?
 
     private let options: Options
     private var runtime: LuaRuntime?
@@ -322,6 +324,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             let screen = LockScreenView(frame: CGRect(origin: .zero, size: options.previewSize))
             // The preview fades the whole screen in once it is ready.
             screen.fadesIn = false
+            screen.onLayout = { [weak self] in self?.onLayout?() }
             container.addSubview(screen)
             screens = [screen]
         case .lock:
@@ -568,6 +571,34 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Embedded only: what the editor can select (the widgets, by their place in the theme's list, and the password
+    /// field), with their frames in the screen's points. Widgets that show nothing are left out.
+    var editables: [(item: EditorItem, frame: CGRect)] {
+        guard mode == .embedded, let screen = screens.first else { return [] }
+        var list: [(item: EditorItem, frame: CGRect)] = []
+        if let field = screen.auth, screen.authSize.width > 0 { list.append((.passwordField, field.view.frame)) }
+        for (index, host) in screen.widgets.enumerated() where host.alphaValue > 0 && host.frame != screen.bounds && !host.frame.isEmpty {
+            list.append((.widget(index), host.frame))
+        }
+        return list
+    }
+
+    /// Embedded only: puts `item` at another place at once, before the change is saved, as the editor drags it.
+    func place(_ item: EditorItem, anchor: Anchor, offset: CGPoint) {
+        guard mode == .embedded, let screen = screens.first else { return }
+        switch item {
+        case .widget(let index):
+            guard screen.widgets.indices.contains(index) else { return }
+            screen.widgets[index].move(anchor: anchor, offset: offset)
+        case .passwordField:
+            guard var field = screen.auth else { return }
+            field.spec.anchor = anchor
+            field.spec.offset = offset
+            screen.auth = field
+        }
+        screen.layoutSubtreeIfNeeded()
+    }
+
     /// The glance state ends at the first key press or mouse movement: the password field appears, and
     /// goes away again after `idle` seconds without either.
     private func activity() {
@@ -676,6 +707,8 @@ final class LockScreenView: NSView {
     /// Widgets fade in once they know their size. Off, they show at once: the theme editor's preview fades in
     /// whole.
     var fadesIn = true
+    /// Called after each layout: the theme editor's canvas follows the widgets.
+    var onLayout: (() -> Void)?
     private(set) var widgets: [WidgetHost] = []
     /// Above the widgets, below the password field and banners.
     var overlay: NSView? {
@@ -859,6 +892,7 @@ final class LockScreenView: NSView {
             message.view.frame = messageFrame(size: message.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale)), scale: scale)
         }
         banner?.frame = CGRect(x: 16, y: 16, width: min(bounds.width - 32, 640), height: 200)
+        onLayout?()
     }
 
     /// Under the password field (and its hint) when there is room, otherwise above it; centered on it, or

@@ -2,10 +2,17 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Every theme as a card, the selected one live, and its editor: background and widgets. Changes save to
+/// Every theme as a card, and the selected one in the editor: its live preview is a canvas where widgets are
+/// clicked to change them and dragged to move them, and the panel beside it changes what is selected. Changes save to
 /// settings.json at once and the preview follows.
 struct ThemesPage: View {
     @Bindable var model: AppModel
+    /// The theme being edited; a new one per theme, so one theme's layout is never saved as another's.
+    @State private var editing: ThemeEditing?
+    @State private var selection: EditorItem?
+    /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
+    @State private var draft: Settings?
+    @AppStorage("themeEditorGrid") private var grid = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,10 +22,24 @@ struct ThemesPage: View {
                 HStack(spacing: 0) {
                     stage(info)
                     Divider()
-                    // A fresh editor per theme: one theme's layout must never be saved as another's.
-                    ThemeEditor(model: model, theme: info)
-                        .id(info.id)
-                        .frame(width: 360)
+                    Group {
+                        if let editing, editing.theme.id == info.id {
+                            ThemeEditor(model: model, editing: editing, selection: $selection, draft: $draft)
+                        } else {
+                            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                    .frame(width: 340)
+                }
+                // Read again when Lua files change: init.lua may give the theme other widgets or options.
+                .task(id: "\(info.id)-\(model.inspection.sources)") {
+                    let next = ThemeEditing(theme: info, model: model)
+                    await next.load()
+                    editing = next
+                }
+                .onChange(of: info.id) {
+                    selection = nil
+                    draft = nil
                 }
             } else {
                 ContentUnavailableView(model.inspection.loaded ? "No Themes" : "Loading Themes…", systemImage: "paintpalette")
@@ -49,29 +70,29 @@ struct ThemesPage: View {
     }
 
     private func stage(_ info: Inspection.ThemeInfo) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             if let error = info.error {
                 ContentUnavailableView("This Theme Does Not Load", systemImage: "exclamationmark.triangle", description: Text(error))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ThemePreview(theme: info.id, settings: model.store.settings, sources: model.inspection.sources, config: model.store.config,
-                             alwaysLive: model.screenshots)
+                ThemePreview(theme: info.id, settings: draft ?? model.store.settings, sources: model.inspection.sources,
+                             config: model.store.config, alwaysLive: model.screenshots, canvas: canvas(for: info))
                     .aspectRatio(1.6, contentMode: .fit)
                     .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
-                    .frame(maxWidth: .infinity)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(info.name).font(.title2.weight(.semibold))
-                    if info.id == model.activeTheme { Tag("In Use", color: .green) }
-                    if !model.store.settings["themes"][info.id].isNil { Tag("Changed", color: .orange) }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                HStack(spacing: 12) {
+                    Toggle(isOn: $grid) { Label("Grid", systemImage: "grid") }
+                        .toggleStyle(.button)
+                        .help("Show a grid, and snap what you drag to its lines")
+                    Text(selection == nil ? "Click a widget to change it, and drag it to move it."
+                         : "Drag it to move it. Click outside it to see the whole theme.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
                 }
-                Text(info.description ?? info.id).foregroundStyle(.secondary).lineLimit(2)
-                if let author = info.author { Text("By \(author)").font(.caption).foregroundStyle(.tertiary) }
             }
-            Spacer(minLength: 0)
         }
-        .padding(24)
+        .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -92,6 +113,14 @@ struct ThemesPage: View {
                 }
             }
         }
+    }
+
+    /// The editor's canvas over the preview, once the theme's layout is in: what is selected, the grid, and where
+    /// clicks and drags go.
+    private func canvas(for info: Inspection.ThemeInfo) -> ThemePreview.Canvas? {
+        guard let editing, editing.theme.id == info.id, editing.layout != nil else { return nil }
+        return ThemePreview.Canvas(selection: selection, grid: grid, name: { editing.name(of: $0) }, select: { selection = $0 },
+                                   move: { editing.move($0, anchor: $1, offset: $2) })
     }
 }
 

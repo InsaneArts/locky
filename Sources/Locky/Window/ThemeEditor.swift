@@ -2,234 +2,451 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The theme editor: a background of the user's choice, and the theme's widgets to move, add, and remove.
-/// It writes settings.json's themes.<id>; Reset removes the change.
+/// The theme editor's panel. With nothing selected: the theme, its background, and its widgets and password field
+/// to select. With a widget selected: where it sits, its card, and its options. With the password field selected:
+/// where it sits. Changes save to settings.json at once, and the preview shows them as they are made.
 struct ThemeEditor: View {
     @Bindable var model: AppModel
-    let theme: Inspection.ThemeInfo
-    @State private var layout: ThemeLayout?
-    @State private var layoutError: String?
+    let editing: ThemeEditing
+    @Binding var selection: EditorItem?
+    /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
+    @Binding var draft: Settings?
     @State private var adding = false
 
-    private var store: SettingsStore { model.store }
+    private var theme: Inspection.ThemeInfo { editing.theme }
 
     var body: some View {
+        Group {
+            if let layoutError = editing.layoutError {
+                ContentUnavailableView("Can't Edit This Theme", systemImage: "exclamationmark.triangle", description: Text(layoutError))
+            } else if editing.layout == nil {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                switch selection {
+                case .widget(let index) where editing.placements.indices.contains(index):
+                    WidgetInspector(model: model, editing: editing, index: index, selection: $selection, draft: $draft)
+                case .passwordField:
+                    PasswordFieldInspector(editing: editing, selection: $selection)
+                default:
+                    overview
+                }
+            }
+        }
+        .sheet(isPresented: $adding) {
+            AddWidgetSheet(widgets: model.inspection.widgets) { name in
+                selection = .widget(editing.add(name))
+            }
+        }
+    }
+
+    private var overview: some View {
         Form {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(theme.name).font(.title3.weight(.semibold))
+                        if theme.id == model.activeTheme { Tag("In Use", color: .green) }
+                        if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
+                    }
+                    Text(theme.description ?? theme.id).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if let author = theme.author { Text("By \(author)").font(.caption).foregroundStyle(.tertiary) }
+                }
+            }
             Section("Background") {
-                BackgroundEditor(model: model, theme: theme, layout: layout)
+                BackgroundEditor(model: model, theme: theme, layout: editing.layout, draft: $draft)
             }
             Section {
-                if let layoutError {
-                    Label(layoutError, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
-                } else if layout == nil {
-                    ProgressView().frame(maxWidth: .infinity)
-                } else if placements.isEmpty {
-                    Text("No widgets").foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(placements.enumerated()), id: \.offset) { index, placement in
-                        PlacementRow(placement: placement, info: model.inspection.widget(placement.widget),
-                                     update: { changed in set(index, changed) }, remove: { remove(index) })
+                ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
+                    Button { selection = .widget(index) } label: {
+                        WidgetRow(placement: placement, info: editing.info(placement))
                     }
+                    .buttonStyle(.plain)
                 }
                 Button("Add Widget…", systemImage: "plus") { adding = true }
-                    .disabled(layout == nil)
             } header: {
                 HStack {
                     Text("Widgets")
                     Spacer()
-                    if !store.settings.themeEdit(theme.id, "widgets").isNil {
-                        Button("Reset Layout") { store.update { $0.setThemeEdit(theme.id, "widgets", nil) } }
+                    if editing.widgetsChanged {
+                        Button("Reset Layout") { editing.resetWidgets() }
                             .buttonStyle(.link)
                             .font(.callout)
                     }
                 }
+            }
+            Section {
+                Button { selection = .passwordField } label: {
+                    HStack {
+                        Text("Password Field")
+                        Spacer()
+                        Text(editing.authPlace.anchor.replacingOccurrences(of: "-", with: " ").capitalizedFirst).foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             } footer: {
-                Text("Widgets show on the main display. Offsets are in points on a 1440×900 screen; y grows downwards.")
+                Text("Click a widget in the preview to change it, and drag it to move it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .task(id: "\(theme.id)-\(model.revision)") { await load() }
-        .sheet(isPresented: $adding) {
-            AddWidgetSheet(widgets: model.inspection.widgets) { name in
-                write(placements + [EditorPlacement(widget: name)])
-            }
-        }
-    }
-
-    private func load() async {
-        let wallpaper = NSScreen.main.flatMap(Wallpaper.picture(for:))?.path
-        switch await Inspection.layout(of: theme.id, config: store.config, wallpaper: wallpaper) {
-        case .success(let value):
-            layout = value
-            layoutError = nil
-        case .failure(let error):
-            // Without this theme's layout, nothing may be added: refs need it.
-            layout = nil
-            layoutError = error.message
-        }
-    }
-
-    /// The window's widget list for this theme, or the theme's own.
-    private var placements: [EditorPlacement] {
-        if let edited = store.settings.themeEdit(theme.id, "widgets").array {
-            return edited.map(EditorPlacement.init(entry:))
-        }
-        return (layout?.widgets ?? []).enumerated().map { EditorPlacement(original: $1, ref: $0 + 1) }
-    }
-
-    private func set(_ index: Int, _ placement: EditorPlacement) {
-        var list = placements
-        guard list.indices.contains(index) else { return }
-        list[index] = placement
-        write(list)
-    }
-
-    private func remove(_ index: Int) {
-        var list = placements
-        guard list.indices.contains(index) else { return }
-        list.remove(at: index)
-        write(list)
-    }
-
-    private func write(_ list: [EditorPlacement]) {
-        store.update { $0.setThemeEdit(theme.id, "widgets", .array(list.map(\.settingsValue))) }
     }
 }
 
-/// One widget in the editor: the theme's placement number `ref`, or one the user added.
-struct EditorPlacement: Equatable {
-    var ref: Int?
-    var widget: String
-    var anchor = "center"
-    var x = 0.0
-    var y = 0.0
-    /// true or false for a card; nil leaves it to the theme and the widget.
-    var card: Bool?
-    /// Fields the editor does not show (size, align, display, opts), kept as they are.
-    var rest: [String: LuaValue] = [:]
-
-    init(widget: String) {
-        self.widget = widget
-    }
-
-    /// From the theme's own placement.
-    init(original: LuaValue, ref: Int) {
-        self.init(entry: original)
-        self.ref = ref
-        rest = [:]
-    }
-
-    /// From a settings.json entry.
-    init(entry: LuaValue) {
-        widget = entry["widget"].string ?? "?"
-        ref = entry["ref"].int
-        anchor = entry["anchor"].string ?? "center"
-        x = Self.coordinate(entry["offset"][0].number)
-        y = Self.coordinate(entry["offset"][1].number)
-        switch entry["card"] {
-        case .bool(let value): card = value
-        case .string(let style): card = style != "none"
-        default: card = nil
-        }
-        let shown: Set<String> = ["ref", "widget", "anchor", "offset", "card"]
-        rest = (entry.table ?? [:]).filter { !shown.contains($0.key) }
-    }
-
-    var settingsValue: LuaValue {
-        var table = rest
-        table["widget"] = .string(widget)
-        if let ref { table["ref"] = .int(ref) }
-        table["anchor"] = .string(anchor)
-        table["offset"] = .array([Self.number(x), Self.number(y)])
-        if let card { table["card"] = .bool(card) }
-        return .table(table)
-    }
-
-    /// A finite offset within ±100,000 points, as the runtime clamps it; anything else is 0.
-    static func coordinate(_ value: Double?) -> Double {
-        guard let value, value.isFinite else { return 0 }
-        return min(max(value, -100_000), 100_000)
-    }
-
-    private static func number(_ value: Double) -> LuaValue {
-        value.rounded() == value && abs(value) < 1e9 ? .int(Int(value)) : .double(value)
-    }
-}
-
-private struct PlacementRow: View {
+/// A widget in the theme's list: its name and what it shows.
+private struct WidgetRow: View {
     let placement: EditorPlacement
     let info: Inspection.WidgetInfo?
-    let update: (EditorPlacement) -> Void
-    let remove: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            AnchorPicker(anchor: placement.anchor) { anchor in
-                var changed = placement
-                changed.anchor = anchor
-                update(changed)
-            }
-            VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(placement.widget).font(.body.weight(.medium)).lineLimit(1)
+                    Text(EditorPlacement.title(placement.widget)).font(.body.weight(.medium)).lineLimit(1)
                     if info == nil {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                             .help("No widget has this name. Is its plugin installed?")
                     }
                 }
-                HStack(spacing: 6) {
-                    NumberField(label: "X", value: placement.x) { value in
-                        var changed = placement
-                        changed.x = value
-                        update(changed)
-                    }
-                    NumberField(label: "Y", value: placement.y) { value in
-                        var changed = placement
-                        changed.y = value
-                        update(changed)
-                    }
-                    Toggle("Card", isOn: Binding(get: { placement.card ?? info?.card ?? false }, set: { value in
-                        var changed = placement
-                        changed.card = value
-                        update(changed)
-                    }))
-                    .toggleStyle(.checkbox)
-                    .help("Put the widget on the theme's card")
+                if let description = info?.description {
+                    Text(description).font(.callout).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
-            Button(role: .destructive, action: remove) {
-                Image(systemName: "minus.circle.fill").foregroundStyle(.red.opacity(0.85))
-            }
-            .buttonStyle(.plain)
-            .help("Remove \(placement.widget)")
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 2)
-        .help(info?.description ?? placement.widget)
+        .contentShape(Rectangle())
     }
 }
 
-/// A number field that saves when editing ends, not on every key.
+/// Back to the theme's panel.
+private struct BackButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) { Label(title, systemImage: "chevron.left") }
+            .buttonStyle(.link)
+    }
+}
+
+/// One widget: where it sits, its card, its options, and Remove.
+private struct WidgetInspector: View {
+    @Bindable var model: AppModel
+    let editing: ThemeEditing
+    let index: Int
+    @Binding var selection: EditorItem?
+    @Binding var draft: Settings?
+
+    var body: some View {
+        let placement = editing.placements[index]
+        let info = editing.info(placement)
+        let inherited = editing.inherited(placement)
+        let keys = OptionRow.keys(inherited: inherited, overrides: placement.opts, choices: info?.choices ?? [:])
+        Form {
+            Section {
+                BackButton(title: editing.theme.name) { selection = nil }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(EditorPlacement.title(placement.widget)).font(.title3.weight(.semibold))
+                    if let info {
+                        if let description = info.description { Text(description).foregroundStyle(.secondary) }
+                        Text(AddWidgetSheet.source(of: info)).font(.caption).foregroundStyle(.tertiary)
+                    } else {
+                        Label("No widget has this name. Is its plugin installed?", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+            Section("Position") {
+                PositionEditor(anchor: placement.anchor, x: placement.x, y: placement.y) { anchor, x, y in
+                    var changed = placement
+                    changed.anchor = anchor
+                    changed.x = x
+                    changed.y = y
+                    editing.set(index, changed)
+                }
+            }
+            if editing.layout?.cardStyle != "none" {
+                Section {
+                    Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in
+                        var changed = placement
+                        changed.card = value
+                        editing.set(index, changed)
+                    }))
+                }
+            }
+            if !keys.isEmpty {
+                Section {
+                    ForEach(keys, id: \.self) { key in
+                        OptionRow(key: key, value: placement.opts[key] ?? inherited[key] ?? .nil, choices: info?.choices[key],
+                                  palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
+                                  live: { draft = settings(placement, key, $0) },
+                                  commit: { set(placement, key, $0, inherited: inherited) })
+                    }
+                } header: {
+                    HStack {
+                        Text("Options")
+                        Spacer()
+                        if !placement.opts.isEmpty {
+                            Button("Reset Options") {
+                                var changed = placement
+                                changed.opts = [:]
+                                editing.set(index, changed)
+                            }
+                            .buttonStyle(.link)
+                            .font(.callout)
+                        }
+                    }
+                }
+            }
+            Section {
+                Button("Remove Widget", role: .destructive) {
+                    selection = nil
+                    editing.remove(index)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Saves an option; one set back to what the theme gives it leaves settings.json.
+    private func set(_ placement: EditorPlacement, _ key: String, _ value: LuaValue, inherited: [String: LuaValue]) {
+        var changed = placement
+        changed.opts[key] = value == inherited[key] ? nil : value
+        editing.set(index, changed)
+        draft = nil
+    }
+
+    /// settings.json with an option changed, for the preview while a color is being picked.
+    private func settings(_ placement: EditorPlacement, _ key: String, _ value: LuaValue) -> Settings {
+        var list = editing.placements
+        list[index].opts[key] = value
+        var settings = model.store.settings
+        settings.setThemeEdit(editing.theme.id, "widgets", .array(list.map(\.settingsValue)))
+        return settings
+    }
+}
+
+/// The password field: where it sits. The theme sets its look.
+private struct PasswordFieldInspector: View {
+    let editing: ThemeEditing
+    @Binding var selection: EditorItem?
+
+    var body: some View {
+        let place = editing.authPlace
+        Form {
+            Section {
+                BackButton(title: editing.theme.name) { selection = nil }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Password Field").font(.title3.weight(.semibold))
+                    Text("Where the password is typed. Its look is the theme's.").foregroundStyle(.secondary)
+                }
+            }
+            Section("Position") {
+                PositionEditor(anchor: place.anchor, x: place.x, y: place.y) { editing.setAuth(anchor: $0, x: $1, y: $2) }
+            }
+            if editing.authChanged {
+                Section {
+                    Button("Put It Back Where the Theme Has It") { editing.resetAuth() }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Where an item sits: one dot for each place on the screen, and its offset from that place.
+private struct PositionEditor: View {
+    let anchor: String
+    let x: Double
+    let y: Double
+    let set: (_ anchor: String, _ x: Double, _ y: Double) -> Void
+
+    var body: some View {
+        LabeledContent("Place") {
+            AnchorPicker(anchor: anchor) { picked in
+                let margin = EditorPlacement.margin(for: picked)
+                set(picked, margin.x, margin.y)
+            }
+        }
+        LabeledContent("Offset") {
+            HStack(spacing: 8) {
+                NumberField(label: "X", value: x) { set(anchor, $0, y) }
+                NumberField(label: "Y", value: y) { set(anchor, x, $0) }
+            }
+        }
+        Text("In points \(Self.describe(anchor)), on a 1440 × 900 screen; y grows downwards.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    /// "top-right" → "from the top right corner".
+    static func describe(_ anchor: String) -> String {
+        switch anchor {
+        case "center": "from the center"
+        case "top", "bottom", "left", "right": "from the \(anchor) edge"
+        default: "from the \(anchor.replacingOccurrences(of: "-", with: " ")) corner"
+        }
+    }
+}
+
+/// One of a widget's options, with a control that fits its value: a menu for listed values, weights, and designs;
+/// a switch for true and false; a number field; a color; or text.
+private struct OptionRow: View {
+    let key: String
+    let value: LuaValue
+    let choices: [String]?
+    let palette: [String: String]
+    /// A change in progress, for the preview.
+    let live: (LuaValue) -> Void
+    let commit: (LuaValue) -> Void
+
+    static let weights = ["ultralight", "thin", "light", "regular", "medium", "semibold", "bold", "heavy", "black"]
+    static let designs = ["default", "rounded", "serif", "monospaced"]
+
+    var body: some View {
+        let label = Self.label(key)
+        if let choices = choices ?? (key == "weight" ? Self.weights : key == "design" ? Self.designs : nil), value.string != nil || value.isNil {
+            let current = value.string ?? choices.first ?? ""
+            Picker(label, selection: Binding(get: { current }, set: { commit(.string($0)) })) {
+                ForEach(choices.contains(current) ? choices : choices + [current], id: \.self) { Text($0.capitalizedFirst).tag($0) }
+            }
+        } else {
+            switch value {
+            case .bool(let on):
+                Toggle(label, isOn: Binding(get: { on }, set: { commit(.bool($0)) }))
+            case .int, .double:
+                LabeledContent(label) {
+                    NumberField(label: nil, value: value.number ?? 0, step: Self.step(key, value)) { commit(EditorPlacement.number($0)) }
+                }
+            case .string(let text) where Self.isColor(key, text, palette):
+                LabeledContent(label) {
+                    ColorChoice(value: text, palette: palette, live: { live(.string($0)) }, commit: { commit(.string($0)) })
+                }
+            case .string(let text):
+                LabeledContent(label) { TextOption(text: text) { commit(.string($0)) } }
+            default:
+                EmptyView()
+            }
+        }
+    }
+
+    /// The options to show, the common ones first, then by name. Lists and tables are left out: only Lua changes them.
+    static func keys(inherited: [String: LuaValue], overrides: [String: LuaValue], choices: [String: [String]]) -> [String] {
+        let keys = Set(inherited.keys).union(overrides.keys).union(choices.keys).filter { key in
+            switch overrides[key] ?? inherited[key] ?? .nil {
+            case .bool, .int, .double, .string: true
+            case .nil: choices[key] != nil
+            default: false
+            }
+        }
+        let first = ["style", "format", "text", "label", "title", "size", "weight", "design", "font", "color"]
+        return keys.sorted { a, b in
+            let (rankA, rankB) = (first.firstIndex(of: a) ?? first.count, first.firstIndex(of: b) ?? first.count)
+            return rankA != rankB ? rankA < rankB : a < b
+        }
+    }
+
+    /// "shadow_color" → "Shadow color".
+    static func label(_ key: String) -> String {
+        key.replacingOccurrences(of: "_", with: " ").capitalizedFirst
+    }
+
+    /// Fractions step by 0.05; other numbers by 1.
+    static func step(_ key: String, _ value: LuaValue) -> Double {
+        let number = value.number ?? 0
+        return ["opacity", "dim", "alpha"].contains(key) || (number.rounded() != number && abs(number) < 1) ? 0.05 : 1
+    }
+
+    /// A color option: named like one, or holding a palette role or a "#rrggbb" color.
+    static func isColor(_ key: String, _ text: String, _ palette: [String: String]) -> Bool {
+        key == "color" || key.hasSuffix("_color") || palette[text] != nil || (text.hasPrefix("#") && NSColor(hex: text) != nil)
+    }
+}
+
+/// A palette role or a color: a menu of the theme's roles, and a color well for any other color.
+private struct ColorChoice: View {
+    let value: String
+    let palette: [String: String]
+    let live: (String) -> Void
+    let commit: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Menu {
+                ForEach(palette.keys.sorted(), id: \.self) { role in
+                    Button { commit(role) } label: {
+                        Label { Text(role) } icon: { Image(nsImage: Self.swatch(palette[role] ?? "#000000")) }
+                    }
+                }
+            } label: {
+                Text(palette[value] != nil ? value : "Custom")
+            }
+            .fixedSize()
+            DebouncedColorPicker(title: "", hex: palette[value] ?? value, live: live, commit: commit)
+                .labelsHidden()
+        }
+    }
+
+    /// A small dot of a color, for the menu.
+    static func swatch(_ hex: String) -> NSImage {
+        NSImage(size: CGSize(width: 12, height: 12), flipped: false) { rect in
+            (NSColor(hex: hex) ?? .black).setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).fill()
+            NSColor.separatorColor.setStroke()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).stroke()
+            return true
+        }
+    }
+}
+
+/// A text option that saves when editing ends, not on every key.
+private struct TextOption: View {
+    let text: String
+    let commit: (String) -> Void
+    @State private var current = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("", text: $current)
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 150)
+            .focused($focused)
+            .onSubmit { if current != text { commit(current) } }
+            .onChange(of: focused) { if !focused, current != text { commit(current) } }
+            .onAppear { current = text }
+            .onChange(of: text) { current = text }
+    }
+}
+
+/// A number field that saves when editing ends, not on every key; with a step, a stepper beside it saves at once.
 private struct NumberField: View {
-    let label: String
+    let label: String?
     let value: Double
+    var step: Double?
     let commit: (Double) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: 3) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            TextField(label, text: $text)
+            if let label { Text(label).font(.caption).foregroundStyle(.secondary) }
+            TextField(label ?? "", text: $text)
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .monospacedDigit()
-                .frame(width: 54)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 60)
                 .focused($focused)
                 .onSubmit(save)
                 .onChange(of: focused) { if !focused { save() } }
+            if let step {
+                Stepper("", onIncrement: { commit(Self.round(value + step, step)) }, onDecrement: { commit(Self.round(value - step, step)) })
+                    .labelsHidden()
+            }
         }
         .onAppear { text = Self.format(value) }
         .onChange(of: value) { text = Self.format(value) }
@@ -243,13 +460,18 @@ private struct NumberField: View {
         if number != value { commit(min(max(number, -10_000), 10_000)) }
     }
 
+    /// A step of 0.05 keeps two decimals, so steps add up without drift.
+    private static func round(_ value: Double, _ step: Double) -> Double {
+        step < 1 ? (value * 100).rounded() / 100 : value.rounded()
+    }
+
     private static func format(_ value: Double) -> String {
         guard value.isFinite, abs(value) < 1e9 else { return "0" }
         return value.rounded() == value ? String(Int(value)) : String(value)
     }
 }
 
-/// Nine dots, one per anchor: the widget's corner, edge, or center of the screen.
+/// Nine dots, one per place on the screen: its corners, its edges' middles, and its center.
 private struct AnchorPicker: View {
     let anchor: String
     let pick: (String) -> Void
@@ -264,10 +486,10 @@ private struct AnchorPicker: View {
                         Button { pick(name) } label: {
                             RoundedRectangle(cornerRadius: 2.5)
                                 .fill(name == anchor ? Color.accentColor : Color.primary.opacity(0.15))
-                                .frame(width: 11, height: 8)
+                                .frame(width: 16, height: 11)
                         }
                         .buttonStyle(.plain)
-                        .help(name)
+                        .help("Move it to the \(PositionEditor.describe(name).dropFirst(9))")
                     }
                 }
             }
@@ -275,12 +497,12 @@ private struct AnchorPicker: View {
         .padding(5)
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement()
-        .accessibilityLabel("Anchor")
+        .accessibilityLabel("Place")
         .accessibilityValue(anchor)
     }
 }
 
-private struct AddWidgetSheet: View {
+struct AddWidgetSheet: View {
     let widgets: [Inspection.WidgetInfo]
     let add: (String) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -304,7 +526,7 @@ private struct AddWidgetSheet: View {
             List(shown) { widget in
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(widget.name).font(.body.weight(.medium))
+                        Text(EditorPlacement.title(widget.name)).font(.body.weight(.medium))
                         Text(widget.description ?? "").font(.callout).foregroundStyle(.secondary).lineLimit(2)
                         Text(Self.source(of: widget)).font(.caption).foregroundStyle(.tertiary)
                     }
@@ -318,7 +540,7 @@ private struct AddWidgetSheet: View {
             }
             Divider()
             HStack {
-                Text("The new widget starts at the center; set its place in the list.").font(.callout).foregroundStyle(.secondary)
+                Text("The new widget starts at the center. Drag it where you want it.").font(.callout).foregroundStyle(.secondary)
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
             }
@@ -338,11 +560,13 @@ private struct AddWidgetSheet: View {
     }
 }
 
-/// The background picker: the theme's own, or the wallpaper, an image, a video, a color, or a gradient.
+/// The background picker: the theme's own, or the wallpaper, an image, a video, a color, or a gradient. Sliders and
+/// colors show in the preview as they change, and save when they stop.
 private struct BackgroundEditor: View {
     @Bindable var model: AppModel
     let theme: Inspection.ThemeInfo
     let layout: ThemeLayout?
+    @Binding var draft: Settings?
 
     enum Kind: String, CaseIterable, Identifiable {
         case theme, wallpaper, image, video, color, gradient
@@ -389,10 +613,10 @@ private struct BackgroundEditor: View {
             file("video", types: [.movie])
             slider("Dim", key: "dim", range: 0...0.8, fallback: 0)
         case .color:
-            color("Color", get: { edit["color"].string }, set: { patch(["color": .string($0)]) })
+            color("Color", get: { edit["color"].string }, fields: { ["color": .string($0)] })
         case .gradient:
-            color("From", get: { edit["gradient"][0].string }, set: { setGradient(0, $0) })
-            color("To", get: { edit["gradient"][1].string }, set: { setGradient(1, $0) })
+            color("From", get: { edit["gradient"][0].string }, fields: { ["gradient": gradient(0, $0)] })
+            color("To", get: { edit["gradient"][1].string }, fields: { ["gradient": gradient(1, $0)] })
             slider("Angle", key: "angle", range: 0...360, fallback: 180)
         }
     }
@@ -414,21 +638,37 @@ private struct BackgroundEditor: View {
         store.update { $0.setThemeEdit(theme.id, "background", value) }
     }
 
-    private func patch(_ fields: [String: LuaValue]) {
+    /// The background with `fields` changed.
+    private func patched(_ fields: [String: LuaValue]) -> LuaValue {
         var table = edit.table ?? [:]
         for (key, value) in fields { table[key] = value }
-        store.update { $0.setThemeEdit(theme.id, "background", .table(table)) }
+        return .table(table)
     }
 
-    private func setGradient(_ index: Int, _ hex: String) {
+    /// Shows the change in the preview before it saves.
+    private func preview(_ fields: [String: LuaValue]) {
+        var settings = store.settings
+        settings.setThemeEdit(theme.id, "background", patched(fields))
+        draft = settings
+    }
+
+    private func save(_ fields: [String: LuaValue]) {
+        let value = patched(fields)
+        store.update { $0.setThemeEdit(theme.id, "background", value) }
+        draft = nil
+    }
+
+    private func gradient(_ index: Int, _ hex: String) -> LuaValue {
         var colors = edit["gradient"].array ?? [.string("#000000"), .string("#000000")]
         while colors.count < 2 { colors.append(.string("#000000")) }
         colors[index] = .string(hex)
-        patch(["gradient": .array(colors)])
+        return .array(colors)
     }
 
     private func slider(_ title: String, key: String, range: ClosedRange<Double>, fallback: Double) -> some View {
-        CommittingSlider(title: title, value: edit[key].number ?? fallback, range: range) { patch([key: .double(($0 * 100).rounded() / 100)]) }
+        let fields = { (value: Double) -> [String: LuaValue] in [key: .double((value * 100).rounded() / 100)] }
+        return CommittingSlider(title: title, value: edit[key].number ?? fallback, range: range,
+                                live: { preview(fields($0)) }, commit: { save(fields($0)) })
     }
 
     private func file(_ key: String, types: [UTType]) -> some View {
@@ -439,14 +679,14 @@ private struct BackgroundEditor: View {
                     .truncationMode(.middle)
                     .foregroundStyle(.secondary)
                 Button("Choose…") {
-                    if let url = Self.chooseFile(types: types) { patch([key: .string(url.path)]) }
+                    if let url = Self.chooseFile(types: types) { save([key: .string(url.path)]) }
                 }
             }
         }
     }
 
-    private func color(_ title: String, get: @escaping () -> String?, set: @escaping (String) -> Void) -> some View {
-        DebouncedColorPicker(title: title, hex: get() ?? "#000000", commit: set)
+    private func color(_ title: String, get: @escaping () -> String?, fields: @escaping (String) -> [String: LuaValue]) -> some View {
+        DebouncedColorPicker(title: title, hex: get() ?? "#000000", live: { preview(fields($0)) }, commit: { save(fields($0)) })
     }
 
     /// What the theme's own background is, in a few words.
@@ -470,11 +710,12 @@ private struct BackgroundEditor: View {
     }
 }
 
-/// A slider that saves once, when the drag ends.
+/// A slider that shows its value live while dragged, and saves once, when the drag ends.
 private struct CommittingSlider: View {
     let title: String
     let value: Double
     let range: ClosedRange<Double>
+    let live: (Double) -> Void
     let commit: (Double) -> Void
     @State private var current = 0.0
     @State private var dragging = false
@@ -494,6 +735,7 @@ private struct CommittingSlider: View {
         }
         .onAppear { current = clamped(value) }
         .onChange(of: value) { if !dragging { current = clamped(value) } }
+        .onChange(of: current) { if dragging { live(current) } }
     }
 
     /// Within the slider's range; a value that is not a finite number starts at the low end.
@@ -502,10 +744,12 @@ private struct CommittingSlider: View {
     }
 }
 
-/// A color well that saves a moment after the color stops changing, not on every step of a drag.
+/// A color well that shows each color live, and saves a moment after the color stops changing, not on every step
+/// of a drag.
 private struct DebouncedColorPicker: View {
     let title: String
     let hex: String
+    let live: (String) -> Void
     let commit: (String) -> Void
     @State private var color = Color.black
     @State private var pending: Task<Void, Never>?
@@ -513,10 +757,12 @@ private struct DebouncedColorPicker: View {
     var body: some View {
         ColorPicker(title, selection: Binding(get: { color }, set: { new in
             color = new
+            guard let value = new.hexString else { return }
+            live(value)
             pending?.cancel()
             pending = Task {
                 try? await Task.sleep(for: .milliseconds(400))
-                if !Task.isCancelled, let value = new.hexString { commit(value) }
+                if !Task.isCancelled { commit(value) }
             }
         }), supportsOpacity: false)
         .onAppear { color = Color(hex: hex) ?? .black }

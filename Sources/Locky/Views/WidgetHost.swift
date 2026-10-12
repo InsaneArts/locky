@@ -49,6 +49,13 @@ final class WidgetHost: NSView {
         onResize?()
     }
 
+    /// Another place for the widget while the theme editor drags it.
+    func move(anchor: Anchor, offset: CGPoint) {
+        placement.anchor = anchor
+        placement.offset = offset
+        onResize?()
+    }
+
     /// Whether the widget is ready to show: drawn and measured, or with nothing to draw.
     var isSettled: Bool {
         (model.node == nil && model.error == nil) || placement.size != nil || model.contentSize.width > 0

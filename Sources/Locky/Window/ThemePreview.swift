@@ -15,12 +15,26 @@ struct ThemePreview: NSViewRepresentable {
     var config = RuntimePath.defaultConfig
     /// Keeps running behind other windows: for screenshots.
     var alwaysLive = false
+    /// The theme editor's canvas: widgets to select and drag, and the grid. nil for a plain preview.
+    var canvas: Canvas?
+
+    /// What the theme editor's canvas shows, and what it reports.
+    struct Canvas {
+        var selection: EditorItem?
+        var grid = false
+        /// The name on a selected item.
+        var name: (EditorItem) -> String
+        var select: (EditorItem?) -> Void
+        /// A drag ended: the item's new anchor and offset, in layout points.
+        var move: (EditorItem, Anchor, CGPoint) -> Void
+    }
 
     func makeNSView(context: Context) -> ThemePreviewView { ThemePreviewView() }
 
     func updateNSView(_ view: ThemePreviewView, context: Context) {
         view.alwaysLive = alwaysLive
         view.config = config
+        view.canvas = canvas
         view.show(ThemePreviewView.Key(theme: theme, settings: settings, sources: sources))
     }
 
@@ -57,10 +71,17 @@ final class ThemePreviewView: NSView {
 
     var alwaysLive = false
     var config = RuntimePath.defaultConfig
+    var canvas: ThemePreview.Canvas? {
+        didSet {
+            overlay.isHidden = canvas == nil
+            overlay.needsDisplay = true
+        }
+    }
     /// Rounds the corners, in screen points.
     private let clip = NSView()
     /// Holds each session's screen at the layout size; its frame is the scaled-down size.
     private let stage = NSView()
+    private let overlay = CanvasOverlay()
 
     private struct Shown {
         let session: LockSession
@@ -88,6 +109,9 @@ final class ThemePreviewView: NSView {
         stage.wantsLayer = true
         clip.addSubview(stage)
         addSubview(clip)
+        overlay.preview = self
+        overlay.isHidden = true
+        addSubview(overlay)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -102,6 +126,14 @@ final class ThemePreviewView: NSView {
         endSessions()
         if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
         occlusion = nil
+    }
+
+    /// The current screen's items the editor can select, with their frames in layout points.
+    var editables: [(item: EditorItem, frame: CGRect)] { current?.session.editables ?? [] }
+
+    /// Puts an item at another place in the current screen while it is dragged.
+    func place(_ item: EditorItem, anchor: Anchor, offset: CGPoint) {
+        current?.session.place(item, anchor: anchor, offset: offset)
     }
 
     private var visible: Bool { alwaysLive || (window?.occlusionState.contains(.visible) ?? false) }
@@ -156,6 +188,9 @@ final class ThemePreviewView: NSView {
         session.onReady = { [weak self, weak session] in
             if let self, let session { promote(session) }
         }
+        session.onLayout = { [weak self, weak session] in
+            if let self, let session, current?.session === session { overlay.needsDisplay = true }
+        }
         incoming = Shown(session: session, container: container, key: key)
         session.begin()
     }
@@ -175,6 +210,7 @@ final class ThemePreviewView: NSView {
                 old?.container.removeFromSuperview()
             }
         })
+        overlay.needsDisplay = true
         advance()
     }
 
@@ -185,6 +221,7 @@ final class ThemePreviewView: NSView {
         }
         current = nil
         incoming = nil
+        overlay.needsDisplay = true
     }
 
     override func viewDidMoveToWindow() {
@@ -219,5 +256,162 @@ final class ThemePreviewView: NSView {
             container.frame = stage.bounds
             for screen in container.subviews { screen.frame = container.bounds }
         }
+        overlay.frame = clip.frame
+    }
+}
+
+/// The theme editor's layer over the preview: the grid, and outlines on the hovered and the selected item. A click
+/// selects an item, and a drag moves it (onto the grid while the grid shows); a click elsewhere clears the
+/// selection.
+@MainActor
+final class CanvasOverlay: NSView {
+    weak var preview: ThemePreviewView?
+    private var hovered: EditorItem?
+    private struct Drag {
+        var item: EditorItem
+        var start: CGPoint
+        var frame: CGRect
+        var placed: (anchor: Anchor, offset: CGPoint)?
+    }
+    private var drag: Drag?
+
+    override var isFlipped: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    private var canvas: ThemePreview.Canvas? { preview?.canvas }
+    /// View points per layout point.
+    private var scale: CGFloat { bounds.width / ThemePreviewView.layoutSize.width }
+
+    private func layoutPoint(_ event: NSEvent) -> CGPoint {
+        let point = convert(event.locationInWindow, from: nil)
+        return CGPoint(x: point.x / scale, y: point.y / scale)
+    }
+
+    /// The item under a point; of several, the smallest, so a widget inside the password field's ring can be picked.
+    private func item(at point: CGPoint) -> (item: EditorItem, frame: CGRect)? {
+        (preview?.editables ?? []).filter { $0.frame.insetBy(dx: -4, dy: -4).contains(point) }
+            .min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let found = item(at: layoutPoint(event))?.item
+        if found != hovered {
+            hovered = found
+            needsDisplay = true
+        }
+        (found == nil ? NSCursor.arrow : NSCursor.openHand).set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovered = nil
+        needsDisplay = true
+        NSCursor.arrow.set()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let canvas else { return }
+        let point = layoutPoint(event)
+        guard let hit = item(at: point) else {
+            canvas.select(nil)
+            return
+        }
+        if canvas.selection != hit.item { canvas.select(hit.item) }
+        drag = Drag(item: hit.item, start: point, frame: hit.frame)
+        NSCursor.closedHand.set()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard var drag, let canvas else { return }
+        let point = layoutPoint(event)
+        let delta = CGPoint(x: point.x - drag.start.x, y: point.y - drag.start.y)
+        // A click that wobbles a little is not a drag.
+        guard drag.placed != nil || hypot(delta.x, delta.y) * scale > 3 else { return }
+        let placed = Placing.place(drag.frame.offsetBy(dx: delta.x, dy: delta.y), in: CGRect(origin: .zero, size: ThemePreviewView.layoutSize),
+                                   snap: canvas.grid)
+        preview?.place(drag.item, anchor: placed.anchor, offset: placed.offset)
+        drag.placed = placed
+        self.drag = drag
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer {
+            drag = nil
+            NSCursor.openHand.set()
+        }
+        guard let drag, let placed = drag.placed else { return }
+        canvas?.move(drag.item, placed.anchor, placed.offset)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let canvas else { return }
+        if canvas.grid { drawGrid() }
+        let items = preview?.editables ?? []
+        if let hovered, hovered != canvas.selection, let frame = items.first(where: { $0.item == hovered })?.frame {
+            outline(frame, color: .white.withAlphaComponent(0.75), width: 1)
+        }
+        if let selection = canvas.selection, let frame = items.first(where: { $0.item == selection })?.frame {
+            outline(frame, color: .controlAccentColor, width: 2)
+            label(canvas.name(selection), on: frame)
+        }
+    }
+
+    private func drawGrid() {
+        let lines = NSBezierPath()
+        let size = ThemePreviewView.layoutSize
+        for x in stride(from: Placing.grid, to: size.width, by: Placing.grid) {
+            lines.move(to: CGPoint(x: x * scale, y: 0))
+            lines.line(to: CGPoint(x: x * scale, y: bounds.height))
+        }
+        for y in stride(from: Placing.grid, to: size.height, by: Placing.grid) {
+            lines.move(to: CGPoint(x: 0, y: y * scale))
+            lines.line(to: CGPoint(x: bounds.width, y: y * scale))
+        }
+        lines.lineWidth = 1 / (window?.backingScaleFactor ?? 2)
+        // Dark and light at once, so the lines show on any background.
+        NSColor.black.withAlphaComponent(0.22).setStroke()
+        lines.stroke()
+        NSColor.white.withAlphaComponent(0.22).setStroke()
+        lines.stroke()
+        let center = NSBezierPath()
+        center.move(to: CGPoint(x: bounds.midX, y: 0))
+        center.line(to: CGPoint(x: bounds.midX, y: bounds.height))
+        center.move(to: CGPoint(x: 0, y: bounds.midY))
+        center.line(to: CGPoint(x: bounds.width, y: bounds.midY))
+        center.lineWidth = 1
+        NSColor.controlAccentColor.withAlphaComponent(0.7).setStroke()
+        center.stroke()
+    }
+
+    private func viewRect(_ frame: CGRect) -> CGRect {
+        CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale).insetBy(dx: -3, dy: -3)
+    }
+
+    private func outline(_ frame: CGRect, color: NSColor, width: CGFloat) {
+        let path = NSBezierPath(roundedRect: viewRect(frame), xRadius: 4, yRadius: 4)
+        path.lineWidth = width
+        color.setStroke()
+        path.stroke()
+    }
+
+    /// The item's name in a tag above it, or below it at the top edge.
+    private func label(_ text: String, on frame: CGRect) {
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white]
+        let size = (text as NSString).size(withAttributes: attributes)
+        let rect = viewRect(frame)
+        let tag = CGSize(width: size.width + 12, height: size.height + 4)
+        let y = rect.minY - tag.height - 3 >= 0 ? rect.minY - tag.height - 3 : rect.maxY + 3
+        let x = min(max(rect.minX, 0), max(bounds.width - tag.width, 0))
+        let box = CGRect(x: x, y: y, width: tag.width, height: tag.height)
+        NSColor.controlAccentColor.setFill()
+        NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
+        (text as NSString).draw(at: CGPoint(x: box.minX + 6, y: box.minY + 2), withAttributes: attributes)
     }
 }

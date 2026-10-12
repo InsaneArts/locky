@@ -79,8 +79,12 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
 - **Dashboard:** the theme a lock uses now, live, with Lock Now; the config's problems, plugins and
   updates, auto-lock, unlock, and the lock screen's changes at a glance; and any photos taken after wrong
   passwords.
-- **Themes:** every theme, the selected one live, and its editor: background, and widgets to move, add, and
-  remove.
+- **Themes:** every theme, and the selected one in the editor. Its live preview is a canvas: click a widget or
+  the password field to select it, and drag it to move it. A widget lands pinned to the corner, edge, or center
+  of the part of the screen it is in, so it keeps its place on other screens; the Grid button shows a 30-point
+  grid and snaps what you drag to it. The panel beside the canvas shows what is selected: its place, its card,
+  and its options (a menu where the widget lists the values an option takes). With nothing selected, it shows
+  the background, the widget list, Add Widget, and Reset Layout.
 - **Plugins:** install from git, update, remove, and see what each package provides.
 - **Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
 - **Settings:** everything in the table above.
