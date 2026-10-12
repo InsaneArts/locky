@@ -6,30 +6,32 @@ import MetalKit
 
 enum Backgrounds {
     /// `overlay`: drawn above the widgets with transparency, for scanlines, grain, or a vignette.
-    @MainActor
     /// `still` (the battery saver) draws a shader once and keeps a video on its first frame.
-    static func makeView(_ background: Theme.Background, screen: NSScreen?, overlay: Bool = false, still: Bool = false) -> NSView {
+    /// `epoch` is when a shader's animation starts: a preview that replaces its session keeps it, so the
+    /// animation goes on where it was.
+    @MainActor
+    static func makeView(_ background: Theme.Background, screen: NSScreen?, overlay: Bool = false, still: Bool = false,
+                         epoch: CFTimeInterval? = nil) -> NSView {
         if overlay {
             let container = OverlayContainer()
-            let content = makeView(background, screen: screen, transparent: true, still: still)
+            let content = makeView(background, screen: screen, transparent: true, still: still, epoch: epoch)
             content.autoresizingMask = [.width, .height]
             container.addSubview(content)
             return container
         }
-        return makeView(background, screen: screen, transparent: false, still: still)
+        return makeView(background, screen: screen, transparent: false, still: still, epoch: epoch)
     }
 
     @MainActor
-    private static func makeView(_ background: Theme.Background, screen: NSScreen?, transparent: Bool, still: Bool) -> NSView {
+    private static func makeView(_ background: Theme.Background, screen: NSScreen?, transparent: Bool, still: Bool,
+                                 epoch: CFTimeInterval?) -> NSView {
         switch background {
         case .shader(let url, let colors, let speed, let resolution, let fps, let params, let dim):
             return ShaderView.make(url: url, colors: colors, speed: speed, resolution: resolution, fps: still ? 0 : fps, params: params, dim: dim,
-                                   transparent: transparent)
+                                   transparent: transparent, epoch: epoch)
         case .wallpaper(let blur, let dim, let tint, let tintAmount):
             let view = PictureView(dim: dim, tint: tint, tintAmount: tintAmount)
-            if let screen, let url = Wallpaper.picture(for: screen) {
-                view.load(url, blur: blur)
-            }
+            view.load(screen.flatMap(Wallpaper.picture(for:)), blur: blur)
             return view
         case .image(let url, let blur, let dim):
             let view = PictureView(dim: dim, tint: nil, tintAmount: 0)
@@ -44,11 +46,41 @@ enum Backgrounds {
             return GradientView(colors: colors, angle: angle, noise: noise)
         }
     }
+
+    /// Changes a view makeView made for `old` to show `new`, in place, when that can be done: the same picture
+    /// with another blur, dim, or tint, the same video with another dim, or another color or gradient. The view
+    /// changes smoothly, without a blank moment. false when `new` needs a new view.
+    @MainActor
+    static func update(_ view: NSView, from old: Theme.Background, to new: Theme.Background) -> Bool {
+        switch (old, new, view) {
+        case (.wallpaper, .wallpaper(let blur, let dim, let tint, let tintAmount), let picture as PictureView):
+            picture.set(blur: blur, dim: dim, tint: tint, tintAmount: tintAmount)
+        case (.image(let before, _, _), .image(let after, let blur, let dim), let picture as PictureView) where before == after:
+            picture.set(blur: blur, dim: dim, tint: nil, tintAmount: 0)
+        case (.video(let before, _), .video(let after, let dim), let video as VideoView) where before == after:
+            video.set(dim: dim)
+        case (.color, .color(let hex), let gradient as GradientView), (.gradient, .color(let hex), let gradient as GradientView):
+            gradient.set(colors: [hex, hex], angle: 180, noise: 0)
+        case (.color, .gradient(let colors, let angle, let noise), let gradient as GradientView),
+             (.gradient, .gradient(let colors, let angle, let noise), let gradient as GradientView):
+            gradient.set(colors: colors, angle: angle, noise: noise)
+        default:
+            return false
+        }
+        return true
+    }
+}
+
+/// A background with more to load after it shows: a picture, a video's first frame, a shader's first frame. The
+/// theme editor's preview waits for it before it fades a new background in.
+@MainActor
+protocol BackgroundLoading: AnyObject {
+    var isLoaded: Bool { get }
 }
 
 /// Runs a theme's `shade(uv, t, res, p)` on every pixel, every frame. The source compiles at runtime, so a
 /// theme ships a .metal file and no binary. See docs/themes.md for the contract.
-final class ShaderView: MTKView, MTKViewDelegate {
+final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
     /// Matches LockyParams in the shader header below.
     private struct Params {
         var colors: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>)
@@ -71,7 +103,9 @@ final class ShaderView: MTKView, MTKViewDelegate {
     private var params: Params!
     private var speed: Float = 1
     private var resolutionScale: CGFloat = 1
-    private let start = CACurrentMediaTime()
+    private var start = CACurrentMediaTime()
+    /// Whether a frame has been drawn.
+    private(set) var isLoaded = false
 
     static let header = """
     #include <metal_stdlib>
@@ -135,11 +169,12 @@ final class ShaderView: MTKView, MTKViewDelegate {
     }
 
     static func make(url: URL, colors: [String], speed: Double, resolution: Double, fps: Int, params values: [Double], dim: Double,
-                     transparent: Bool = false) -> NSView {
+                     transparent: Bool = false, epoch: CFTimeInterval? = nil) -> NSView {
         guard let device = MTLCreateSystemDefaultDevice() else { return MessageView("No Metal device") }
         do {
             let source = try String(contentsOf: url, encoding: .utf8)
             let view = ShaderView(frame: .zero, device: device)
+            if let epoch { view.start = epoch }
             view.pipeline = try compile(source, device: device, transparent: transparent)
             if transparent {
                 view.layer?.isOpaque = false
@@ -205,6 +240,7 @@ final class ShaderView: MTKView, MTKViewDelegate {
         encoder.endEncoding()
         buffer.present(drawable)
         buffer.commit()
+        isLoaded = true
     }
 }
 
@@ -215,9 +251,16 @@ final class OverlayContainer: NSView {
 }
 
 /// A picture, optionally blurred, dimmed, and tinted: the user's wallpaper or an image file.
-final class PictureView: NSView {
+final class PictureView: NSView, BackgroundLoading {
     private let dimLayer = CALayer()
     private let tintLayer = CALayer()
+    /// Whether the picture is in place, or there is none to load.
+    private(set) var isLoaded = false
+    private var url: URL?
+    private var blur = 0.0
+    /// The picture at a working size before the blur, and how much it was reduced: another blur starts from it.
+    private var reduced: (image: CGImage, scale: Double)?
+    private var rendering: Task<Void, Never>?
 
     /// The picture is darkened by `dim` (0...1), then mixed with `tint` by `tintAmount`.
     init(dim: Double, tint: String?, tintAmount: Double) {
@@ -226,10 +269,9 @@ final class PictureView: NSView {
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.contentsGravity = .resizeAspectFill
         layer?.masksToBounds = true
-        dimLayer.backgroundColor = NSColor.black.withAlphaComponent(dim).cgColor
-        tintLayer.backgroundColor = (tint.flatMap(NSColor.init(hex:)) ?? .clear).withAlphaComponent(tint == nil ? 0 : tintAmount).cgColor
         layer?.addSublayer(dimLayer)
         layer?.addSublayer(tintLayer)
+        shade(dim: dim, tint: tint, tintAmount: tintAmount)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -243,34 +285,86 @@ final class PictureView: NSView {
         CATransaction.commit()
     }
 
-    /// Loads and blurs off the main thread; the picture appears when ready.
-    func load(_ url: URL, blur: Double) {
-        let scale = NSScreen.main?.backingScaleFactor ?? 2
-        Task.detached(priority: .userInitiated) {
-            guard let image = Self.render(url, blur: blur * Double(scale)) else { return }
-            await MainActor.run { [weak self] in self?.layer?.contents = image }
+    private func shade(dim: Double, tint: String?, tintAmount: Double) {
+        dimLayer.backgroundColor = NSColor.black.withAlphaComponent(dim).cgColor
+        tintLayer.backgroundColor = (tint.flatMap(NSColor.init(hex:)) ?? .clear).withAlphaComponent(tint == nil ? 0 : tintAmount).cgColor
+    }
+
+    /// Loads and blurs off the main thread; the picture appears when ready. Without a picture, it stays black.
+    func load(_ url: URL?, blur: Double) {
+        self.url = url
+        self.blur = blur
+        reduced = nil
+        guard url != nil else {
+            isLoaded = true
+            return
+        }
+        render()
+    }
+
+    /// Another blur, dim, or tint for the same picture: the dim and tint change at once, and the picture keeps its
+    /// old blur until the new one is ready.
+    func set(blur: Double, dim: Double, tint: String?, tintAmount: Double) {
+        shade(dim: dim, tint: tint, tintAmount: tintAmount)
+        guard blur != self.blur else { return }
+        self.blur = blur
+        if url != nil { render() }
+    }
+
+    private func render() {
+        let url = url, reduced = reduced
+        let sigma = blur * Double(NSScreen.main?.backingScaleFactor ?? 2)
+        rendering?.cancel()
+        rendering = Task.detached(priority: .userInitiated) { [weak self] in
+            var working = reduced
+            let image: CGImage?
+            if sigma > 0 {
+                // Big wallpapers blur faster at a reduced size, and a blurred picture loses nothing by it.
+                if working == nil, let url { working = Self.read(url, longest: 3000) }
+                image = working.flatMap { Self.blurred($0.image, sigma: sigma * $0.scale) }
+            } else {
+                image = url.flatMap { Self.read($0, longest: nil)?.image }
+            }
+            await MainActor.run {
+                guard let self, !Task.isCancelled else { return }
+                if let working { self.reduced = working }
+                if let image { self.layer?.contents = image }
+                self.isLoaded = true
+            }
         }
     }
 
-    nonisolated private static func render(_ url: URL, blur: Double) -> CGImage? {
+    /// Thread-safe, like every CIContext; it keeps no intermediate images, which are big for a wallpaper.
+    private static let context = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
+
+    /// The picture, reduced to at most `longest` pixels across when that is given, and the scale it was reduced by.
+    nonisolated private static func read(_ url: URL, longest: CGFloat?) -> (image: CGImage, scale: Double)? {
         guard let source = CIImage(contentsOf: url) else { return nil }
-        // Big wallpapers blur faster at a reduced size, and a blurred picture loses nothing by it.
-        let longest = max(source.extent.width, source.extent.height)
-        let reduce = blur > 0 && longest > 3000 ? 3000 / longest : 1
-        var image = source.transformed(by: CGAffineTransform(scaleX: reduce, y: reduce))
-        if blur > 0 {
-            let extent = image.extent
-            image = image.clampedToExtent().applyingGaussianBlur(sigma: blur * reduce).cropped(to: extent)
-        }
-        return CIContext(options: [.useSoftwareRenderer: false]).createCGImage(image, from: image.extent)
+        let size = max(source.extent.width, source.extent.height)
+        let reduce = longest.map { size > $0 ? $0 / size : 1 } ?? 1
+        let image = source.transformed(by: CGAffineTransform(scaleX: reduce, y: reduce))
+        return context.createCGImage(image, from: image.extent).map { ($0, Double(reduce)) }
+    }
+
+    nonisolated private static func blurred(_ picture: CGImage, sigma: Double) -> CGImage? {
+        let image = CIImage(cgImage: picture)
+        let extent = image.extent
+        return context.createCGImage(image.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent), from: extent)
     }
 }
 
 /// Plays a video on a silent loop, like a Wallpaper Engine video wallpaper.
-final class VideoView: NSView {
+final class VideoView: NSView, BackgroundLoading {
     private let player = AVQueuePlayer()
     private var looper: AVPlayerLooper?
     private let shade = CALayer()
+
+    /// Whether its first frame is ready.
+    var isLoaded: Bool { (layer as? AVPlayerLayer)?.isReadyForDisplay ?? true }
+
+    func set(dim: Double) {
+        shade.backgroundColor = NSColor.black.withAlphaComponent(dim).cgColor
+    }
 
     /// Not `playing`, it shows the video's first frame.
     init(url: URL, dim: Double, playing: Bool = true) {
@@ -303,20 +397,29 @@ final class GradientView: NSView {
     init(colors: [String], angle: Double, noise: Double) {
         super.init(frame: .zero)
         wantsLayer = true
+        layer?.addSublayer(gradient)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        set(colors: colors, angle: angle, noise: noise)
+        CATransaction.commit()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Other colors, angle, or grain; outside a transaction that disables actions, the change animates.
+    func set(colors: [String], angle: Double, noise: Double) {
         gradient.colors = colors.map { (NSColor(hex: $0) ?? .black).cgColor }
         let radians = (angle - 90) * .pi / 180
         gradient.startPoint = CGPoint(x: 0.5 - cos(radians) / 2, y: 0.5 + sin(radians) / 2)
         gradient.endPoint = CGPoint(x: 0.5 + cos(radians) / 2, y: 0.5 - sin(radians) / 2)
-        layer?.addSublayer(gradient)
-        if noise > 0 {
+        if noise > 0, grain.superlayer == nil {
             grain.contents = Self.noiseTile
-            grain.opacity = Float(min(noise, 1))
             grain.compositingFilter = "overlayBlendMode"
+            grain.frame = bounds
             layer?.addSublayer(grain)
         }
+        grain.opacity = Float(min(max(noise, 0), 1))
     }
-
-    required init?(coder: NSCoder) { fatalError() }
 
     override func layout() {
         super.layout()
