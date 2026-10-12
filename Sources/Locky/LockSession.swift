@@ -8,7 +8,8 @@ import SwiftUI
 /// fallback's), and takes the theme's style when the theme arrives, if nothing has been typed yet.
 @MainActor
 final class LockSession: NSObject, NSWindowDelegate {
-    enum Mode { case preview, lock }
+    /// embedded: inside another view, such as the theme editor's preview. No Touch ID, no keyboard.
+    enum Mode { case preview, lock, embedded }
 
     struct Options {
         var theme: String?
@@ -17,6 +18,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         var behind = false
         /// settings.json as the lock starts, for the app's own settings. Lua reads its part itself.
         var settings = Settings()
+        /// Embedded only: the view the screen goes into, with bounds of previewSize.
+        weak var container: NSView?
     }
 
     let mode: Mode
@@ -60,14 +63,16 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     func begin() {
-        napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
+        if mode != .embedded {
+            napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
+        }
         observeSystem()
 
         let environment = LuaRuntime.Environment()
         environment.keyboard = Keyboard.current()
         environment.displays = NSScreen.screens.count
         environment.wallpaper = NSScreen.screens.first.flatMap(Wallpaper.picture(for:))?.path
-        if let size = (mode == .preview ? CGRect(origin: .zero, size: options.previewSize) : NSScreen.screens.first?.frame)?.size {
+        if let size = (mode == .lock ? NSScreen.screens.first?.frame : CGRect(origin: .zero, size: options.previewSize))?.size {
             environment.screen = size
         }
         keyboardObserver = DistributedNotificationCenter.default().addObserver(
@@ -83,7 +88,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         // A preview kept behind other windows (for screenshots) never asks for Touch ID: its Touch ID view is
         // hidden, so macOS would show its own prompt on top of whatever the user is doing.
         let touchID = TouchID()
-        if touchID.isAvailable, !(mode == .preview && options.behind) { self.touchID = touchID }
+        if touchID.isAvailable, mode != .embedded, !(mode == .preview && options.behind) { self.touchID = touchID }
 
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
         openWindows()
@@ -101,7 +106,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             if !Task.isCancelled { self?.startTouchID() }
         }
 
-        LogFile.shared.write(level: "info", message: "\(mode == .lock ? "lock" : "preview") started", source: "locky")
+        if mode != .embedded { LogFile.shared.write(level: "info", message: "\(mode == .lock ? "lock" : "preview") started", source: "locky") }
         Task {
             let started = await runtime.start(theme: options.theme)
             guard !ended else { return }
@@ -118,7 +123,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     func end(_ reason: String) {
         guard !ended else { return }
         ended = true
-        LogFile.shared.write(level: "info", message: "\(mode == .lock ? "lock" : "preview") ended: \(reason)", source: "locky")
+        if mode != .embedded { LogFile.shared.write(level: "info", message: "\(mode == .lock ? "lock" : "preview") ended: \(reason)", source: "locky") }
         runtime?.stop()
         touchID?.stop()
         touchIDFallback?.cancel()
@@ -132,6 +137,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         if let napGuard { ProcessInfo.processInfo.endActivity(napGuard) }
         observers.forEach { $0.0.removeObserver($0.1) }
         windows.forEach { $0.delegate = nil; $0.orderOut(nil) }
+        if mode == .embedded { screens.forEach { $0.removeFromSuperview() } }
         windows = []
         screens = []
         hosts = [:]
@@ -218,6 +224,11 @@ final class LockSession: NSObject, NSWindowDelegate {
                 window.makeKeyAndOrderFront(nil)
                 NSApp.activate()
             }
+        case .embedded:
+            guard let container = options.container else { return }
+            let screen = LockScreenView(frame: CGRect(origin: .zero, size: options.previewSize))
+            container.addSubview(screen)
+            screens = [screen]
         case .lock:
             for (index, screen) in NSScreen.screens.enumerated() {
                 let window = ShieldWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
@@ -268,7 +279,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         let panel = AuthPanel(auth: spec, style: style, user: Auth.user(privacy: privacy), touchID: touchID, model: authModel,
                               unlock: { [weak self] in self?.end("password") },
                               failed: { runtime?.queue.async { runtime?.emit("auth_failed") } },
-                              onSize: { [weak screen] size in screen?.authSize = size })
+                              onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded)
         screen.auth = (NSHostingView(rootView: panel), spec)
     }
 
@@ -286,15 +297,18 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         if mode == .lock, started.autoUnlock > 0 { armSafety(after: started.autoUnlock) }
         else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel() }
-        Self.lastLook = (theme.auth, theme.palette, theme.font)
         privacy = started.privacy
-        Self.lastPrivacy = started.privacy
+        if mode != .embedded {
+            Self.lastLook = (theme.auth, theme.palette, theme.font)
+            Self.lastPrivacy = started.privacy
+        }
         buildScreens(started)
         startTouchID()
 
         auth = theme.auth
         if theme.auth.reveal == "activity", authModel.password.isEmpty {
             screens.first?.setAuthVisible(false, dim: theme.auth.dim, animated: false)
+            guard mode != .embedded else { return }
             windows.forEach { $0.acceptsMouseMovedEvents = true }
             activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDown, .scrollWheel]) { [weak self] event in
                 self?.activity()
@@ -310,6 +324,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             0.2126 * $0.redComponent + 0.7152 * $0.greenComponent + 0.0722 * $0.blueComponent > 0.5
         } ?? false
         windows.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) }
+        if mode == .embedded { screens.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) } }
 
         if let first = screens.first {
             let style = LockyStyle(palette: theme.palette, font: theme.font, scale: Layout.scale(for: first.bounds.size))
@@ -324,12 +339,13 @@ final class LockSession: NSObject, NSWindowDelegate {
             let scale = Layout.scale(for: screen.bounds.size)
             let style = LockyStyle(palette: theme.palette, font: theme.font, scale: scale, hour24: started.hour24)
             screen.style = style
-            screen.background = Backgrounds.makeView(theme.background, screen: windows[index].screen)
+            let display = windows.indices.contains(index) ? windows[index].screen : NSScreen.main
+            screen.background = Backgrounds.makeView(theme.background, screen: display)
             if let overlay = theme.overlay {
-                screen.overlay = Backgrounds.makeView(overlay, screen: windows[index].screen, overlay: true)
+                screen.overlay = Backgrounds.makeView(overlay, screen: display, overlay: true)
             }
             for (offset, placement) in theme.widgets.enumerated() where main || placement.allDisplays {
-                let host = WidgetHost(placement: placement, theme: theme, style: style, showsErrors: mode == .preview)
+                let host = WidgetHost(placement: placement, theme: theme, style: style, showsErrors: mode != .lock)
                 screen.add(host)
                 if let id = started.instances[offset] {
                     hosts[id, default: []].append(host)
@@ -341,7 +357,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             if main {
                 screen.message = started.message.map { NSHostingController(rootView: LockMessage(text: $0, auth: theme.auth, style: style)) }
                 if mode == .lock { screen.banner = NSHostingView(rootView: SafetyBanner(model: banner)) }
-                if mode == .preview, !started.problems.isEmpty {
+                if mode != .lock, !started.problems.isEmpty {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
                 }
             }

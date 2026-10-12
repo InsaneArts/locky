@@ -147,6 +147,8 @@ struct AuthPanel: View {
     let unlock: () -> Void
     let failed: () -> Void
     var onSize: (CGSize) -> Void = { _ in }
+    /// false in the theme editor's preview: the field shows, but never takes the keyboard.
+    var interactive = true
 
     private var password: String {
         get { model.password }
@@ -211,7 +213,7 @@ struct AuthPanel: View {
         .onGeometryChange(for: CGSize.self) { $0.size } action: { onSize($0) }
         .task {
             try? await Task.sleep(for: .milliseconds(250))
-            focused = true
+            if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
     }
@@ -246,7 +248,7 @@ struct AuthPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             try? await Task.sleep(for: .milliseconds(250))  // the window is key by then
-            focused = true
+            if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
     }
@@ -286,7 +288,7 @@ struct AuthPanel: View {
                 .foregroundStyle(style.color("fg"))
                 .multilineTextAlignment(alignment == .center ? .center : .leading)
                 .focused($focused)
-                .disabled(checking)
+                .disabled(checking || !interactive)
                 .onSubmit(submit)
         }
         .shadow(color: glowColor, radius: auth.glow ?? 0)
