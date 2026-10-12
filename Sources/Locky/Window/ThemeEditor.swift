@@ -179,7 +179,7 @@ private struct WidgetInspector: View {
                 Section {
                     ForEach(keys, id: \.self) { key in
                         OptionRow(key: key, value: placement.opts[key] ?? inherited[key] ?? .nil, choices: info?.choices[key],
-                                  palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
+                                  fallback: info?.opts[key], palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
                                   live: { draft = settings(key, $0) },
                                   commit: { value in
                                       change { $0.opts[key] = value == inherited[key] ? nil : value }
@@ -297,6 +297,8 @@ private struct OptionRow: View {
     let key: String
     let value: LuaValue
     let choices: [String]?
+    /// The widget's own value for the option, which tells what kind of value it takes.
+    let fallback: LuaValue?
     let palette: [String: String]
     /// A change in progress, for the preview.
     let live: (LuaValue) -> Void
@@ -314,6 +316,9 @@ private struct OptionRow: View {
             }
         } else {
             switch value {
+            case .bool(let on) where fallback?.string != nil:
+                // Text that a theme turned off with false, such as a header: on brings the widget's own text back.
+                Toggle(label, isOn: Binding(get: { on }, set: { commit($0 ? fallback ?? .bool(true) : .bool(false)) }))
             case .bool(let on):
                 Toggle(label, isOn: Binding(get: { on }, set: { commit(.bool($0)) }))
             case .int, .double:
