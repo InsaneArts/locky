@@ -261,7 +261,7 @@ import Testing
         #expect(runtime.bootForTest().isEmpty)
         _ = try loadTheme(runtime)
         let id = try runtime.sync { try runtime.call("create", [.int(1)], budget: 1) }.first ?? .nil
-        try runtime.sync { try runtime.call("init", [id], budget: 1) }
+        _ = try runtime.sync { try runtime.call("init", [id], budget: 1) }
         #expect(try runtime.eval("return OPTS.size, OPTS.color, OPTS.font") == [.int(50), .string("red"), .string("theme")])
     }
 
