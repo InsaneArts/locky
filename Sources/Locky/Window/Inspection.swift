@@ -38,6 +38,8 @@ struct Inspection: Sendable {
         var alsoInConfig: Bool
         var folder: URL
         var installed: Bool
+        /// The commit locky-pack-lock.json pins it to.
+        var commit: String?
     }
 
     var themes: [ThemeInfo] = []
@@ -69,13 +71,15 @@ struct Inspection: Sendable {
                               directory: info["dir"].string.map { URL(fileURLWithPath: $0) },
                               palette: (info["palette"].table ?? [:]).compactMapValues(\.string), error: info["error"].string)
                 }
+                let lockfile = try? PackManager.readLockfile(path.lockfile)
                 result.packs = ((try? runtime.call("pack_specs", budget: 1).first?.array) ?? []).map { spec in
                     let name = spec["name"].string ?? "?"
                     let dir = spec["dir"].string.map { URL(fileURLWithPath: $0) }
                     let folder = dir ?? path.packs.appending(path: name)
                     return PackInfo(name: name, src: spec["src"].string, version: spec["version"].string, dir: dir,
                                     fromSettings: spec["from"].string == "settings", alsoInConfig: spec["in_config"].bool ?? false,
-                                    folder: folder, installed: FileManager.default.fileExists(atPath: folder.path))
+                                    folder: folder, installed: FileManager.default.fileExists(atPath: folder.path),
+                                    commit: dir == nil ? lockfile?.plugins[name]?.rev : nil)
                 }
                 result.widgets = ((try? runtime.call("widget_catalog", budget: 1).first?.array) ?? []).map { info in
                     WidgetInfo(name: info["name"].string ?? "?", description: info["description"].string,

@@ -38,6 +38,10 @@ final class AppModel {
     /// Bumped whenever the config folder or settings.json changes: views that read files read them again.
     private(set) var revision = 0
 
+    /// A package run in progress, and the last one's report.
+    private(set) var packRunning: PackManager.Action?
+    private(set) var packReport: (action: PackManager.Action, report: PackManager.Report)?
+
     /// What the window asks the app to do.
     @ObservationIgnored var lockNow: () -> Void = {}
     @ObservationIgnored var preview: (_ theme: String?) -> Void = { _ in }
@@ -65,6 +69,20 @@ final class AppModel {
             inspection = result
             revision += 1
             if selectedTheme == nil || result.theme(selectedTheme!) == nil { selectedTheme = activeTheme }
+        }
+    }
+
+    /// Runs `locky pack <action>` in the background, one run at a time, then reads the config again.
+    func runPack(_ action: PackManager.Action, then done: ((PackManager.Report) -> Void)? = nil) {
+        guard packRunning == nil else { return }
+        packRunning = action
+        let config = store.config
+        Task {
+            let report = await Task.detached { PackManager(path: .standard(config: config)).run(action) }.value
+            packRunning = nil
+            packReport = (action, report)
+            refresh()
+            done?(report)
         }
     }
 

@@ -4,8 +4,6 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var session: LockSession?
-    /// A package run in progress; the Plugins items wait for it.
-    private var packRunning = false
     /// Messages that arrived during a lock, shown once it opens: an alert would take the keyboard from the
     /// password field.
     private var pendingMessages: [(title: String, text: String)] = []
@@ -89,8 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         plugins.autoenablesItems = false
         for (title, action) in [("Install Missing", #selector(syncPlugins)), ("Update All", #selector(updatePlugins)),
                                 ("Remove Unused", #selector(cleanPlugins))] {
-            let entry = item(packRunning ? "\(title) (busy…)" : title, action)
-            entry.isEnabled = !packRunning
+            let busy = model.packRunning != nil
+            let entry = item(busy ? "\(title) (busy…)" : title, action)
+            entry.isEnabled = !busy
             plugins.addItem(entry)
         }
         plugins.addItem(.separator())
@@ -168,15 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func cleanPlugins() { runPack(.clean) }
 
     private func runPack(_ action: PackManager.Action) {
-        guard !packRunning else { return }
-        packRunning = true
-        Task.detached {
-            let report = PackManager(path: .standard()).run(action)
-            await MainActor.run { [weak self] in
-                self?.packRunning = false
-                self?.refreshThemeNames()
-                self?.show(title: "Plugins", text: report.text)
-            }
+        model.runPack(action) { [weak self] report in
+            self?.refreshThemeNames()
+            self?.show(title: "Plugins", text: report.text)
         }
     }
 
