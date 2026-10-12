@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The app's settings. Each change saves to settings.json at once. Settings Lua also reads (the safety
@@ -139,6 +140,8 @@ struct SettingsPage: View {
             LabeledContent {
                 Picker("Photo", selection: Binding(get: { store.settings["intruder_photo"].int ?? 0 }, set: { value in
                     store.update { $0["intruder_photo"] = value == 0 ? .nil : .int(value) }
+                    // Ask now: during a lock, the camera never asks.
+                    if value > 0, CameraAccess.status == .notDetermined { Task { _ = await CameraAccess.request() } }
                 })) {
                     Text("Off").tag(0)
                     ForEach([2, 3, 5, 10], id: \.self) { Text("After \($0) wrong passwords").tag($0) }
@@ -149,6 +152,7 @@ struct SettingsPage: View {
                 Text("Take a photo")
                 Text("With the camera, once per lock. The Dashboard shows the photos after you unlock.")
             }
+            if store.settings["intruder_photo"].int != nil { CameraStatus() }
         } header: {
             Text("Security")
         } footer: {
@@ -350,5 +354,36 @@ extension SettingsStore {
         Binding(get: { self.settings[key].bool ?? fallback }, set: { value in
             self.update { $0[key] = value == fallback ? .nil : .bool(value) }
         })
+    }
+}
+
+/// Whether Locky may use the camera, with the way to change it.
+private struct CameraStatus: View {
+    @State private var status = CameraAccess.status
+
+    var body: some View {
+        HStack {
+            switch status {
+            case .authorized:
+                Label("Locky may use the camera", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            case .notDetermined:
+                Label("Locky needs your permission to use the camera", systemImage: "camera").foregroundStyle(.secondary)
+                Spacer()
+                Button("Allow…") {
+                    Task {
+                        _ = await CameraAccess.request()
+                        status = CameraAccess.status
+                    }
+                }
+            default:
+                Label("Locky may not use the camera, so it takes no photo", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Spacer()
+                Button("Open Privacy Settings") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")!)
+                }
+            }
+        }
+        .onAppear { status = CameraAccess.status }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in status = CameraAccess.status }
     }
 }

@@ -49,6 +49,10 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var ended = false
     private let banner = SafetyBanner.Model()
+    /// When to take a photo of whoever types wrong passwords, and the photos this lock took.
+    private lazy var intruder = IntruderPolicy(settings: options.settings)
+    private(set) var photos: [URL] = []
+    private var capturing: Task<Void, Never>?
 
     /// The last theme's password field look, so the next lock's field appears in it at once.
     private static var lastLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec)?
@@ -280,9 +284,33 @@ final class LockSession: NSObject, NSWindowDelegate {
         let runtime = self.runtime
         let panel = AuthPanel(auth: spec, style: style, user: Auth.user(privacy: privacy), touchID: touchID, model: authModel,
                               unlock: { [weak self] in self?.end("password") },
-                              failed: { runtime?.queue.async { runtime?.emit("auth_failed") } },
+                              failed: { [weak self] in
+                                  runtime?.queue.async { runtime?.emit("auth_failed") }
+                                  self?.wrongPassword()
+                              },
                               onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded)
         screen.auth = (NSHostingView(rootView: panel), spec)
+    }
+
+    /// The photos this lock took, once a capture still running has finished.
+    func photosTaken() async -> [URL] {
+        await capturing?.value
+        return photos
+    }
+
+    /// Counts a wrong password; at settings.json's intruder_photo, takes one photo with the camera. The camera
+    /// never asks for permission here: Settings asks when the photo is turned on.
+    private func wrongPassword() {
+        guard mode == .lock, intruder.wrongPassword() else { return }
+        capturing = Task { [weak self] in
+            do {
+                let url = try await IntruderCamera().capture()
+                self?.photos.append(url)
+                LogFile.shared.write(level: "info", message: "took a photo after wrong passwords: \(url.lastPathComponent)", source: "locky")
+            } catch {
+                LogFile.shared.write(level: "warn", message: "no photo after wrong passwords: \(error)", source: "locky")
+            }
+        }
     }
 
     private func startTouchID() {

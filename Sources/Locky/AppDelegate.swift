@@ -206,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {
         guard session == nil else { return }
         let session = LockSession(mode: mode, options: options)
-        session.onEnd = { [weak self] in
+        session.onEnd = { [weak self, weak session] in
             guard let self else { return }
             self.session = nil
             refreshThemeNames()
@@ -214,6 +214,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let waiting = pendingMessages
             pendingMessages = []
             for message in waiting { show(title: message.title, text: message.text) }
+            // Someone typed wrong passwords and the camera caught them: show the photos.
+            if mode == .lock, let session {
+                Task { [weak self] in
+                    if await !session.photosTaken().isEmpty { self?.showWindow(.dashboard) }
+                }
+            }
         }
         self.session = session
         session.begin()
