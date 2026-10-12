@@ -92,6 +92,8 @@ final class LuaRuntime: @unchecked Sendable {
     private var vm: LuaVM?
     private var entries: [String: LuaRef] = [:]
     private var problems: [String] = []
+    /// How many of `problems` came from settings.json, init.lua, and plugin scripts, before the theme loaded.
+    private var bootProblems = 0
 
     private struct ScheduledTimer {
         var source: DispatchSourceTimer
@@ -157,34 +159,78 @@ final class LuaRuntime: @unchecked Sendable {
         let trimmed = config["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let message = trimmed.isEmpty ? nil : String(trimmed.prefix(200))
         let requested = themeOverride ?? config["theme"].string ?? "default"
+        bootProblems = problems.count
         var theme = loadTheme(requested)
         if theme == nil, requested != "default" { theme = loadTheme("default") }
         guard let theme else {
             return Started(theme: .fallback, instances: [], autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
                            message: message)
         }
-        var instances: [Int?] = []
-        for (offset, placement) in theme.widgets.enumerated() {
-            guard placement.known else {
-                problems.append("theme \(theme.id): no widget named \"\(placement.widget)\"")
-                instances.append(nil)
-                continue
-            }
-            guard let id = (try? call("create", [.int(offset + 1)], budget: Budget.create).first)?.int else {
-                instances.append(nil)
-                continue
-            }
-            instances.append(id)
-            do {
-                try call("init", [.int(id)], budget: Budget.initialize)
-            } catch {
-                fail(owner: id, error)
-            }
-            invalidate(id)
-        }
+        let instances = theme.widgets.indices.map { startInstance($0, of: theme) }
         emit("lock")
         return Started(theme: theme, instances: instances, autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
                        message: message)
+    }
+
+    /// The instance for placement `index` of the theme just loaded, started and due to draw: nil when its widget
+    /// is unknown or it fails to start.
+    private func startInstance(_ index: Int, of theme: Theme) -> Int? {
+        let placement = theme.widgets[index]
+        guard placement.known else {
+            problems.append("theme \(theme.id): no widget named \"\(placement.widget)\"")
+            return nil
+        }
+        guard let id = (try? call("create", [.int(index + 1)], budget: Budget.create).first)?.int else { return nil }
+        do {
+            try call("init", [.int(id)], budget: Budget.initialize)
+        } catch {
+            fail(owner: id, error)
+        }
+        invalidate(id)
+        return id
+    }
+
+    /// Loads the theme again in this state with new settings.json values: the theme editor's preview shows the
+    /// window's changes to a theme this way, without starting again. A placement that keeps its widget and
+    /// options keeps its instance, with its timers and state; the others get new instances, and the instances
+    /// no placement keeps stop. Only changes to themes apply like this: others need init.lua to run again.
+    /// nil when Lua is not running or the theme does not load.
+    func reload(theme name: String, settings: Settings, previous: Started) async -> Started? {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: self.reloadOnQueue(theme: name, settings: settings, previous: previous)) }
+        }
+    }
+
+    private func reloadOnQueue(theme name: String, settings: Settings, previous: Started) -> Started? {
+        guard vm != nil, !stopped else { return nil }
+        let before = problems.count
+        self.settings = settings
+        applySettings(settings, reported: problems)
+        guard let theme = loadTheme(name) else { return nil }
+        let old = previous.theme.widgets
+        // Old placements whose instance still runs, by index.
+        var running: [Int: Int] = [:]
+        for (index, id) in previous.instances.enumerated() {
+            if let id, !disabled.contains(id) { running[index] = id }
+        }
+        func same(_ a: Theme.Placement, _ b: Theme.Placement) -> Bool { a.known && a.widget == b.widget && a.options == b.options }
+        var instances = [Int?](repeating: nil, count: theme.widgets.count)
+        // The same place first, so equal widgets keep their order; then anywhere, for a widget that moved in the list.
+        for (index, placement) in theme.widgets.enumerated() where old.indices.contains(index) && same(old[index], placement) {
+            instances[index] = running.removeValue(forKey: index)
+        }
+        for (index, placement) in theme.widgets.enumerated() where instances[index] == nil {
+            if let match = running.keys.sorted().first(where: { same(old[$0], placement) }) {
+                instances[index] = running.removeValue(forKey: match)
+            }
+        }
+        for id in running.values { disable(id) }
+        for index in theme.widgets.indices where instances[index] == nil {
+            instances[index] = startInstance(index, of: theme)
+        }
+        return Started(theme: theme, instances: instances, autoUnlock: previous.autoUnlock,
+                       problems: Array(problems.prefix(bootProblems)) + problems[before...], hour24: previous.hour24, privacy: previous.privacy,
+                       message: previous.message)
     }
 
     /// Loads the Lua core and runs the user's files, without a theme: for `locky check` and the pack manager.
