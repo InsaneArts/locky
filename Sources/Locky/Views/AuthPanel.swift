@@ -27,11 +27,10 @@ enum Auth {
         var picture: NSImage?
     }
 
-    /// The login user. In privacy mode: no name, and "user@mac" for the terminal prompt. The picture stays,
-    /// as on macOS's own lock screen.
+    /// The login user. In privacy mode: no name or picture, and "user@mac" for the terminal prompt.
     static func user(privacy: Bool) -> User {
+        if privacy { return User(name: "", login: "user", host: "mac", picture: nil) }
         let identity = CBIdentity(name: NSUserName(), authority: CBIdentityAuthority.default())
-        if privacy { return User(name: "", login: "user", host: "mac", picture: identity?.image) }
         let host = (SystemInfo.hostname()["host"].string ?? "mac").replacingOccurrences(of: ".local", with: "")
         return User(name: identity?.fullName ?? NSUserName(), login: NSUserName(), host: host, picture: identity?.image)
     }

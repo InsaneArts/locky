@@ -298,7 +298,7 @@ import Testing
 
     @Test func thePasswordFieldShowsNoName() {
         let user = Auth.user(privacy: true)
-        #expect(user.name.isEmpty && user.login == "user" && user.host == "mac")
+        #expect(user.name.isEmpty && user.login == "user" && user.host == "mac" && user.picture == nil)
         #expect(Auth.user(privacy: false).login == NSUserName())
     }
 }
