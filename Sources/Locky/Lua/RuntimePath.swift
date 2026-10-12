@@ -125,19 +125,28 @@ struct RuntimePath: Sendable {
 
     /// A digest of every file under the roots (its path, size, and modification time), without settings.json and
     /// hidden files: it changes when init.lua, a plugin, a theme, or an asset changes, and the window's previews
-    /// start again.
+    /// start again. Symlinks count as what they point at, as Lua reads them: a config folder in a dotfiles repo,
+    /// linked into place, is the common case.
     func fingerprint() -> Int {
         var hasher = Hasher()
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
-        for root in roots {
-            guard let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { continue }
-            for case let url as URL in files where url.lastPathComponent != "settings.json" {
-                guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
-                hasher.combine(url.path)
-                hasher.combine(values.fileSize)
-                hasher.combine(values.contentModificationDate)
+        var walked = Set<String>()
+        func walk(_ folder: URL) {
+            let real = folder.resolvingSymlinksInPath()
+            guard walked.insert(real.path).inserted, let names = try? FileManager.default.contentsOfDirectory(atPath: real.path) else { return }
+            for name in names.sorted() where !name.hasPrefix(".") && name != "settings.json" {
+                let url = real.appending(path: name)
+                let target = url.resolvingSymlinksInPath()
+                guard let values = try? target.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]) else { continue }
+                if values.isDirectory == true {
+                    walk(target)
+                } else {
+                    hasher.combine(url.path)
+                    hasher.combine(values.fileSize)
+                    hasher.combine(values.contentModificationDate)
+                }
             }
         }
+        roots.forEach(walk)
         return hasher.finalize()
     }
 

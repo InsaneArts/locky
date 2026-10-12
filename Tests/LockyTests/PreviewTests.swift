@@ -124,6 +124,25 @@ import Testing
         #expect(screen.background === last && first.superview == nil)
     }
 
+    /// A config folder in a dotfiles repo, linked into place: its files count, and a change to one shows.
+    @Test func theFingerprintFollowsSymlinks() throws {
+        let sandbox = try Sandbox()
+        let real = sandbox.root.appending(path: "dotfiles/locky")
+        try FileManager.default.createDirectory(at: real.appending(path: "plugin"), withIntermediateDirectories: true)
+        try "print(1)".write(to: real.appending(path: "init.lua"), atomically: true, encoding: .utf8)
+        let linked = sandbox.root.appending(path: "linked")
+        try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: real)
+        let path = RuntimePath(config: linked, packs: sandbox.packs, roots: [linked])
+        let before = path.fingerprint()
+        #expect(path.fingerprint() == before)
+        try "print(2) -- and more".write(to: real.appending(path: "init.lua"), atomically: true, encoding: .utf8)
+        let after = path.fingerprint()
+        #expect(after != before)
+        // settings.json does not count: the window writes it on every change.
+        try "{}".write(to: real.appending(path: "settings.json"), atomically: true, encoding: .utf8)
+        #expect(path.fingerprint() == after)
+    }
+
     @Test func onlyTheThemesOwnChangesReloadInPlace() {
         let base = ThemePreviewView.Key(theme: "t", settings: Settings(["theme": .string("t")]), sources: 5)
         var edited = base
