@@ -119,3 +119,26 @@ import Testing
         #expect(frame.minX >= 16 && frame.maxX <= 1440 - 16)
     }
 }
+
+@Suite struct InstanceLockTests {
+    /// Another process holds the lock (a child, as a second Locky would): this one does not get it, and gets it
+    /// once that process ends.
+    @Test func onlyOneProcessHoldsTheLock() async throws {
+        let sandbox = try Sandbox()
+        let file = sandbox.root.appending(path: "instance.lock")
+        FileManager.default.createFile(atPath: file.path, contents: nil)
+        let holder = Process()
+        holder.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        holder.arguments = ["-e", "use Fcntl ':flock'; open(F, '<', $ARGV[0]) or die; flock(F, LOCK_EX) or die; print \"held\\n\"; $| = 1; sleep 30",
+                            file.path]
+        let output = Pipe()
+        holder.standardOutput = output
+        try holder.run()
+        defer { holder.terminate() }
+        _ = output.fileHandleForReading.availableData  // "held"
+        #expect(!InstanceLock.acquire(file))
+        holder.terminate()
+        holder.waitUntilExit()
+        #expect(InstanceLock.acquire(file))
+    }
+}
