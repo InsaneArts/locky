@@ -151,9 +151,17 @@ private final class FakeCamera: CameraSession, @unchecked Sendable {
         try Data("x".utf8).write(to: outside)
         #expect(throws: (any Error).self) { try log.delete(outside) }
         #expect(fm.fileExists(atPath: outside.path))
+        // Paths that name the folder itself, or a folder that looks like a photo, delete nothing.
+        try fm.createDirectory(at: log.folder.appending(path: "album.jpg"), withIntermediateDirectories: true)
+        for path in [log.folder.appending(path: "."), log.folder.appending(path: "album.jpg/.."), log.folder.appending(path: "album.jpg")] {
+            #expect(throws: (any Error).self) { try log.delete(path) }
+        }
+        #expect(fm.fileExists(atPath: log.folder.appending(path: "notes.txt").path))
+        #expect(!log.photos().contains { $0.url.lastPathComponent == "album.jpg" })
 
         try log.deleteAll()
         #expect(log.photos().isEmpty)
         #expect(fm.fileExists(atPath: log.folder.appending(path: "notes.txt").path))
+        #expect(fm.fileExists(atPath: log.folder.appending(path: "album.jpg").path))
     }
 }

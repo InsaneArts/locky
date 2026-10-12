@@ -186,7 +186,7 @@ struct IntruderLog {
     func photos() -> [(url: URL, date: Date)] {
         let formatter = Self.nameFormatter()
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-        return names.filter { !$0.hasPrefix(".") && $0.lowercased().hasSuffix(".jpg") }
+        return names.filter { !$0.hasPrefix(".") && $0.lowercased().hasSuffix(".jpg") && Self.isRegularFile(folder.appending(path: $0)) }
             .map { name in
                 let url = folder.appending(path: name)
                 // A photo renamed in Finder keeps its place by its file date.
@@ -197,12 +197,17 @@ struct IntruderLog {
             .sorted { ($0.date, $0.url.lastPathComponent) > ($1.date, $1.url.lastPathComponent) }
     }
 
-    /// Deletes one photo. A file outside the folder is refused, so a wrong URL cannot delete anything else.
+    /// Deletes one photo: only a file `photos()` lists, so a wrong URL ("Intruders/.", a folder) deletes nothing else.
     func delete(_ photo: URL) throws {
-        guard photo.deletingLastPathComponent().resolvingSymlinksInPath().path == folder.resolvingSymlinksInPath().path else {
+        let target = photo.standardizedFileURL.resolvingSymlinksInPath().path
+        guard photos().contains(where: { $0.url.standardizedFileURL.resolvingSymlinksInPath().path == target }) else {
             throw CocoaError(.fileNoSuchFile, userInfo: [NSURLErrorKey: photo])
         }
         try FileManager.default.removeItem(at: photo)
+    }
+
+    private static func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
     }
 
     /// Deletes every photo, and nothing else in the folder.
