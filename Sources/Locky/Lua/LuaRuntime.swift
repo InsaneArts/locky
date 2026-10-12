@@ -147,11 +147,16 @@ final class LuaRuntime: @unchecked Sendable {
         let config = (try? call("config", budget: Budget.callback).first) ?? .nil
         // Not a number, or infinite: off. Otherwise at most a day; a sleep of an infinite duration traps.
         let autoUnlock = config["auto_unlock"].isNil ? 60 : config["auto_unlock"].number.map { $0.isFinite ? min(max($0, 0), 86_400) : 0 } ?? 0
+        // Read before the theme loads: the bare fallback keeps them too.
+        let hour24 = config["hour24"].bool, privacy = config["privacy"].bool ?? false
+        let trimmed = config["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let message = trimmed.isEmpty ? nil : String(trimmed.prefix(200))
         let requested = themeOverride ?? config["theme"].string ?? "default"
         var theme = loadTheme(requested)
         if theme == nil, requested != "default" { theme = loadTheme("default") }
         guard let theme else {
-            return Started(theme: .fallback, instances: [], autoUnlock: autoUnlock, problems: problems)
+            return Started(theme: .fallback, instances: [], autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
+                           message: message)
         }
         var instances: [Int?] = []
         for (offset, placement) in theme.widgets.enumerated() {
@@ -173,9 +178,8 @@ final class LuaRuntime: @unchecked Sendable {
             invalidate(id)
         }
         emit("lock")
-        let message = config["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Started(theme: theme, instances: instances, autoUnlock: autoUnlock, problems: problems, hour24: config["hour24"].bool,
-                       privacy: config["privacy"].bool ?? false, message: message?.isEmpty == false ? String(message!.prefix(200)) : nil)
+        return Started(theme: theme, instances: instances, autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
+                       message: message)
     }
 
     /// Loads the Lua core and runs the user's files, without a theme: for `locky check` and the pack manager.

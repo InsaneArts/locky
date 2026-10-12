@@ -179,6 +179,19 @@ import Testing
         #expect(started.problems.contains { $0.contains("anchor") })
         runtime.stop()
     }
+
+    @Test func theBareFallbackKeepsPrivacyTheMessageAndHour24() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/default.lua", "return 5")  // shadows the built-in default, so no theme loads
+        try Settings(["privacy": .bool(true), "message": .string("If found, call 555"), "hour24": .bool(true)]).save(config: sandbox.config)
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        let started = await runtime.start(theme: "nope")
+        runtime.stop()
+        #expect(started.theme.id == "fallback")
+        #expect(started.privacy)
+        #expect(started.message == "If found, call 555")
+        #expect(started.hour24 == true)
+    }
 }
 
 @Suite struct RuntimePauseTests {
