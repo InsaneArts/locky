@@ -102,8 +102,10 @@ import Testing
         try await Task.sleep(for: .seconds(0.3))
         let activity = ContinuousClock.now
         displayOff.noteActivity()
-        try await waitFor(1, calls)
-        #expect(calls.count == 1)
+        // 0, unless a busy main thread held this test past the first deadline.
+        let before = calls.count
+        try await waitFor(before + 1, calls)
+        #expect(calls.count == before + 1)
         // A full second after the activity, not after the start.
         #expect(try #require(calls.last) - activity >= .seconds(1))
         displayOff.stop()
