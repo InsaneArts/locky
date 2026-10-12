@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The themes the Theme menu lists, worked out in the background (it runs init.lua).
     private var themeNames: [String] = []
     /// settings.json: what the menu and the window change.
-    private let store = SettingsStore()
+    private let store = SettingsStore(lastGood: SettingsStore.defaultLastGood)
     private lazy var model: AppModel = {
         let model = AppModel(store: store)
         model.lockNow = { [weak self] in self?.lockNow() }

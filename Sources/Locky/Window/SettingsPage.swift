@@ -13,24 +13,27 @@ struct SettingsPage: View {
             if let problem = store.problem {
                 Section {
                     Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Button("Move the Broken File Aside and Start Over") { try? store.resetBrokenFile() }
+                    Button("Move the Broken File Aside and Restore the Last Good Settings") { try? store.resetBrokenFile() }
                 } footer: {
-                    Text("Locky does not change settings.json while it has an error. Fix it in an editor, or start over.")
+                    Text("Locky does not change settings.json while it has an error, and goes on with the last settings that read without one. Fix the file in an editor, or restore those.")
                 }
             }
-            GeneralSettings(model: model)
-            autoLock
-            unlock
-            lockScreen
-            ScheduleSettings(model: model)
-            power
-            security
-            Section("Plugins") {
-                Toggle("Check for plugin updates once a day", isOn: store.bool("update_check", default: true))
+            // While the file has an error, everything but the way out of it waits.
+            Group {
+                GeneralSettings(model: model)
+                autoLock
+                unlock
+                lockScreen
+                ScheduleSettings(model: model)
+                power
+                security
+                Section("Plugins") {
+                    Toggle("Check for plugin updates once a day", isOn: store.bool("update_check", default: true))
+                }
             }
+            .disabled(store.problem != nil)
         }
         .formStyle(.grouped)
-        .disabled(store.problem != nil)
     }
 
     // MARK: Sections

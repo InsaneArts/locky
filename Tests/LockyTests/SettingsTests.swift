@@ -380,6 +380,55 @@ import Testing
         #expect(defaults.string(forKey: "theme") == nil)
     }
 
+    @Test func aTypoAtLaunchKeepsTheLastGoodSettings() throws {
+        let sandbox = try Sandbox()
+        let lastGood = sandbox.root.appending(path: "support/last-good.json")
+        let good = Settings(["auto_lock": .table(["idle_minutes": .int(5)]), "emergency_exit": .bool(false)])
+        try good.save(config: sandbox.config)
+        _ = SettingsStore(config: sandbox.config, lastGood: lastGood)
+        // A hand edit loses a comma; then the Mac restarts.
+        try sandbox.write("settings.json", #"{ "emergency_exit": false "auto_lock": {} }"#)
+        let relaunched = SettingsStore(config: sandbox.config, lastGood: lastGood)
+        #expect(relaunched.problem != nil)
+        #expect(relaunched.settings == good)
+        // Restoring writes those settings back, the broken file moved aside.
+        try relaunched.resetBrokenFile()
+        #expect(Settings.load(config: sandbox.config).settings == good)
+        #expect(relaunched.problem == nil)
+    }
+
+    @Test func aSaveThroughASymlinkKeepsAnEditNoEventReported() throws {
+        let sandbox = try Sandbox()
+        let target = sandbox.root.appending(path: "dotfiles/locky/settings.json")
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try #"{ "theme": "glass" }"#.write(to: target, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: Settings.url(config: sandbox.config), withDestinationURL: target)
+        let store = SettingsStore(config: sandbox.config)
+        // A git pull in the dotfiles changes the target; the config folder sees nothing.
+        try #"{ "theme": "glass", "emergency_exit": false }"#.write(to: target, atomically: true, encoding: .utf8)
+        store.update { $0["privacy"] = .bool(true) }
+        let saved = Settings.load(file: target).settings
+        #expect(saved["emergency_exit"] == .bool(false))
+        #expect(saved["privacy"] == .bool(true))
+        #expect(store.settings == saved)
+        // A broken target is never written over.
+        try "{ broken".write(to: target, atomically: true, encoding: .utf8)
+        store.update { $0["privacy"] = .bool(false) }
+        #expect(try String(contentsOf: target, encoding: .utf8) == "{ broken")
+        #expect(store.problem != nil)
+    }
+
+    @Test func theStoresOwnSaveReportsOneChange() throws {
+        let sandbox = try Sandbox()
+        let store = SettingsStore(config: sandbox.config)
+        var changes = 0
+        store.onChange = { changes += 1 }
+        // A whole number as a double, as the safety timer's picker saves it, comes back as an integer.
+        store.update { $0["auto_unlock"] = .double(60) }
+        store.reload()
+        #expect(changes == 1)
+    }
+
     @Test func anEditInAnotherEditorShowsUp() async throws {
         let sandbox = try Sandbox()
         let store = SettingsStore(config: sandbox.config)

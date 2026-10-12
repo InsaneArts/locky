@@ -19,11 +19,15 @@ struct Settings: Equatable, Sendable {
     /// A missing file reads as empty settings. A file that is not a JSON object reads as empty settings and a
     /// problem; the window then shows the problem and leaves the file alone until it is fixed.
     static func load(config: URL) -> (settings: Settings, problem: String?) {
-        let url = url(config: config)
+        load(file: url(config: config))
+    }
+
+    static func load(file url: URL) -> (settings: Settings, problem: String?) {
         guard FileManager.default.fileExists(atPath: url.path) else { return (Settings(), nil) }
         let name = LuaError.shortenPaths(url.path)
         do {
-            let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+            // The size of the file a symlink points at, not of the link.
+            let size = (try FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path)[.size] as? Int) ?? 0
             guard size <= 1 << 20 else { return (Settings(), "\(name) is larger than 1 MB") }
             let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
             guard let table = object as? [String: Any] else { return (Settings(), "\(name) must hold a JSON object") }
@@ -36,7 +40,11 @@ struct Settings: Equatable, Sendable {
     /// Writes the file atomically with sorted keys, so dotfile diffs stay small. A symlinked settings.json
     /// (dotfiles managed with stow, for one) keeps its link: the write goes to the file it points at.
     func save(config: URL) throws {
-        let url = Self.url(config: config).resolvingSymlinksInPath()
+        try save(file: Self.url(config: config))
+    }
+
+    func save(file: URL) throws {
+        let url = file.resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let object = try values.mapValues { try $0.jsonObject() }
         var data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
