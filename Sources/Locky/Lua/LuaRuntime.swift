@@ -142,7 +142,12 @@ final class LuaRuntime: @unchecked Sendable {
             try boot()
         } catch {
             problems.append("Locky's Lua core failed to start: \(error)")
-            return Started(theme: .fallback, instances: [], autoUnlock: 60, problems: problems)
+            // Without Lua, settings.json still says how the lock looks: privacy, the message, the clock.
+            let settings = settings ?? Settings.load(config: path.config).settings
+            let seconds = settings["auto_unlock"].number.map { $0.isFinite ? min(max($0, 0), 86_400) : 0 } ?? 60
+            let message = settings["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Started(theme: .fallback, instances: [], autoUnlock: seconds, problems: problems, hour24: settings["hour24"].bool,
+                           privacy: settings["privacy"].bool ?? false, message: message?.isEmpty == false ? String(message!.prefix(200)) : nil)
         }
         let config = (try? call("config", budget: Budget.callback).first) ?? .nil
         // Not a number, or infinite: off. Otherwise at most a day; a sleep of an infinite duration traps.

@@ -716,6 +716,31 @@ import Testing
 }
 
 @Suite struct SettingsOrderFollowUpTests {
+    @Test func pluginScriptsSeeSettingsPrivacyOverInitLuas() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        try sandbox.write("init.lua", "locky.setup({ privacy = false })")
+        try sandbox.write("plugin/p.lua", "NAME = locky.sys.user().name")
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        #expect(runtime.bootForTest().isEmpty)
+        #expect(try runtime.eval("return NAME") == [.string("user")])
+        runtime.stop()
+    }
+
+    @Test func aCoreFailureKeepsPrivacyAndTheMessage() async throws {
+        let sandbox = try Sandbox()
+        // A module of the user's that shadows the core's and fails stops the core from starting.
+        try sandbox.write("lua/locky/ui.lua", "error('shadowed')")
+        let settings = Settings(["privacy": .bool(true), "message": .string("If found, call 555"), "auto_unlock": .int(0)])
+        let runtime = LuaRuntime(path: sandbox.path(), settings: settings, delegate: Recorder().delegate)
+        let started = await runtime.start(theme: nil)
+        runtime.stop()
+        #expect(started.problems.first?.contains("core failed") == true)
+        #expect(started.privacy)
+        #expect(started.message == "If found, call 555")
+        #expect(started.autoUnlock == 0)
+    }
+
     @Test func aPaletteThatRefersToItselfManyTimesStillLists() throws {
         let sandbox = try Sandbox()
         try sandbox.write("themes/t.lua", "return { name = 'T' }")
@@ -726,15 +751,5 @@ import Testing
         runtime.stop()
         #expect(list.contains { $0["id"] == .string("t") })
         #expect(list.first { $0["id"] == .string("cycle3") }?["palette"]["accent"] == .string("#ff0000"))
-    }
-    @Test func pluginScriptsSeeSettingsPrivacyOverInitLuas() throws {
-        let sandbox = try Sandbox()
-        try sandbox.write("settings.json", #"{ "privacy": true }"#)
-        try sandbox.write("init.lua", "locky.setup({ privacy = false })")
-        try sandbox.write("plugin/p.lua", "NAME = locky.sys.user().name")
-        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
-        #expect(runtime.bootForTest().isEmpty)
-        #expect(try runtime.eval("return NAME") == [.string("user")])
-        runtime.stop()
     }
 }
