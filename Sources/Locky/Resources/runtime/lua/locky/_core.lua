@@ -1389,7 +1389,7 @@ return {
     end
     return {
       id = name, name = theme.name, background = plain(theme.background), widgets = widgets_list,
-      auth = { anchor = theme.auth.anchor, offset = plain(theme.auth.offset) },
+      auth = { anchor = theme.auth.anchor, offset = plain(theme.auth.offset) }, card_style = text(theme.card.style),
     }
   end,
 

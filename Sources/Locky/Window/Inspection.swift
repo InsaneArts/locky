@@ -15,13 +15,17 @@ struct Inspection: Sendable {
         var error: String?
     }
 
-    struct WidgetInfo: Identifiable, Hashable, Sendable {
+    struct WidgetInfo: Identifiable, Equatable, Sendable {
         var id: String { name }
         var name: String
         var description: String?
         var file: URL?
         /// Whether it sits on the theme's card when the theme does not say.
         var card = false
+        /// Its options with init.lua's: what a placement the window adds starts with.
+        var opts: [String: LuaValue] = [:]
+        /// The values its options take, for the editor's menus.
+        var choices: [String: [String]] = [:]
     }
 
     /// A package from locky.pack.add (init.lua) or settings.json's packs (the window).
@@ -88,7 +92,9 @@ struct Inspection: Sendable {
                 }
                 result.widgets = ((try? runtime.call("widget_catalog", budget: 1).first?.array) ?? []).map { info in
                     WidgetInfo(name: info["name"].string ?? "?", description: info["description"].string,
-                               file: info["file"].string.map { URL(fileURLWithPath: $0) }, card: info["card"].bool ?? false)
+                               file: info["file"].string.map { URL(fileURLWithPath: $0) }, card: info["card"].bool ?? false,
+                               opts: info["opts"].table ?? [:],
+                               choices: (info["choices"].table ?? [:]).compactMapValues { $0.array?.compactMap(\.string) })
                 }
             }
             runtime.stop()
@@ -116,7 +122,8 @@ struct Inspection: Sendable {
                     try runtime.boot()
                     let value = try runtime.call("theme_layout", [.string(theme)], budget: 1).first ?? .nil
                     return .success(ThemeLayout(id: theme, name: value["name"].string ?? theme, background: value["background"],
-                                                widgets: value["widgets"].array ?? []))
+                                                widgets: value["widgets"].array ?? [], auth: value["auth"],
+                                                cardStyle: value["card_style"].string ?? "glass"))
                 } catch {
                     return .failure(LuaError(LuaError(String(describing: error)).summary))
                 }
@@ -131,12 +138,17 @@ struct Inspection: Sendable {
     }
 }
 
-/// A theme's own background and widget placements (widget, anchor, offset, size, align, card, display).
+/// A theme's own background and widget placements (widget, anchor, offset, size, align, card, display, and the
+/// options before settings.json's), its password field's place, and its card style.
 struct ThemeLayout: Sendable, Equatable {
     var id: String
     var name: String
     var background: LuaValue
     var widgets: [LuaValue]
+    /// { anchor, offset }.
+    var auth: LuaValue = .nil
+    /// "glass", "solid", "outline", or "none".
+    var cardStyle = "glass"
 }
 
 extension LuaRuntime.Delegate {

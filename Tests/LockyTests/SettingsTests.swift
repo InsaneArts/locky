@@ -424,6 +424,7 @@ import Testing
         #expect(layout["widgets"][1]["opts"] == .table(["size": .int(20), "color": .string("red")]))
         #expect(layout["auth"]["anchor"] == .string("bottom"))
         #expect(layout["auth"]["offset"] == .array([.int(0), .int(-60)]))
+        #expect(layout["card_style"] == .string("glass"))
     }
 
     @Test func theCatalogHasEachWidgetsOptionsAndChoices() throws {

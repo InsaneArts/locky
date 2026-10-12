@@ -62,6 +62,9 @@ import Testing
         #expect(inspection.theme("mine")?.palette["bg"] == "#123456")
         #expect(inspection.theme("broken")?.error?.contains("expected table") == true)
         #expect(inspection.widget("w")?.card == true)
+        // What the editor offers for a core widget's options.
+        #expect(inspection.widget("battery")?.choices["style"] == ["row", "compact", "ring"])
+        #expect(inspection.widget("clock")?.opts["size"] == .int(180))
         // settings.json wins in config; base is what init.lua says.
         #expect(inspection.config["privacy"] == .bool(false))
         #expect(inspection.base["privacy"] == .bool(true))
