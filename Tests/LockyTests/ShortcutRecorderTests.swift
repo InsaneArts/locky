@@ -26,6 +26,7 @@ import Testing
     @Test func aKeyThatTypesIsRejected() {
         #expect(outcome(kVK_ANSI_L) == .reject)
         #expect(outcome(kVK_ANSI_L, [.shift]) == .reject)
+        #expect(outcome(kVK_ANSI_L, [.option]) == .reject)
         #expect(outcome(kVK_Space, [.shift, .capsLock]) == .reject)
         #expect(outcome(kVK_Return) == .reject)
     }

@@ -66,13 +66,16 @@ struct Shortcut: Equatable, Sendable {
         .table(["key": .int(Int(keyCode)), "modifiers": .array(modifiers.names.map(LuaValue.string))])
     }
 
-    /// A global shortcut needs ⌘, ⌃, or ⌥, so typing never sets it off. F-keys need none: nobody types them.
+    /// A global shortcut needs ⌘ or ⌃, so typing never sets it off: ⌥ alone is how many layouts type characters
+    /// (⌥L is "@" on a German keyboard), and a global shortcut takes the key from every app, the lock's password
+    /// field included. F-keys need neither: nobody types them. ⌃⌥⌘Q is the lock's emergency quit.
     var isValid: Bool {
-        !modifiers.isDisjoint(with: [.command, .control, .option]) || Self.functionKeys.contains(Int(keyCode))
+        if keyCode == UInt16(kVK_ANSI_Q), modifiers == [.control, .option, .command] { return false }
+        return !modifiers.isDisjoint(with: [.command, .control]) || Self.functionKeys.contains(Int(keyCode))
     }
 
-    /// As macOS menus show it, such as "⌃⌥⌘L". The key's character comes from the current keyboard layout, so a
-    /// French keyboard shows its own letter for the same key code.
+    /// As macOS menus show it, such as "⌃⌥⌘L". The key's character comes from the ASCII-capable keyboard layout,
+    /// as in macOS's own menus: a Georgian or Russian layout still shows "L" for the L key, and a French one its "L".
     @MainActor
     var display: String { modifiers.symbols + Self.keyName(keyCode) }
 
@@ -96,7 +99,8 @@ struct Shortcut: Equatable, Sendable {
         return title.count == character.count ? title : character
     }
 
-    /// What the key types in the current keyboard layout, without modifiers. nil for keys that type nothing visible.
+    /// What the key types in the ASCII-capable keyboard layout, without modifiers. nil for keys that type nothing
+    /// visible.
     @MainActor
     private static func character(_ keyCode: UInt16) -> String? {
         guard let layout = layoutData(), let bytes = CFDataGetBytePtr(layout) else { return nil }
@@ -113,11 +117,11 @@ struct Shortcut: Equatable, Sendable {
         return text.unicodeScalars.allSatisfy(invisible.contains) ? nil : text
     }
 
-    /// The current keyboard layout's key map, or the last ASCII layout's if it has none. Text Input Sources must be
-    /// read on the main thread.
+    /// The current ASCII-capable keyboard layout's key map (the current layout's when it is one). Text Input Sources
+    /// must be read on the main thread.
     @MainActor
     private static func layoutData() -> CFData? {
-        for copy in [TISCopyCurrentKeyboardLayoutInputSource, TISCopyCurrentASCIICapableKeyboardLayoutInputSource] {
+        for copy in [TISCopyCurrentASCIICapableKeyboardLayoutInputSource, TISCopyCurrentKeyboardLayoutInputSource] {
             if let source = copy()?.takeRetainedValue(), let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) {
                 return Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue()
             }

@@ -44,15 +44,22 @@ import Testing
         for value in bad { #expect(Shortcut(value) == nil, "\(value)") }
     }
 
-    @Test func aShortcutNeedsCommandControlOrOptionExceptAnFKey() {
+    @Test func aShortcutNeedsCommandOrControlExceptAnFKey() {
         let l = UInt16(kVK_ANSI_L)
         #expect(!Shortcut(keyCode: l, modifiers: []).isValid)
         #expect(!Shortcut(keyCode: l, modifiers: [.shift]).isValid)
         #expect(!Shortcut(keyCode: UInt16(kVK_Space), modifiers: [.shift]).isValid)
-        for modifier: Shortcut.Modifiers in [.command, .control, .option] {
+        // ⌥ alone types characters on many layouts (⌥L is "@" in German), a password's included.
+        #expect(!Shortcut(keyCode: l, modifiers: [.option]).isValid)
+        #expect(!Shortcut(keyCode: l, modifiers: [.option, .shift]).isValid)
+        for modifier: Shortcut.Modifiers in [.command, .control] {
             #expect(Shortcut(keyCode: l, modifiers: [modifier]).isValid)
             #expect(Shortcut(keyCode: l, modifiers: [modifier, .shift]).isValid)
+            #expect(Shortcut(keyCode: l, modifiers: [modifier, .option]).isValid)
         }
+        // The lock's emergency quit stays free.
+        #expect(!Shortcut(keyCode: UInt16(kVK_ANSI_Q), modifiers: [.control, .option, .command]).isValid)
+        #expect(Shortcut(keyCode: UInt16(kVK_ANSI_Q), modifiers: [.control, .option, .command, .shift]).isValid)
         for key in [kVK_F1, kVK_F12, kVK_F20] {
             #expect(Shortcut(keyCode: UInt16(key), modifiers: []).isValid)
             #expect(Shortcut(keyCode: UInt16(key), modifiers: [.shift]).isValid)
@@ -76,11 +83,14 @@ import Testing
         #expect(Shortcut(keyCode: UInt16(kVK_F1), modifiers: [.command, .shift, .option, .control]).display == "⌃⌥⇧⌘F1")
     }
 
-    @Test func aLetterKeyShowsTheCurrentLayoutsCharacter() {
+    @Test func aLetterKeyShowsTheASCIILayoutsCharacter() {
         let display = lockNow.display
         #expect(display.hasPrefix("⌃⌥⌘"))
         let key = display.dropFirst(3)
         #expect(!key.isEmpty && !key.hasPrefix("Key"), "\(display)")
+        // Whatever layout is selected (Georgian, Russian), the L key reads as a Latin letter, as in macOS's menus.
+        let latin = key.unicodeScalars.allSatisfy(\.isASCII)
+        #expect(latin, "\(display)")
     }
 
     /// Registers a real hot key for a moment: ⌃⌥⇧⌘F20, which no keyboard in use is likely to press.

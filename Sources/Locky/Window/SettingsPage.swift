@@ -285,7 +285,7 @@ private struct GeneralSettings: View {
                 model.store.update { $0.shortcut = shortcut }
             }), onRecordingChange: model.recordingShortcut) {
                 Text("Lock Now shortcut")
-                Text("Works in every app. Click to record; Delete clears it.")
+                Text("Works in every app. Needs ⌘ or ⌃, or an F-key. Click to record; Delete clears it.")
             }
             if let problem = model.shortcutProblem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
