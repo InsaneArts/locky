@@ -1,4 +1,4 @@
--- greeting: "Good evening, Tornike."
+-- greeting: "Good evening, Alex."
 --   opts.name     the name to use (default: the user's first name, none in privacy mode); false leaves it out
 --   opts.size, opts.weight, opts.font, opts.design, opts.color
 local ui = locky.ui

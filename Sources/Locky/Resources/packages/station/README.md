@@ -16,7 +16,7 @@ jump of the minute hand.
 - The date under the clock, uppercase and tracked: MONDAY 12 OCTOBER, in your language.
 - Top left, the computer's name on a black platform sign.
 - Under the date, the next "departure": the herdr agent that needs you most, such as
-  `NEXT Claude · Jolt-source issues 34-41 · needs you`, with `+2` when more agents wait. Hidden when
+  `NEXT Claude · Fix the login bug · needs you`, with `+2` when more agents wait. Hidden when
   nothing needs you or herdr is not running.
 - The password field at the bottom, as a line in the railway red, in Helvetica Neue.
 
