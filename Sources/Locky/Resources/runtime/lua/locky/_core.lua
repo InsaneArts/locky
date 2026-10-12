@@ -812,6 +812,7 @@ local function normalize_theme(name, theme, background_from_settings)
       card = entry.card,
       display = entry.display or "main",
       opts = entry.opts or {},
+      settings_opts = entry.settings_opts,
     }
   end
   return result
@@ -973,9 +974,8 @@ local function settings_edit(name, theme, edit)
             placement[key] = { entry[key][1], entry[key][2] }
           end
         end
-        if entry.opts then
-          placement.opts = tbl.deep_extend("force", placement.opts or {}, entry.opts)
-        end
+        -- Kept apart from the theme's options: they merge last, over init.lua's locky.setup({ widgets = ... }).
+        placement.settings_opts = entry.opts and tbl.deepcopy(entry.opts)
         list[#list + 1] = placement
       end
     end
@@ -1229,6 +1229,7 @@ return {
     for i, placement in ipairs(current_theme.widgets) do
       exported.widgets[i] = tbl.extend("force", placement)
       exported.widgets[i].opts = nil
+      exported.widgets[i].settings_opts = nil
       local definition = widgets[placement.widget]
       exported.widgets[i].known = definition ~= nil
       exported.widgets[i].size = placement.size or (definition and definition.size)
@@ -1250,8 +1251,10 @@ return {
     local instance = raw_setmetatable({
       id = last_instance,
       name = definition.name,
-      -- The widget's defaults, then the theme's options, then the user's: the user has the last word.
-      opts = tbl.deep_extend("force", definition.opts or {}, placement.opts, locky.config.widgets[definition.name] or {}),
+      -- The widget's defaults, then the theme's options, then init.lua's, then settings.json's: the user has
+      -- the last word, and the window's layer wins, as everywhere.
+      opts = tbl.deep_extend("force", definition.opts or {}, placement.opts, locky.config.widgets[definition.name] or {},
+        placement.settings_opts),
       state = {},
       theme = current_theme,
     }, Instance)

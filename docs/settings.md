@@ -50,7 +50,8 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 
 `themes.<id>.widgets` replaces the theme's widget list. An entry with `ref` is the theme's own placement
 number `ref`: it keeps that placement's options, and the entry's `anchor`, `offset`, `card`, `size`, `align`,
-`display`, and `opts` go on top. An entry without `ref` adds a widget:
+`display`, and `opts` go on top (its `opts` over `locky.setup({ widgets = … })` too). An entry without `ref`
+adds a widget:
 
 ```json
 "themes": {

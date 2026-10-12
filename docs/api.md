@@ -22,7 +22,7 @@ Inside `init` and `render`, `self` is the widget instance:
 
 | | |
 |---|---|
-| `self.opts` | Options: the definition's defaults, then the theme's, then the user's. |
+| `self.opts` | Options: the definition's defaults, then the theme's, then the user's: `locky.setup({ widgets = … })`, then settings.json's. |
 | `self.state` | A table for your data. |
 | `self.theme` | The theme: `palette`, `font`, `name`, … |
 | `self:set(patch)` | Merges `patch` into `self.state` and draws the widget again. |

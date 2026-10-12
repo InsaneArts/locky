@@ -248,6 +248,23 @@ import Testing
         #expect(try runtime.eval("return locky.theme.current.widgets[1].opts.size") == [.int(20)])
     }
 
+    /// settings.json is the last layer for widget options too, over init.lua's locky.setup({ widgets = ... }).
+    @Test func settingsOptionsWinOverInitLuas() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'two', opts = { size = 20, font = 'theme' } } } }")
+        try sandbox.write("plugin/w.lua", "locky.widget.define('two', { opts = { size = 1 }, init = function(self) OPTS = self.opts end, render = function() end })")
+        try sandbox.write("init.lua", "locky.setup({ widgets = { two = { size = 99, color = 'red' } } })")
+        try Settings(["themes": .table(["t": .table(["widgets": .array([
+            .table(["ref": .int(1), "widget": .string("two"), "opts": .table(["size": .int(50)])]),
+        ])])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        _ = try loadTheme(runtime)
+        let id = try runtime.sync { try runtime.call("create", [.int(1)], budget: 1) }.first ?? .nil
+        try runtime.sync { try runtime.call("init", [id], budget: 1) }
+        #expect(try runtime.eval("return OPTS.size, OPTS.color, OPTS.font") == [.int(50), .string("red"), .string("theme")])
+    }
+
     /// Saved when the theme had { one, two, one }: entry 1 was placement 3, now gone, and entry 2 is placement 1,
     /// still there. A stale ref looks for its widget by name only among placements no exact ref names.
     @Test func anExactRefKeepsItsPlacement() throws {
