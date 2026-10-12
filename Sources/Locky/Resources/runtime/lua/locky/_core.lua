@@ -451,8 +451,18 @@ locky.config = {
   message = nil,
 }
 
+-- The type of each setting. Lua and the host both read privacy and hour24 only as true or false, so another
+-- value would hide names in widgets but not in the password field, or fail the host's whole config.
+local setting_types = {
+  theme = "string", auto_unlock = "number", hour24 = "boolean", privacy = "boolean", message = "string",
+  background = "table", palette = "table", widgets = "table",
+}
+
 function locky.setup(opts)
   validate("opts", opts, "table")
+  for key, kind in pairs(setting_types) do
+    validate("opts." .. key, opts[key], kind, true)
+  end
   locky.config = tbl.deep_extend("force", locky.config, opts)
 end
 
@@ -503,13 +513,13 @@ locky.sys = {
   uptime = native.sys_uptime,
   -- In privacy mode (locky.config.privacy), generic names instead of the computer's and the user's.
   hostname = function()
-    if locky.config.privacy then
+    if locky.config.privacy == true then
       return { name = "Mac", host = "mac" }
     end
     return native.sys_hostname()
   end,
   user = function()
-    if locky.config.privacy then
+    if locky.config.privacy == true then
       return { name = "user", full_name = "" }
     end
     return native.sys_user()
@@ -533,7 +543,7 @@ locky.date = {
   format = function(template, time)
     validate("template", template, "string")
     validate("time", time, "number", true)
-    if template == "time" and locky.config.hour24 ~= nil then
+    if template == "time" and type(locky.config.hour24) == "boolean" then
       template = locky.config.hour24 and "HH:mm" or "h:mm"
     end
     return native.date_format(template, time or os.time())
@@ -541,8 +551,8 @@ locky.date = {
   --- The user's language, weekdays, months, first weekday, and hour24 (locky.config.hour24 when it is set).
   locale = function()
     local locale = native.locale()
-    if locky.config.hour24 ~= nil then
-      locale.hour24 = locky.config.hour24 == true
+    if type(locky.config.hour24) == "boolean" then
+      locale.hour24 = locky.config.hour24
     end
     return locale
   end,
@@ -1140,8 +1150,13 @@ local instances, last_instance = {}, 0
 return {
   config = function()
     local config = locky.config
+    -- As the Lua side reads them: hour24 only as true or false, privacy only when true.
+    local hour24 = config.hour24
+    if type(hour24) ~= "boolean" then
+      hour24 = nil
+    end
     return {
-      theme = config.theme, auto_unlock = config.auto_unlock, hour24 = config.hour24, privacy = config.privacy == true,
+      theme = config.theme, auto_unlock = config.auto_unlock, hour24 = hour24, privacy = config.privacy == true,
       message = type(config.message) == "string" and config.message or nil,
     }
   end,

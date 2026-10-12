@@ -47,6 +47,48 @@ import Testing
         #expect(config["message"] == .string("from the plugin"))
     }
 
+    @Test func setupChecksItsTypes() throws {
+        for (option, expected) in [
+            ("theme = 5", "opts.theme: expected string, got number"), ("auto_unlock = '60'", "opts.auto_unlock: expected number, got string"),
+            ("hour24 = 1", "opts.hour24: expected boolean, got number"), ("privacy = 'yes'", "opts.privacy: expected boolean, got string"),
+            ("message = {}", "opts.message: expected string, got table"), ("background = 'x'", "opts.background: expected table, got string"),
+            ("palette = 5", "opts.palette: expected table, got number"), ("widgets = true", "opts.widgets: expected table, got boolean"),
+        ] {
+            let sandbox = try Sandbox()
+            try sandbox.write("init.lua", "locky.setup({ \(option) })")
+            let problems = runtime(sandbox).bootForTest()
+            #expect(problems.count == 1 && problems[0].contains("init.lua:1: \(expected)"), "\(problems)")
+        }
+    }
+
+    /// Lua and the host read privacy and hour24 alike: only true turns privacy on, and only true or false forces
+    /// the clock. Values set around locky.setup cannot hide names in widgets but not in the password field.
+    @Test func privacyAndHour24ReadTheSameInLuaAndTheHost() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.config.privacy = 1 locky.config.hour24 = 1")
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        let config = try config(runtime)
+        #expect(config["privacy"] == .bool(false))
+        #expect(config["hour24"] == .nil)
+        let time = "os.time({ year = 2026, month = 1, day = 2, hour = 17, min = 5 })"
+        let lua = try runtime.eval("return locky.sys.user().name, locky.date.format('time', \(time)), locky.date.locale().hour24")
+        let date = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 1, day: 2, hour: 17, minute: 5)))
+        #expect(lua == [.string(NSUserName()), .string(SystemInfo.format(date, "time")), SystemInfo.locale()["hour24"]])
+    }
+
+    /// A function in hour24 failed config(), and the lock lost auto_unlock and privacy with it.
+    @Test func anOddHour24CostsNothingElse() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ auto_unlock = 0, privacy = true }) locky.config.hour24 = function() end")
+        let runtime = runtime(sandbox)
+        let started = await runtime.start(theme: "default")
+        runtime.stop()
+        #expect(started.autoUnlock == 0)
+        #expect(started.privacy)
+        #expect(started.hour24 == nil)
+    }
+
     @Test func valuesOfTheWrongTypeAreSkippedAndReported() throws {
         let sandbox = try Sandbox()
         try sandbox.write("init.lua", "locky.setup({ theme = 'from-init' })")
