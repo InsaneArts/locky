@@ -8,7 +8,8 @@
 -- data is false when herdr is not running, otherwise:
 --   { agents = { { status, kind, title, workspace }, ... }, counts = { blocked, done, working, idle, unknown },
 --     need = blocked + done }
--- Agents come sorted: blocked, done, working, idle.
+-- Agents come sorted: blocked, done, working, idle. In privacy mode (locky.config.privacy) a title is the
+-- agent's kind ("Claude") and the workspace is "".
 local M = {}
 
 M.colors = { blocked = "warning", done = "success", working = "accent", idle = "muted", unknown = "muted" }
@@ -40,11 +41,13 @@ function M.parse(json)
   for _, a in ipairs(snapshot.agents or {}) do
     local status = rank[a.agent_status] and a.agent_status or "unknown"
     counts[status] = counts[status] + 1
+    local kind = capital(a.display_agent or a.agent or "agent")
+    local private = locky.config.privacy
     agents[#agents + 1] = {
       status = status,
-      kind = capital(a.display_agent or a.agent or "agent"),
-      title = a.name or a.title or (a.terminal_title_stripped and clean(a.terminal_title_stripped)) or capital(a.agent or "agent"),
-      workspace = capital(workspaces[a.workspace_id] or ""),
+      kind = kind,
+      title = private and kind or a.name or a.title or (a.terminal_title_stripped and clean(a.terminal_title_stripped)) or capital(a.agent or "agent"),
+      workspace = private and "" or capital(workspaces[a.workspace_id] or ""),
     }
   end
   table.sort(agents, function(x, y)

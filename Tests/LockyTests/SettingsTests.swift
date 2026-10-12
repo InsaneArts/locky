@@ -248,3 +248,47 @@ import Testing
         #expect(try runtime.eval("return locky.date.locale().hour24") == [system])
     }
 }
+
+@Suite struct PrivacyTests {
+    private func runtime(privacy: Bool) throws -> (LuaRuntime, Sandbox) {
+        let sandbox = try Sandbox()
+        try Settings(["privacy": .bool(privacy)]).save(config: sandbox.config)
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        #expect(runtime.bootForTest().isEmpty)
+        return (runtime, sandbox)
+    }
+
+    @Test func privacyModeGivesGenericNames() throws {
+        let (runtime, _) = try runtime(privacy: true)
+        #expect(try runtime.eval("local u = locky.sys.user() return u.name, u.full_name") == [.string("user"), .string("")])
+        #expect(try runtime.eval("local h = locky.sys.hostname() return h.name, h.host") == [.string("Mac"), .string("mac")])
+        let (open, _) = try self.runtime(privacy: false)
+        #expect(try open.eval("return locky.sys.user().name") == [.string(NSUserName())])
+    }
+
+    @Test func privacyModeHidesAgentTitlesAndWorkspaces() throws {
+        let (runtime, _) = try runtime(privacy: true)
+        let source = "return require('locky.herdr').parse([==[\(HerdrModuleTests.snapshot)]==])"
+        let agents = try runtime.eval(source).first?["agents"].array ?? []
+        #expect(agents.map { $0["title"].string } == ["Codex", "Claude", "Claude", "Pi"])
+        #expect(agents.allSatisfy { $0["workspace"] == .string("") })
+        // Counts stay: they say nothing about the work.
+        #expect(try runtime.eval(source + ".need") == [.int(2)])
+    }
+
+    @Test func theGreetingLeavesTheNameOut() throws {
+        let (runtime, _) = try runtime(privacy: true)
+        let text = try runtime.eval("""
+            local definition = locky.widget.get("greeting")
+            local view = definition.render({ opts = definition.opts, state = { hour = 20 } })
+            return view.text
+            """)
+        #expect(text == [.string("Good evening.")])
+    }
+
+    @Test func thePasswordFieldShowsNoName() {
+        let user = Auth.user(privacy: true)
+        #expect(user.name.isEmpty && user.login == "user" && user.host == "mac")
+        #expect(Auth.user(privacy: false).login == NSUserName())
+    }
+}

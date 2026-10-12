@@ -1,5 +1,5 @@
 -- greeting: "Good evening, Tornike."
---   opts.name     the name to use (default: the user's first name); false leaves it out
+--   opts.name     the name to use (default: the user's first name, none in privacy mode); false leaves it out
 --   opts.size, opts.weight, opts.font, opts.design, opts.color
 local ui = locky.ui
 
@@ -19,7 +19,7 @@ locky.widget.define("greeting", {
   render = function(self)
     local o = self.opts
     local name = o.name
-    if name == nil then
+    if name == nil and not locky.config.privacy then
       name = (locky.sys.user().full_name:match("^(%S+)")) or locky.sys.user().name
     end
     local text = part_of_day(self.state.hour or os.date("*t").hour) .. (name and (", " .. name) or "") .. (o.period == false and "" or ".")

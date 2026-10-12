@@ -10,6 +10,18 @@ local ui = locky.ui
 local herdr = require("locky.herdr")
 local colors, words = herdr.colors, herdr.words
 
+-- "workspace · Kind". In privacy mode the workspace is empty and the title is the kind: the status then.
+local function detail(a)
+  local parts = {}
+  if a.workspace ~= "" then
+    parts[#parts + 1] = a.workspace
+  end
+  if a.kind ~= a.title then
+    parts[#parts + 1] = a.kind
+  end
+  return #parts > 0 and table.concat(parts, " · ") or words[a.status]
+end
+
 locky.widget.define("agents", {
   description = "herdr coding agents: blocked, done, and working",
   card = true,
@@ -91,7 +103,7 @@ locky.widget.define("agents", {
             ui.vstack {
               align = "leading", spacing = 1,
               ui.text(a.title, { size = o.size, weight = "semibold", lines = 1, max_width = o.max_width or 300 }),
-              ui.text(a.workspace .. " · " .. a.kind, { size = o.size - 1, color = "muted", lines = 1 }),
+              ui.text(detail(a), { size = o.size - 1, color = "muted", lines = 1 }),
             },
           },
         }

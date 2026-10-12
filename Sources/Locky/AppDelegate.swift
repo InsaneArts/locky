@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let launch = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst()))
         if let mode = launch.mode {
             start(mode, options: LockSession.Options(theme: launch.theme ?? pickedTheme, previewSize: launch.size ?? CGSize(width: 1440, height: 900),
-                                                     behind: launch.behind))
+                                                     behind: launch.behind, settings: Self.settings()))
         }
     }
 
@@ -94,14 +94,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func lockNow() {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
-        start(.lock, options: LockSession.Options(theme: pickedTheme))
+        start(.lock, options: LockSession.Options(theme: pickedTheme, settings: Self.settings()))
+    }
+
+    private static func settings() -> Settings {
+        Settings.load(config: RuntimePath.defaultConfig).settings
     }
 
     /// While locked, nothing quits Locky through the normal path: that would open the Mac.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         session?.mode == .lock ? .terminateCancel : .terminateNow
     }
-    @objc private func preview() { start(.preview, options: LockSession.Options(theme: pickedTheme)) }
+    @objc private func preview() { start(.preview, options: LockSession.Options(theme: pickedTheme, settings: Self.settings())) }
 
     @objc private func pickTheme(_ sender: NSMenuItem) {
         pickedTheme = sender.representedObject as? String
@@ -157,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func restartPreview() {
         guard session?.mode == .preview else { return }
         session?.end("theme changed")
-        start(.preview, options: LockSession.Options(theme: pickedTheme))
+        start(.preview, options: LockSession.Options(theme: pickedTheme, settings: Self.settings()))
     }
 
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {

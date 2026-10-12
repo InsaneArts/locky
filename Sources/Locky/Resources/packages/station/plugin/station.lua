@@ -257,8 +257,9 @@ locky.widget.define("station.departure", {
         background = "accent", radius = 3, padding = { 3, 7 },
       }),
       ui.text(a.kind, { size = o.size, weight = "bold", color = "fg", lines = 1 }),
-      dot,
-      ui.text(a.title, { size = o.size, color = "fg", lines = 1, max_width = o.max_width }),
+      -- In privacy mode the title is the kind: once is enough.
+      a.title ~= a.kind and dot,
+      a.title ~= a.kind and ui.text(a.title, { size = o.size, color = "fg", lines = 1, max_width = o.max_width }),
       dot,
       ui.text(status, { size = o.size, weight = "medium", color = a.status == "blocked" and "accent" or "muted", lines = 1 }),
       self.state.more > 0 and ui.text("+" .. self.state.more, { size = o.size - 2, weight = "medium", color = "muted" }),

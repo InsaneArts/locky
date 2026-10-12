@@ -27,8 +27,11 @@ enum Auth {
         var picture: NSImage?
     }
 
-    static var user: User {
+    /// The login user. In privacy mode: no name, and "user@mac" for the terminal prompt. The picture stays,
+    /// as on macOS's own lock screen.
+    static func user(privacy: Bool) -> User {
         let identity = CBIdentity(name: NSUserName(), authority: CBIdentityAuthority.default())
+        if privacy { return User(name: "", login: "user", host: "mac", picture: identity?.image) }
         let host = (SystemInfo.hostname()["host"].string ?? "mac").replacingOccurrences(of: ".local", with: "")
         return User(name: identity?.fullName ?? NSUserName(), login: NSUserName(), host: host, picture: identity?.image)
     }
@@ -226,7 +229,7 @@ struct AuthPanel: View {
     private var stack: some View {
         VStack(alignment: auth.hintAlign == "leading" ? .leading : .center, spacing: 12 * s) {
             if auth.avatar && auth.style != "terminal" && auth.style != "minimal" { avatar }
-            if auth.name && auth.style != "terminal" && auth.style != "minimal" {
+            if auth.name && !user.name.isEmpty && auth.style != "terminal" && auth.style != "minimal" {
                 Text(user.name).font(font(15, "semibold")).foregroundStyle(style.color("fg"))
             }
             HStack(spacing: 10 * s) {

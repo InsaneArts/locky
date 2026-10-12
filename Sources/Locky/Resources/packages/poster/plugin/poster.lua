@@ -167,7 +167,8 @@ local renderers = {
         -- Blocked agents get a red number: they are waiting for you.
         line(o, tostring(i), { weight = "bold", color = a.status == "blocked" and "accent" or "fg", width = number, text_align = "leading" }),
         line(o, a.kind, { weight = "medium", width = kind, text_align = "leading" }),
-        line(o, a.title, { max_width = o.width - GRID.pitch - number - kind }),
+        -- In privacy mode the title is the kind, which the column before already shows.
+        line(o, a.title ~= a.kind and a.title or "", { max_width = o.width - GRID.pitch - number - kind }),
       }
     end
     if #agents > o.rows then

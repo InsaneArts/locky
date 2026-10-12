@@ -15,6 +15,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         var previewSize = CGSize(width: 1440, height: 900)
         /// Preview only: open behind other windows without activating, for screenshots.
         var behind = false
+        /// settings.json as the lock starts, for the app's own settings. Lua reads its part itself.
+        var settings = Settings()
     }
 
     let mode: Mode
@@ -47,6 +49,9 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     /// The last theme's password field look, so the next lock's field appears in it at once.
     private static var lastLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec)?
+    /// Privacy mode as the last lock had it (init.lua may turn it on), until this lock's Lua says.
+    private static var lastPrivacy = false
+    private lazy var privacy = options.settings["privacy"].bool ?? Self.lastPrivacy
 
     init(mode: Mode, options: Options) {
         self.mode = mode
@@ -260,7 +265,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     private func installAuth(_ spec: Theme.Auth, style: LockyStyle) {
         guard let screen = screens.first else { return }
         let runtime = self.runtime
-        let panel = AuthPanel(auth: spec, style: style, user: Auth.user, touchID: touchID, model: authModel,
+        let panel = AuthPanel(auth: spec, style: style, user: Auth.user(privacy: privacy), touchID: touchID, model: authModel,
                               unlock: { [weak self] in self?.end("password") },
                               failed: { runtime?.queue.async { runtime?.emit("auth_failed") } },
                               onSize: { [weak screen] size in screen?.authSize = size })
@@ -282,6 +287,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock, started.autoUnlock > 0 { armSafety(after: started.autoUnlock) }
         else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel() }
         Self.lastLook = (theme.auth, theme.palette, theme.font)
+        privacy = started.privacy
+        Self.lastPrivacy = started.privacy
         buildScreens(started)
         startTouchID()
 

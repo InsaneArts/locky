@@ -501,8 +501,19 @@ locky.sys = {
   cpu = native.sys_cpu,
   memory = native.sys_memory,
   uptime = native.sys_uptime,
-  hostname = native.sys_hostname,
-  user = native.sys_user,
+  -- In privacy mode (locky.config.privacy), generic names instead of the computer's and the user's.
+  hostname = function()
+    if locky.config.privacy then
+      return { name = "Mac", host = "mac" }
+    end
+    return native.sys_hostname()
+  end,
+  user = function()
+    if locky.config.privacy then
+      return { name = "user", full_name = "" }
+    end
+    return native.sys_user()
+  end,
   os = native.sys_os,
   machine = native.sys_machine,
   keyboard = native.sys_keyboard,
