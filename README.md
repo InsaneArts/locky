@@ -39,6 +39,14 @@ default, lives in the core runtime) with its own widgets, shaders, and a README 
 Pick one in the menu's Theme submenu, or in `init.lua` with `locky.setup({ theme = "station" })`.
 `Scripts/snapshot.sh <id> out.png [1728x1117]` renders any theme to a PNG.
 
+## The window
+
+Dashboard… and Settings… (⌘,) in the menu open Locky's window: a live dashboard, a theme editor (background,
+widgets), plugins (install, update, remove), the config with Open in your editor, and settings such as the
+Lock Now shortcut, auto-lock, Open at Login, a lock screen message, privacy mode, a theme schedule, the
+battery saver, and a photo after wrong passwords. It saves to `~/.config/locky/settings.json`, which wins
+over init.lua key by key: see [settings.md](docs/settings.md).
+
 ## Configure
 
 `~/.config/locky/init.lua` (the menu's Open Config Folder creates it with examples):
@@ -56,7 +64,9 @@ locky health                      like :checkhealth
 locky themes | widgets            what is installed
 locky pack list|sync|update|clean plugins from git, pinned by locky-pack-lock.json
 locky pack check                  which plugins have updates; installs none
+locky login [on|off]              open Locky at login, or not
 locky preview --theme NAME        the lock screen in a window
+locky window [SECTION]            the Locky window, at a page
 ```
 
 ## Docs
@@ -65,6 +75,7 @@ locky preview --theme NAME        the lock screen in a window
 - [views.md](docs/views.md): every view and property widgets can draw
 - [themes.md](docs/themes.md): themes, backgrounds, and shaders
 - [api.md](docs/api.md): the `locky` API
+- [settings.md](docs/settings.md): settings.json, which the window writes, and how it layers over init.lua
 
 ## Layout
 
@@ -72,9 +83,13 @@ locky preview --theme NAME        the lock screen in a window
 Sources/CLua/                 Lua 5.5.1 (unmodified) and locky_bridge.c: time budgets, memory limit, safe calls
 Sources/Locky/Lua/            the runtime: LuaVM, LuaRuntime, the runtime path, system information
 Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the password field
+Sources/Locky/Window/         the Locky window: dashboard, theme editor, plugins, config, settings
+Sources/Locky/Settings/       settings.json, its store, and the theme schedule
+Sources/Locky/System/         the shortcut, auto-lock, login item, power, camera, and editors
 Sources/Locky/Resources/
   runtime/                    lua/locky (core, ui), plugin/ (core widgets), themes/, shaders/, types/
   packages/                   the built-in theme packages, one folder each
-Scripts/                      packaging, snapshot.sh (render a theme to PNG)
+Scripts/                      packaging, snapshot.sh (a theme to PNG), window-shot.sh (a window page to PNG),
+                              thumbnails.sh (the theme thumbnails), make_icon.swift (the app icon)
 Tests/LockyTests/             the test suite
 ```
