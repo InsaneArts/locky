@@ -59,7 +59,8 @@ struct ThemeEditor: View {
     }
 
     private func load() async {
-        switch await Inspection.layout(of: theme.id, config: store.config) {
+        let wallpaper = NSScreen.main.flatMap(Wallpaper.picture(for:))?.path
+        switch await Inspection.layout(of: theme.id, config: store.config, wallpaper: wallpaper) {
         case .success(let value):
             layout = value
             layoutError = nil
