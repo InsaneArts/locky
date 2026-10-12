@@ -192,6 +192,11 @@ final class LockSession: NSObject, NSWindowDelegate {
         observe(.default, NSWindow.didResignKeyNotification) { session in
             DispatchQueue.main.async { if !session.ended, !(session.windows.first?.isKeyWindow ?? true) { session.reclaimKeyboard() } }
         }
+        observe(.default, NSWindow.didBecomeKeyNotification) { session in
+            guard session.windows.first?.isKeyWindow == true, session.authModel.needsClick else { return }
+            session.authModel.needsClick = false
+            session.authModel.focusRequest += 1
+        }
     }
 
     private func reclaimKeyboard() {
@@ -203,13 +208,17 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     /// macOS treats activation as a request it may refuse; check a few times that the lock got the keyboard.
+    /// If it still has not, the field asks for a click instead of looking ready for typing: a click on the
+    /// shield always gives it the keyboard.
     private func reclaimKeyboardSoon() {
         Task { [weak self] in
             for _ in 0..<6 {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard let self, !ended else { return }
-                if !NSApp.isActive || !(windows.first?.isKeyWindow ?? false) { reclaimKeyboard() }
+                if !(windows.first?.isKeyWindow ?? false) { reclaimKeyboard() }
             }
+            guard let self, !ended else { return }
+            authModel.needsClick = !(windows.first?.isKeyWindow ?? false)
         }
     }
 
@@ -252,7 +261,11 @@ final class LockSession: NSObject, NSWindowDelegate {
             screens = [screen]
         case .lock:
             for (index, screen) in NSScreen.screens.enumerated() {
-                let window = ShieldWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+                let window = ShieldWindow(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+                // A panel hides when its app deactivates, and Locky is often not the active app during a lock.
+                window.hidesOnDeactivate = false
+                window.becomesKeyOnlyIfNeeded = false
+                window.worksWhenModal = true
                 // Only the main display's shield takes the keyboard: a click on another display must not send
                 // the typing to a window without a password field.
                 window.allowsKey = index == 0
@@ -270,8 +283,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                 windows.append(window)
                 screens.append(view)
             }
+            windows.first?.makeKeyAndOrderFront(nil)
             NSApp.activate()
-            windows.first?.makeKey()
             NSApp.presentationOptions = Self.kioskOptions
         }
         windows.forEach { $0.appearance = NSAppearance(named: .darkAqua) }
@@ -491,7 +504,10 @@ final class PreviewWindow: NSWindow {
     }
 }
 
-final class ShieldWindow: NSWindow {
+/// A shield over one display: a panel that takes the keyboard without activating Locky. Since macOS 14, an
+/// activation is only a request, which macOS refuses when no input reached Locky (a lock an auto-lock started);
+/// a non-activating panel still becomes key, so what is typed goes to the lock, not to the app behind it.
+final class ShieldWindow: NSPanel {
     /// Only the main display's shield, which holds the password field.
     var allowsKey = true
     override var canBecomeKey: Bool { allowsKey }

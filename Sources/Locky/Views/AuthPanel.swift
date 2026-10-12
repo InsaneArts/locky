@@ -43,6 +43,9 @@ final class AuthModel {
     var password = ""
     /// Bumped to put the keyboard focus back in the field.
     var focusRequest = 0
+    /// The lock could not take the keyboard (macOS refused it): the field asks for a click instead of looking
+    /// ready for typing, so nobody types the password into the app behind the lock.
+    var needsClick = false
 }
 
 /// Touch ID drawn inside Locky's window. LAAuthenticationView takes the place of the system's Touch ID sheet,
@@ -189,10 +192,10 @@ struct AuthPanel: View {
             secureField(placeholder: "")
                 .frame(width: 1, height: 1)
                 .opacity(0.011)
-            if touchID != nil, !checking, !(wrong > 0 && password.isEmpty) {
+            if touchID != nil, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick {
                 glyph.offset(y: diameter * 0.34)
-            } else if auth.hint {
-                Text(checking ? "verifying" : wrong > 0 && password.isEmpty ? "wrong" : "")
+            } else if auth.hint || model.needsClick {
+                Text(model.needsClick ? "click to unlock" : checking ? "verifying" : wrong > 0 && password.isEmpty ? "wrong" : "")
                     .font(font(12, "medium"))
                     .foregroundStyle(wrong > 0 && password.isEmpty ? style.color("danger") : style.color("muted"))
                     .offset(y: diameter * 0.36)
@@ -277,7 +280,7 @@ struct AuthPanel: View {
     /// The native secure field, with Locky's own placeholder: SwiftUI draws a field's prompt in the system's
     /// gray, which disappears on light themes. Locky draws it in the palette's muted color instead.
     private func secureField(placeholder: String? = nil, alignment: Alignment = .leading) -> some View {
-        let text = placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
+        let text = model.needsClick ? "Click to unlock" : placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
         return ZStack(alignment: alignment) {
             if password.isEmpty, !text.isEmpty {
                 Text(text).font(font(14, "regular")).foregroundStyle(style.color("muted")).allowsHitTesting(false)
