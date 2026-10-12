@@ -282,6 +282,8 @@ final class CanvasOverlay: NSView {
 
     override var isFlipped: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    /// A click on the canvas ends typing in the panel, which saves it to the widget it was for.
+    override var acceptsFirstResponder: Bool { true }
 
     private var canvas: ThemePreview.Canvas? { preview?.canvas }
     /// View points per layout point.
@@ -322,6 +324,7 @@ final class CanvasOverlay: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard let canvas else { return }
+        window?.makeFirstResponder(self)
         let point = layoutPoint(event)
         guard let hit = item(at: point) else {
             canvas.select(nil)

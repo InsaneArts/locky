@@ -41,6 +41,8 @@ struct ThemesPage: View {
                     selection = nil
                     draft = nil
                 }
+                // A change in progress belongs to what was selected.
+                .onChange(of: selection) { draft = nil }
             } else {
                 ContentUnavailableView(model.inspection.loaded ? "No Themes" : "Loading Themes…", systemImage: "paintpalette")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

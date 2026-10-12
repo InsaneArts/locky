@@ -24,7 +24,9 @@ struct ThemeEditor: View {
             } else {
                 switch selection {
                 case .widget(let index) where editing.placements.indices.contains(index):
+                    // A panel of its own per widget: typing in one widget's fields never carries over to another's.
                     WidgetInspector(model: model, editing: editing, index: index, selection: $selection, draft: $draft)
+                        .id(index)
                 case .passwordField:
                     PasswordFieldInspector(editing: editing, selection: $selection)
                 default:
@@ -161,20 +163,16 @@ private struct WidgetInspector: View {
             }
             Section("Position") {
                 PositionEditor(anchor: placement.anchor, x: placement.x, y: placement.y) { anchor, x, y in
-                    var changed = placement
-                    changed.anchor = anchor
-                    changed.x = x
-                    changed.y = y
-                    editing.set(index, changed)
+                    change {
+                        $0.anchor = anchor
+                        $0.x = x
+                        $0.y = y
+                    }
                 }
             }
             if editing.layout?.cardStyle != "none" {
                 Section {
-                    Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in
-                        var changed = placement
-                        changed.card = .bool(value)
-                        editing.set(index, changed)
-                    }))
+                    Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = .bool(value) } }))
                 }
             }
             if !keys.isEmpty {
@@ -182,21 +180,20 @@ private struct WidgetInspector: View {
                     ForEach(keys, id: \.self) { key in
                         OptionRow(key: key, value: placement.opts[key] ?? inherited[key] ?? .nil, choices: info?.choices[key],
                                   palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
-                                  live: { draft = settings(placement, key, $0) },
-                                  commit: { set(placement, key, $0, inherited: inherited) })
+                                  live: { draft = settings(key, $0) },
+                                  commit: { value in
+                                      change { $0.opts[key] = value == inherited[key] ? nil : value }
+                                      draft = nil
+                                  })
                     }
                 } header: {
                     HStack {
                         Text("Options")
                         Spacer()
                         if !placement.opts.isEmpty {
-                            Button("Reset Options") {
-                                var changed = placement
-                                changed.opts = [:]
-                                editing.set(index, changed)
-                            }
-                            .buttonStyle(.link)
-                            .font(.callout)
+                            Button("Reset Options") { change { $0.opts = [:] } }
+                                .buttonStyle(.link)
+                                .font(.callout)
                         }
                     }
                 }
@@ -211,17 +208,19 @@ private struct WidgetInspector: View {
         .formStyle(.grouped)
     }
 
-    /// Saves an option; one set back to what the theme gives it leaves settings.json.
-    private func set(_ placement: EditorPlacement, _ key: String, _ value: LuaValue, inherited: [String: LuaValue]) {
-        var changed = placement
-        changed.opts[key] = value == inherited[key] ? nil : value
-        editing.set(index, changed)
-        draft = nil
+    /// Changes this widget as it is now, so a change that saves a moment late (a color picked) never brings back an
+    /// older copy of it. An option set back to what the theme gives it leaves settings.json.
+    private func change(_ edit: (inout EditorPlacement) -> Void) {
+        guard editing.placements.indices.contains(index) else { return }
+        var placement = editing.placements[index]
+        edit(&placement)
+        editing.set(index, placement)
     }
 
     /// settings.json with an option changed, for the preview while a color is being picked.
-    private func settings(_ placement: EditorPlacement, _ key: String, _ value: LuaValue) -> Settings {
+    private func settings(_ key: String, _ value: LuaValue) -> Settings? {
         var list = editing.placements
+        guard list.indices.contains(index) else { return nil }
         list[index].opts[key] = value
         var settings = model.store.settings
         settings.setThemeEdit(editing.theme.id, "widgets", .array(list.map(\.settingsValue)))
@@ -636,6 +635,7 @@ private struct BackgroundEditor: View {
                             "angle": .int(180)])
         }
         store.update { $0.setThemeEdit(theme.id, "background", value) }
+        draft = nil
     }
 
     /// The background with `fields` changed.
@@ -767,6 +767,8 @@ private struct DebouncedColorPicker: View {
         }), supportsOpacity: false)
         .onAppear { color = Color(hex: hex) ?? .black }
         .onChange(of: hex) { color = Color(hex: hex) ?? .black }
+        // A control that goes away (another widget selected, a background picked) never saves late.
+        .onDisappear { pending?.cancel() }
     }
 }
 
