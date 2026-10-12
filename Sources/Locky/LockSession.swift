@@ -95,7 +95,8 @@ final class LockSession: NSObject, NSWindowDelegate {
             forName: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String), object: nil, queue: .main
         ) { _ in MainActor.assumeIsolated { environment.keyboard = Keyboard.current() } }
 
-        let runtime = LuaRuntime(environment: environment, delegate: LuaRuntime.Delegate(
+        // The app's copy of settings.json: while the file has an error, that is the last one that read without one.
+        let runtime = LuaRuntime(environment: environment, settings: options.settings, delegate: LuaRuntime.Delegate(
             present: { [weak self] id, node in Task { @MainActor in self?.deliver(id, replacingViews: true) { $0.present(node) } } },
             failed: { [weak self] id, message, disabled in Task { @MainActor in self?.deliver(id, replacingViews: false) { $0.fail(message, disabled: disabled) } } }
         ))

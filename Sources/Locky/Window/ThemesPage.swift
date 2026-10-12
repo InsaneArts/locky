@@ -52,7 +52,7 @@ struct ThemesPage: View {
                 ContentUnavailableView("This Theme Does Not Load", systemImage: "exclamationmark.triangle", description: Text(error))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ThemePreview(theme: info.id, generation: model.revision, alwaysLive: model.screenshots)
+                ThemePreview(theme: info.id, settings: model.store.settings, generation: model.revision, alwaysLive: model.screenshots)
                     .aspectRatio(1.6, contentMode: .fit)
                     .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
                     .frame(maxWidth: .infinity)

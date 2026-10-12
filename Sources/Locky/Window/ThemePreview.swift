@@ -6,6 +6,8 @@ import SwiftUI
 /// while its window is hidden, so a forgotten window costs nothing.
 struct ThemePreview: NSViewRepresentable {
     var theme: String
+    /// The app's copy of settings.json, which the preview applies as a lock would.
+    var settings: Settings
     /// Bumped to start the preview again, after a change to the theme.
     var generation = 0
     /// Keeps running behind other windows: for screenshots.
@@ -15,6 +17,7 @@ struct ThemePreview: NSViewRepresentable {
 
     func updateNSView(_ view: ThemePreviewView, context: Context) {
         view.alwaysLive = alwaysLive
+        view.settings = settings
         view.show(theme: theme, generation: generation)
     }
 
@@ -28,6 +31,7 @@ final class ThemePreviewView: NSView {
     static let layoutSize = CGSize(width: 1440, height: 900)
 
     var alwaysLive = false
+    var settings = Settings()
     /// Rounds the corners, in screen points.
     private let clip = NSView()
     /// Holds the lock screen at the layout size; its frame is the scaled-down size.
@@ -81,7 +85,8 @@ final class ThemePreviewView: NSView {
             // A hidden preview starts when its window shows.
             guard let shown, visible else { return }
             layoutSubtreeIfNeeded()
-            let session = LockSession(mode: .embedded, options: LockSession.Options(theme: shown.theme, previewSize: Self.layoutSize, container: canvas))
+            let session = LockSession(mode: .embedded, options: LockSession.Options(theme: shown.theme, previewSize: Self.layoutSize,
+                                                                                   settings: settings, container: canvas))
             self.session = session
             session.begin()
         }
