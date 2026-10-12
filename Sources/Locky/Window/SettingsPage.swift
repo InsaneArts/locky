@@ -40,7 +40,7 @@ struct SettingsPage: View {
 
     private var autoLock: some View {
         Section {
-            let idle = store.settings["auto_lock"]["idle_minutes"].number
+            let idle = store.settings["auto_lock"]["idle_minutes"].number.flatMap { $0.isFinite ? min(max($0, 1), 1440) : nil }
             Toggle(isOn: Binding(get: { idle != nil }, set: { setAutoLock("idle_minutes", $0 ? .int(5) : nil) })) {
                 HStack {
                     Text("After the Mac is idle for")
@@ -66,7 +66,7 @@ struct SettingsPage: View {
         Section {
             Toggle("Unlock with Touch ID", isOn: store.bool("touch_id", default: true))
             LabeledContent {
-                Picker("Safety timer", selection: luaNumber("auto_unlock", fallback: 60)) {
+                Picker("Safety timer", selection: Binding(get: { safetySeconds }, set: { value in store.update { $0["auto_unlock"] = .double(value) } })) {
                     ForEach(safetyChoices, id: \.self) { seconds in
                         Text(seconds == 0 ? "Off" : Self.duration(seconds)).tag(seconds)
                     }
@@ -82,7 +82,7 @@ struct SettingsPage: View {
                 Text("Quit with ⌃⌥⌘Q")
                 Text("Ends the lock at once: for when something goes wrong.")
             }
-            if (effective("auto_unlock").number ?? 60) == 0, store.settings["emergency_exit"].bool == false {
+            if safetySeconds == 0, store.settings["emergency_exit"].bool == false {
                 Label("With both off, a bug in Locky could keep you locked out until you restart the Mac.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
@@ -167,17 +167,19 @@ struct SettingsPage: View {
 
     private var safetyChoices: [Double] {
         let choices: [Double] = [0, 30, 60, 120, 300, 600]
-        let current = effective("auto_unlock").number ?? 60
+        let current = safetySeconds
         return choices.contains(current) ? choices : (choices + [current]).sorted()
+    }
+
+    /// The safety timer as the runtime reads it: not a number, or infinite, is off; at most a day.
+    private var safetySeconds: Double {
+        guard let seconds = effective("auto_unlock").number else { return effective("auto_unlock").isNil ? 60 : 0 }
+        return seconds.isFinite ? min(max(seconds, 0), 86_400) : 0
     }
 
     /// settings.json's value, else init.lua's (or the default).
     private func effective(_ key: String) -> LuaValue {
         store.settings[key].isNil ? model.inspection.base[key] : store.settings[key]
-    }
-
-    private func luaNumber(_ key: String, fallback: Double) -> Binding<Double> {
-        Binding(get: { effective(key).number ?? fallback }, set: { value in store.update { $0[key] = .double(value) } })
     }
 
     private func autoLockBinding(_ key: String) -> Binding<Bool> {
@@ -192,8 +194,11 @@ struct SettingsPage: View {
         }
     }
 
+    /// "45 s", "2 min". Not a finite number of seconds up to a day (init.lua may say math.huge) reads "Off", as the
+    /// runtime treats it.
     static func duration(_ seconds: Double) -> String {
-        seconds < 60 || seconds.truncatingRemainder(dividingBy: 60) != 0 ? "\(Int(seconds)) s" : "\(Int(seconds / 60)) min"
+        guard seconds.isFinite, seconds > 0, seconds <= 86_400 else { return "Off" }
+        return seconds < 60 || seconds.truncatingRemainder(dividingBy: 60) != 0 ? "\(Int(seconds)) s" : "\(Int(seconds / 60)) min"
     }
 }
 

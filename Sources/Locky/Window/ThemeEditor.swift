@@ -124,8 +124,8 @@ struct EditorPlacement: Equatable {
         widget = entry["widget"].string ?? "?"
         ref = entry["ref"].int
         anchor = entry["anchor"].string ?? "center"
-        x = entry["offset"][0].number ?? 0
-        y = entry["offset"][1].number ?? 0
+        x = Self.coordinate(entry["offset"][0].number)
+        y = Self.coordinate(entry["offset"][1].number)
         switch entry["card"] {
         case .bool(let value): card = value
         case .string(let style): card = style != "none"
@@ -143,6 +143,12 @@ struct EditorPlacement: Equatable {
         table["offset"] = .array([Self.number(x), Self.number(y)])
         if let card { table["card"] = .bool(card) }
         return .table(table)
+    }
+
+    /// A finite offset within ±100,000 points, as the runtime clamps it; anything else is 0.
+    static func coordinate(_ value: Double?) -> Double {
+        guard let value, value.isFinite else { return 0 }
+        return min(max(value, -100_000), 100_000)
     }
 
     private static func number(_ value: Double) -> LuaValue {
@@ -236,7 +242,8 @@ private struct NumberField: View {
     }
 
     private static func format(_ value: Double) -> String {
-        value.rounded() == value ? String(Int(value)) : String(value)
+        guard value.isFinite, abs(value) < 1e9 else { return "0" }
+        return value.rounded() == value ? String(Int(value)) : String(value)
     }
 }
 
@@ -483,8 +490,13 @@ private struct CommittingSlider: View {
                     .frame(width: 36, alignment: .trailing)
             }
         }
-        .onAppear { current = value }
-        .onChange(of: value) { if !dragging { current = value } }
+        .onAppear { current = clamped(value) }
+        .onChange(of: value) { if !dragging { current = clamped(value) } }
+    }
+
+    /// Within the slider's range; a value that is not a finite number starts at the low end.
+    private func clamped(_ value: Double) -> Double {
+        value.isFinite ? min(max(value, range.lowerBound), range.upperBound) : range.lowerBound
     }
 }
 

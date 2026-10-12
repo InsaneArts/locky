@@ -68,3 +68,17 @@ import Testing
         #expect(pack.name == "locky-weather" && pack.fromSettings && !pack.installed)
     }
 }
+
+@Suite struct OddNumberTests {
+    /// init.lua's auto_unlock = math.huge, a theme's offset = { math.huge, 0 }: the window once trapped on them.
+    @Test func numbersThatAreNotFiniteShowAndSaveSafely() {
+        #expect(SettingsPage.duration(.infinity) == "Off")
+        #expect(SettingsPage.duration(.nan) == "Off")
+        #expect(SettingsPage.duration(1e300) == "Off")
+        #expect(SettingsPage.duration(90) == "90 s")
+        let placement = EditorPlacement(entry: .table(["widget": .string("clock"), "offset": .array([.double(.infinity), .double(-1e12)])]))
+        #expect(placement.x == 0 && placement.y == -100_000)
+        // And it saves as JSON can hold it.
+        #expect((try? placement.settingsValue.jsonObject()) != nil)
+    }
+}

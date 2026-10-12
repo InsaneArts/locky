@@ -111,7 +111,7 @@ struct DashboardPage: View {
     private var autoLockCard: some View {
         let auto = settings["auto_lock"]
         var triggers: [String] = []
-        if let minutes = auto["idle_minutes"].number { triggers.append("after \(Int(minutes)) min idle") }
+        if let minutes = auto["idle_minutes"].number, minutes.isFinite { triggers.append("after \(Int(min(max(minutes, 1), 1440))) min idle") }
         if auto["display_sleep"].bool == true { triggers.append("display sleep") }
         if auto["system_sleep"].bool == true { triggers.append("Mac sleep") }
         if auto["screen_saver"].bool == true { triggers.append("screen saver") }
@@ -125,9 +125,10 @@ struct DashboardPage: View {
     private var unlockCard: some View {
         let touchID = settings["touch_id"].bool != false
         let safety = (settings["auto_unlock"].isNil ? model.inspection.base["auto_unlock"] : settings["auto_unlock"]).number ?? 60
+        let duration = SettingsPage.duration(safety)
         return StatusCard(symbol: touchID ? "touchid" : "key.fill", tint: .pink, title: "Unlock",
                           value: touchID ? "Touch ID or password" : "Password",
-                          detail: safety > 0 ? "Prototype: opens by itself after \(SettingsPage.duration(safety))." : "The safety timer is off.") {
+                          detail: duration != "Off" ? "Prototype: opens by itself after \(duration)." : "The safety timer is off.") {
             model.section = .settings
         }
     }
