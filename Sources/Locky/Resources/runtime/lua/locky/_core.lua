@@ -920,8 +920,11 @@ end
 
 -- A copy with only strings, numbers, booleans, and tables: for data the host reads.
 local function plain(value)
-  if type(value) ~= "table" then
-    return (type(value) == "string" or type(value) == "number" or type(value) == "boolean") and value or nil
+  local kind = type(value)
+  if kind == "string" or kind == "number" or kind == "boolean" then
+    return value
+  elseif kind ~= "table" then
+    return nil
   end
   local copy = {}
   for key, item in pairs(value) do

@@ -198,6 +198,15 @@ import Testing
         #expect(theme["widgets"].array?.map { $0["widget"] } == [.string("one"), .string("two")])
     }
 
+    @Test func falseSurvivesTheTripToTheWindow() throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("themes/f.lua", "return { widgets = { { 'one', card = false } } }")
+        let runtime = runtime(sandbox)
+        _ = runtime.bootForTest()
+        let layout = try runtime.sync { try runtime.call("theme_layout", [.string("f")], budget: 1) }.first ?? .nil
+        #expect(layout["widgets"][0]["card"] == .bool(false))
+    }
+
     @Test func themeLayoutIgnoresTheWindowsChanges() throws {
         let sandbox = try themeSandbox()
         try Settings(["themes": .table(["t": .table(["widgets": .array([])])])]).save(config: sandbox.config)
