@@ -65,6 +65,10 @@ and so on (default center). `card = true` uses the theme's card, or name a style
 "all"` repeats the widget on every display; by default widgets show on the main display only, and every
 display gets the background.
 
+**Testing.** `Scripts/snapshot.sh <id> out.png` renders a theme to a PNG. `LOCKY_WALLPAPER=/path/to/image.jpg`
+(or `none`) stands in for the desktop picture, to try a theme on other wallpapers. A `preview.png` or
+`preview.jpg` next to `themes/` becomes the theme's thumbnail in the Locky window.
+
 **Layout size.** Lay a theme out for a 1440×900 screen. Locky scales sizes and offsets on other screens
 (a 1728×1117 MacBook Pro screen scales by 1.2).
 

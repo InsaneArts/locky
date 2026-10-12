@@ -375,8 +375,12 @@ extension NSColor {
 enum Wallpaper {
     /// The desktop picture of `screen` as an image file. A dynamic wallpaper (.madesktop) has no single image,
     /// so this falls back to its thumbnail, which is plenty under a blur. nil when there is nothing to show.
+    /// $LOCKY_WALLPAPER replaces it, for screenshots and theme work: an image file, or "none" for no picture.
     @MainActor
     static func picture(for screen: NSScreen) -> URL? {
+        if let override = ProcessInfo.processInfo.environment["LOCKY_WALLPAPER"] {
+            return override == "none" ? nil : URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
+        }
         guard let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return nil }
         if url.pathExtension.lowercased() == "madesktop" {
             guard let plist = NSDictionary(contentsOf: url), let thumbnail = plist["thumbnailPath"] as? String else { return nil }
