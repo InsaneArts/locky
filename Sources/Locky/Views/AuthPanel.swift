@@ -46,6 +46,8 @@ final class AuthModel {
     /// The lock could not take the keyboard (macOS refused it): the field asks for a click instead of looking
     /// ready for typing, so nobody types the password into the app behind the lock.
     var needsClick = false
+    /// The user the field shows; privacy mode can change it while the field stays.
+    var user = Auth.User(name: "", login: "user", host: "mac", picture: nil)
 }
 
 /// Touch ID drawn inside Locky's window. LAAuthenticationView takes the place of the system's Touch ID sheet,
@@ -144,7 +146,6 @@ private struct TouchIDGlyph: NSViewRepresentable {
 struct AuthPanel: View {
     let auth: Theme.Auth
     let style: LockyStyle
-    let user: Auth.User
     let touchID: TouchID?
     @Bindable var model: AuthModel
     let unlock: () -> Void
@@ -159,6 +160,7 @@ struct AuthPanel: View {
     }
     @State private var checking = false
     @State private var wrong = 0
+    private var user: Auth.User { model.user }
     @FocusState private var focused: Bool
     /// The "ring" style's lit arc: where it starts (0 to 1), its role color, and a counter that restarts its fade.
     @State private var arc: (start: Double, color: String, key: Int) = (0, "accent", 0)

@@ -64,8 +64,12 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     /// The last theme's password field look, so the next lock's field appears in it at once.
     private static var lastLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec)?
-    /// Privacy mode as the last lock had it (init.lua may turn it on), until this lock's Lua says.
-    private static var lastPrivacy = false
+    /// Privacy mode as the last lock had it (init.lua may turn it on), until this lock's Lua says. Kept across
+    /// launches, so the first lock after a restart does not show the name while Lua starts.
+    private static var lastPrivacy: Bool {
+        get { UserDefaults.standard.bool(forKey: "lastPrivacy") }
+        set { UserDefaults.standard.set(newValue, forKey: "lastPrivacy") }
+    }
     private lazy var privacy = options.settings["privacy"].bool ?? Self.lastPrivacy
 
     init(mode: Mode, options: Options) {
@@ -320,7 +324,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     private func installAuth(_ spec: Theme.Auth, style: LockyStyle) {
         guard let screen = screens.first else { return }
         let runtime = self.runtime
-        let panel = AuthPanel(auth: spec, style: style, user: Auth.user(privacy: privacy), touchID: touchID, model: authModel,
+        authModel.user = Auth.user(privacy: privacy)
+        let panel = AuthPanel(auth: spec, style: style, touchID: touchID, model: authModel,
                               unlock: { [weak self] in self?.end("password") },
                               failed: { [weak self] in
                                   runtime?.queue.async { runtime?.emit("auth_failed") }
@@ -365,7 +370,11 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         if mode == .lock, started.autoUnlock > 0 { armSafety(after: started.autoUnlock) }
         else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel(); safetySeconds = nil }
-        privacy = started.privacy
+        if privacy != started.privacy {
+            privacy = started.privacy
+            // The field may already hold typing: change the name it shows, not the field.
+            authModel.user = Auth.user(privacy: privacy)
+        }
         if mode != .embedded {
             Self.lastLook = (theme.auth, theme.palette, theme.font)
             Self.lastPrivacy = started.privacy
