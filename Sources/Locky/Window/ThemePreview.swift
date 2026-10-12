@@ -128,8 +128,12 @@ final class ThemePreviewView: NSView {
         occlusion = nil
     }
 
-    /// The current screen's items the editor can select, with their frames in layout points.
-    var editables: [(item: EditorItem, frame: CGRect)] { current?.session.editables ?? [] }
+    /// The current screen's items the editor can select, with their frames in layout points: none while the screen
+    /// shows another theme, or the theme without the window's changes.
+    var editables: [(item: EditorItem, frame: CGRect)] {
+        guard let current, current.session.shows(theme: current.key.theme) else { return [] }
+        return current.session.editables
+    }
 
     /// Puts an item at another place in the current screen while it is dragged.
     func place(_ item: EditorItem, anchor: Anchor, offset: CGPoint) {

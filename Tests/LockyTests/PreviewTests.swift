@@ -81,6 +81,33 @@ import Testing
         #expect(await wait { screen.widgets[0].model.node?.kind == .text("a") })
     }
 
+    /// Settings Lua leaves out, or a theme that does not load, are not what the editor edits: the screen says so.
+    @Test func theScreenSaysWhenItShowsTheThemeAsEdited() async throws {
+        let sandbox = try sandbox()
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        defer { session.end("test") }
+        #expect(await wait { session.shows(theme: "t") })
+        let bad = Settings(["themes": .table(["t": .table(["widgets": .array([.table(["widget": .string("w"), "anchor": .string("middle")])])])])])
+        #expect(await session.reload(settings: bad))
+        #expect(!session.shows(theme: "t"))
+        #expect(await session.reload(settings: Settings()))
+        #expect(session.shows(theme: "t"))
+
+        try sandbox.write("themes/broken.lua", "return { background = { shader = 'nowhere' } }")
+        let other = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var fallback = LockSession.Options(theme: "broken", container: other)
+        fallback.path = sandbox.path()
+        let shown = LockSession(mode: .embedded, options: fallback)
+        shown.begin()
+        defer { shown.end("test") }
+        #expect(await wait { (other.subviews.first as? LockScreenView)?.background != nil })
+        #expect(!shown.shows(theme: "broken"))
+    }
+
     @Test func onlyTheThemesOwnChangesReloadInPlace() {
         let base = ThemePreviewView.Key(theme: "t", settings: Settings(["theme": .string("t")]), sources: 5)
         var edited = base

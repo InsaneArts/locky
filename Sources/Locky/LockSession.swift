@@ -580,6 +580,15 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Whether the screen shows `theme` with settings.json's changes to it: not the theme Locky falls back to, and no
+    /// change to it left out for a problem. The theme editor edits on the screen only then, so what it changes is what
+    /// the screen shows.
+    func shows(theme: String) -> Bool {
+        guard let started, started.theme.id == theme else { return false }
+        let prefix = "settings.json themes.\(theme)"
+        return !started.problems.contains { $0.hasPrefix(prefix + ".") || $0.hasPrefix(prefix + ":") }
+    }
+
     /// Embedded only: what the editor can select (the widgets, by their place in the theme's list, and the password
     /// field), with their frames in the screen's points. Widgets that show nothing are left out.
     var editables: [(item: EditorItem, frame: CGRect)] {
