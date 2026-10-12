@@ -249,7 +249,9 @@ private struct MessageField: View {
     private func save() {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value != saved else { return }
-        model.store.update { $0["message"] = value.isEmpty ? .nil : .string(String(value.prefix(200))) }
+        // Cleared while init.lua has a message: an empty one overrides it. Otherwise no key at all.
+        let overrides = !(model.inspection.base["message"].string ?? "").isEmpty
+        model.store.update { $0["message"] = value.isEmpty ? (overrides ? .string("") : .nil) : .string(String(value.prefix(200))) }
     }
 }
 
