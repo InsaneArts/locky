@@ -35,6 +35,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSCameraUsageDescription</key><string>Locky takes a photo when someone enters too many wrong passwords, if you turn that on in Settings.</string>
 </dict>
 </plist>
 PLIST
@@ -43,12 +44,13 @@ cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp -R "$ROOT/Sources/$APP_NAME/Resources/." "$APP/Contents/Resources/"
 xattr -cr "$APP"
 
+# The hardened runtime blocks the camera (intruder photos) unless Locky.entitlements allows it.
 if [[ "$SIGNING_MODE" == "adhoc" || -z "$APP_IDENTITY" ]]; then
   codesign --force --sign - "$APP"
 elif [[ "$SIGNING_MODE" == "release" ]]; then
-  codesign --force --timestamp --options runtime --sign "$APP_IDENTITY" "$APP"
+  codesign --force --timestamp --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$APP_IDENTITY" "$APP"
 else
-  codesign --force --options runtime --sign "$APP_IDENTITY" "$APP"
+  codesign --force --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$APP_IDENTITY" "$APP"
 fi
 echo "Built $APP"
 
