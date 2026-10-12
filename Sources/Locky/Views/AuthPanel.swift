@@ -231,6 +231,8 @@ struct AuthPanel: View {
             if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
+        // A field made during the wait after wrong passwords was disabled when it asked for focus.
+        .onChange(of: model.checking) { if !model.checking, interactive { focused = true } }
     }
 
     private var showsGlyph: Bool { touchID != nil }
@@ -266,6 +268,8 @@ struct AuthPanel: View {
             if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
+        // A field made during the wait after wrong passwords was disabled when it asked for focus.
+        .onChange(of: model.checking) { if !model.checking, interactive { focused = true } }
     }
 
     /// Sizes are given for a 14-point field and scale with auth.font.size.
