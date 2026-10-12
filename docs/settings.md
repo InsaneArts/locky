@@ -70,7 +70,7 @@ without the change.
 
 ## The window
 
-Open it from the menu (Dashboard…, Settings… ⌘,), by opening Locky.app again, or with
+Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
 `Locky window [dashboard|themes|plugins|config|settings]`. While it is open, Locky shows in the Dock.
 
 - **Dashboard:** the theme a lock uses now, live, with Lock Now; the config's problems, plugins and

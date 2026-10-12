@@ -126,7 +126,7 @@ locky-weather/
   README.md
 ```
 
-Users add it in `init.lua` and install it with `locky pack sync` (or the menu's Plugins ▸ Install Missing):
+Users add it in `init.lua` and install it with `locky pack sync` (or the Locky window's Plugins page):
 
 ```lua
 locky.pack.add({

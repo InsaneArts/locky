@@ -4,9 +4,6 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var session: LockSession?
-    /// Messages that arrived during a lock, shown once it opens: an alert would take the keyboard from the
-    /// password field.
-    private var pendingMessages: [(title: String, text: String)] = []
     /// The themes the Theme menu lists, worked out in the background (it runs init.lua).
     private var themeNames: [String] = []
     /// settings.json: what the menu and the window change.
@@ -147,10 +144,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.show(section, behind: behind, size: size)
     }
 
+    /// Lock Now, a quick theme change, and the window: everything else is in the window.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(item("Lock Now", #selector(lockNow)))
-        menu.addItem(item("Preview", #selector(previewFromMenu)))
         menu.addItem(.separator())
 
         let themes = NSMenu()
@@ -172,27 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             themes.addItem(entry)
         }
         menu.addItem(submenu("Theme", themes))
-
-        let plugins = NSMenu()
-        plugins.autoenablesItems = false
-        for (title, action) in [("Install Missing", #selector(syncPlugins)), ("Update All", #selector(updatePlugins)),
-                                ("Remove Unused", #selector(cleanPlugins))] {
-            let busy = model.packRunning != nil
-            let entry = item(busy ? "\(title) (busy…)" : title, action)
-            entry.isEnabled = !busy
-            plugins.addItem(entry)
-        }
-        plugins.addItem(.separator())
-        plugins.addItem(item("Open Plugins Folder", #selector(openPlugins)))
-        let updates = model.available.count
-        menu.addItem(submenu(updates == 0 ? "Plugins" : updates == 1 ? "Plugins (1 update)" : "Plugins (\(updates) updates)", plugins))
-
-        menu.addItem(.separator())
-        menu.addItem(item("Dashboard…", #selector(openDashboard)))
-        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
-        menu.addItem(item("Check Config", #selector(checkConfig)))
-        menu.addItem(item("Open Config Folder", #selector(openConfig)))
-        menu.addItem(item("Open Log", #selector(openLog)))
+        menu.addItem(item("Settings…", #selector(openWindow), key: ","))
         menu.addItem(.separator())
         menu.addItem(item("Quit Locky", #selector(NSApplication.terminate(_:)), key: "q"))
     }
@@ -231,8 +208,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         session?.mode == .lock ? .terminateCancel : .terminateNow
     }
-    @objc private func previewFromMenu() { preview(theme: nil) }
-
     /// A preview window of `theme` (nil: the theme a lock would use), replacing an open preview.
     private func preview(theme: String?) {
         guard session?.mode != .lock else { return }
@@ -240,7 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         start(.preview, options: LockSession.Options(theme: theme ?? scheduledTheme(), settings: store.settings))
     }
 
-    @objc private func openDashboard() { showWindow(.dashboard) }
+    /// The window at the page it showed last.
+    @objc private func openWindow() { showWindow(nil) }
     @objc private func openSettings() { showWindow(.settings) }
 
     @objc private func pickTheme(_ sender: NSMenuItem) {
@@ -251,40 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func followConfig() {
         pickedTheme = nil
         restartPreview()
-    }
-
-    @objc private func syncPlugins() { runPack(.sync) }
-    @objc private func updatePlugins() { runPack(.update) }
-    @objc private func cleanPlugins() { runPack(.clean) }
-
-    private func runPack(_ action: PackManager.Action) {
-        model.runPack(action) { [weak self] report in
-            self?.refreshThemeNames()
-            self?.show(title: "Plugins", text: report.text)
-        }
-    }
-
-    @objc private func openPlugins() {
-        try? FileManager.default.createDirectory(at: RuntimePath.defaultPacks, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(RuntimePath.defaultPacks)
-    }
-
-    @objc private func checkConfig() {
-        Task.detached {
-            let report = CLI.checkReport(theme: nil)
-            await MainActor.run { [weak self] in self?.show(title: "Check Config", text: report.text) }
-        }
-    }
-
-    @objc private func openConfig() {
-        CLI.ensureConfig()
-        NSWorkspace.shared.open(RuntimePath.defaultConfig)
-    }
-
-    @objc private func openLog() {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/Locky/locky.log")
-        LogFile.shared.write(level: "info", message: "log opened", source: "locky")
-        NSWorkspace.shared.open(url)
     }
 
     private func restartPreview() {
@@ -302,10 +244,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             self.session = nil
             refreshThemeNames()
-            // What arrived during the lock, now that the password field no longer needs the keyboard.
-            let waiting = pendingMessages
-            pendingMessages = []
-            for message in waiting { show(title: message.title, text: message.text) }
             if mode == .lock { autoLock.noteUnlock() }
             // Someone typed wrong passwords and the camera caught them: show the photos.
             if mode == .lock, let session {
@@ -316,18 +254,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         self.session = session
         session.begin()
-    }
-
-    private func show(title: String, text: String) {
-        if session?.mode == .lock {
-            pendingMessages.append((title, text))
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = String(text.prefix(4000))
-        NSApp.activate()
-        alert.runModal()
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {

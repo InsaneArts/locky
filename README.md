@@ -14,7 +14,7 @@ open Locky.app                    # the lock icon appears in the menu bar
 swift test                        # the test suite
 ```
 
-The menu bar icon has Lock Now, Preview, the theme picker, plugin commands, and Check Config.
+The menu bar icon has Lock Now, the theme picker, and Settings…, which opens Locky's window.
 
 ## Themes
 
@@ -41,7 +41,7 @@ Pick one in the menu's Theme submenu, or in `init.lua` with `locky.setup({ theme
 
 ## The window
 
-Dashboard… and Settings… (⌘,) in the menu open Locky's window: a live dashboard, a theme editor (background,
+Settings… (⌘,) in the menu opens Locky's window: a live dashboard, a theme editor (background,
 widgets), plugins (install, update, remove), the config with Open in your editor, and settings such as the
 Lock Now shortcut, auto-lock, Open at Login, a lock screen message, privacy mode, a theme schedule, the
 battery saver, and a photo after wrong passwords. It saves to `~/.config/locky/settings.json`, which wins
@@ -49,7 +49,7 @@ over init.lua key by key: see [settings.md](docs/settings.md).
 
 ## Configure
 
-`~/.config/locky/init.lua` (the menu's Open Config Folder creates it with examples):
+`~/.config/locky/init.lua` (the window's Config page creates it with examples):
 
 ```lua
 locky.setup({ theme = "default", palette = { accent = "#ff79c6" } })
