@@ -52,6 +52,9 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// The battery saver: on battery or in Low Power Mode, with settings.json's battery_saver on, nothing moves.
     private var still = false
     private var powerObserver: PowerObserver?
+    /// settings.json's display_off: the displays go dark after that many seconds without input.
+    private var displayOff: DisplayOff?
+    private var inputMonitor: Any?
     /// When to take a photo of whoever types wrong passwords, and the photos this lock took.
     private lazy var intruder = IntruderPolicy(settings: options.settings)
     private(set) var photos: [URL] = []
@@ -112,6 +115,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock {
             armSafety(after: 60)
             reclaimKeyboardSoon()
+            startDisplayOff()
         }
         // Touch ID starts with the theme's field, or after a second with this one if the theme is slow.
         touchIDFallback = Task { [weak self] in
@@ -144,6 +148,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         autoUnlock?.cancel()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
+        if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
+        displayOff?.stop()
         powerObserver = nil
         idleTimer?.cancel()
         if let keyboardObserver { DistributedNotificationCenter.default().removeObserver(keyboardObserver) }
@@ -175,6 +181,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         observe(workspace, NSWorkspace.screensDidWakeNotification) {
             $0.runtime?.setPaused(false)
             $0.touchID?.restart()
+            $0.displayOff?.noteActivity()
         }
         observe(workspace, NSWorkspace.didWakeNotification) { $0.runtime?.realign() }
         guard mode == .lock else { return }
@@ -254,6 +261,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                 window.backgroundColor = .black
                 window.hasShadow = false
                 window.isReleasedWhenClosed = false
+                // Mouse moves show a hidden password field and keep the displays on, also after a rebuild.
+                window.acceptsMouseMovedEvents = true
                 let view = LockScreenView()
                 window.contentView = view
                 window.setFrame(screen.frame, display: true)
@@ -347,7 +356,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         if theme.auth.reveal == "activity", authModel.password.isEmpty {
             screens.first?.setAuthVisible(false, dim: theme.auth.dim, animated: false)
             guard mode != .embedded else { return }
-            windows.forEach { $0.acceptsMouseMovedEvents = true }
+            windows.forEach { $0.acceptsMouseMovedEvents = true }  // the preview's window; lock windows always do
             activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDown, .scrollWheel]) { [weak self] event in
                 self?.activity()
                 return event
@@ -434,6 +443,17 @@ final class LockSession: NSObject, NSWindowDelegate {
         still = now
         LogFile.shared.write(level: "info", message: now ? "battery saver on" : "battery saver off", source: "locky")
         if mode == .lock { rebuildForDisplays() }
+    }
+
+    private func startDisplayOff() {
+        guard let seconds = options.settings.displayOff, seconds > 0 else { return }
+        let off = DisplayOff(after: seconds, sleep: { Power.sleepDisplays() })
+        displayOff = off
+        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel]) {
+            [weak off] event in
+            off?.noteActivity()
+            return event
+        }
     }
 
     // MARK: Safety
