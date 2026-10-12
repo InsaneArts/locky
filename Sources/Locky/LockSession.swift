@@ -663,7 +663,10 @@ final class LockScreenView: NSView {
         let below = frame.maxY + gap
         let y = below + size.height <= bounds.maxY - 12 * scale ? below : frame.minY - gap - size.height
         let x = spec.hintAlign == "leading" ? frame.minX : frame.midX - size.width / 2
-        return CGRect(x: x, y: y, width: size.width, height: size.height).integral
+        // A field near an edge (Poster's is at the bottom left) must not push a long message off the screen.
+        let margin = 16 * scale
+        let clamped = min(max(x, bounds.minX + margin), max(bounds.minX + margin, bounds.maxX - margin - size.width))
+        return CGRect(x: clamped, y: y, width: size.width, height: size.height).integral
     }
 }
 

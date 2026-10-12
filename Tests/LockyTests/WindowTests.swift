@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Locky
@@ -80,5 +81,20 @@ import Testing
         #expect(placement.x == 0 && placement.y == -100_000)
         // And it saves as JSON can hold it.
         #expect((try? placement.settingsValue.jsonObject()) != nil)
+    }
+}
+
+@Suite struct ReviewFollowUpTests {
+    @MainActor
+    @Test func aLongMessageStaysOnScreenNextToAFieldAtTheEdge() {
+        let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var spec = Theme.Auth()
+        spec.anchor = .bottomLeft
+        spec.offset = CGPoint(x: 40, y: -40)
+        screen.auth = (NSView(), spec)
+        screen.authSize = CGSize(width: 240, height: 80)
+        screen.layout()
+        let frame = screen.messageFrame(size: CGSize(width: 600, height: 18), scale: 1)
+        #expect(frame.minX >= 16 && frame.maxX <= 1440 - 16)
     }
 }
