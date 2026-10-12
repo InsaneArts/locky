@@ -8,6 +8,7 @@ struct ConfigPage: View {
     @State private var file: ConfigFile = .initLua
     @State private var text: String?
     @State private var check: (running: Bool, report: String?) = (false, nil)
+    @State private var openError: String?
 
     enum ConfigFile: String, CaseIterable, Identifiable {
         case initLua = "init.lua"
@@ -32,6 +33,14 @@ struct ConfigPage: View {
         VStack(spacing: 0) {
             header
             Divider()
+            if let openError {
+                Label(openError, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                Divider()
+            }
             if !model.inspection.problems.isEmpty || check.report != nil {
                 problems
                 Divider()
@@ -74,6 +83,7 @@ struct ConfigPage: View {
                 .truncationMode(.middle)
                 .textSelection(.enabled)
             Spacer()
+            OpenInButton(model: model, file: url, error: $openError)
             Button("Check", systemImage: "checkmark.seal") { runCheck() }
                 .disabled(check.running)
                 .help("Run init.lua, plugins, and the theme, and report every error (locky check)")
@@ -89,9 +99,18 @@ struct ConfigPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(model.inspection.problems.enumerated()), id: \.offset) { _, problem in
-                    Label(LuaError(problem).summary, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .textSelection(.enabled)
+                    let summary = LuaError(problem).summary
+                    let place = place(of: summary)
+                    HStack(alignment: .firstTextBaseline) {
+                        Label(summary, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .textSelection(.enabled)
+                        if let place {
+                            Spacer()
+                            Button("Open at Line \(place.line)") { openError = model.open(place.file, line: place.line) }
+                                .buttonStyle(.link)
+                        }
+                    }
                 }
                 if check.running {
                     HStack(spacing: 8) {
@@ -114,7 +133,18 @@ struct ConfigPage: View {
     }
 
     private func load() {
-        text = try? String(contentsOf: url, encoding: .utf8)
+        // Invalid UTF-8 shows as U+FFFD instead of hiding the whole file.
+        text = (try? Data(contentsOf: url)).map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    /// "~/.config/locky/init.lua:12: …" → that file and line 12. Lua shortens a long path to "…/init.lua";
+    /// that one is the config's.
+    func place(of problem: String) -> (file: URL, line: Int)? {
+        guard let match = problem.firstMatch(of: /^(.+?\.lua):(\d+):/), let line = Int(match.2) else { return nil }
+        let path = (String(match.1) as NSString).expandingTildeInPath
+        if path.hasPrefix("/"), FileManager.default.fileExists(atPath: path) { return (URL(fileURLWithPath: path), line) }
+        if path.hasPrefix("..."), path.hasSuffix("/init.lua") { return (model.store.config.appending(path: "init.lua"), line) }
+        return nil
     }
 
     private func runCheck() {
@@ -156,7 +186,9 @@ struct CodeView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? NSTextView else { return }
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let styled = NSMutableAttributedString(string: text, attributes: [.font: font, .foregroundColor: NSColor.labelColor])
+        let styled = language == .lua
+            ? NSMutableAttributedString(attributedString: LuaHighlighter.highlight(text, font: font))
+            : NSMutableAttributedString(string: text, attributes: [.font: font, .foregroundColor: NSColor.labelColor])
         // Tint the lines with problems.
         let lines = text.components(separatedBy: "\n")
         var offset = 0
@@ -224,5 +256,48 @@ final class LineNumberRuler: NSRulerView {
             if NSMaxRange(lineRange) <= index || NSMaxRange(lineRange) >= text.length { break }
             index = NSMaxRange(lineRange)
         }
+    }
+}
+
+/// "Open in <editor>", with a menu to choose the editor (and the terminal for terminal editors). The choice
+/// saves to settings.json.
+private struct OpenInButton: View {
+    let model: AppModel
+    let file: URL
+    @Binding var error: String?
+
+    var body: some View {
+        if let found = model.editors, let editor = model.editor {
+            Menu {
+                Section("Open With") {
+                    ForEach(found.editors) { candidate in
+                        Toggle(candidate.name, isOn: Binding(get: { candidate.id == editor.id }, set: { _ in choose(editor: candidate) }))
+                    }
+                }
+                if case .command = editor.kind, !found.terminals.isEmpty {
+                    Section("In Terminal") {
+                        ForEach(found.terminals) { terminal in
+                            Toggle(terminal.name, isOn: Binding(get: { terminal.id == model.terminal?.id }, set: { _ in
+                                model.store.update { $0["terminal"] = .string(terminal.id) }
+                            }))
+                        }
+                    }
+                }
+            } label: {
+                Label("Open in \(editor.name)", systemImage: "square.and.pencil")
+            } primaryAction: {
+                error = model.open(file)
+            }
+            .fixedSize()
+            .disabled(!FileManager.default.fileExists(atPath: file.path))
+        } else {
+            ProgressView().controlSize(.small)
+                .task { await model.findEditors() }
+        }
+    }
+
+    private func choose(editor: Editor) {
+        model.store.update { $0["editor"] = .string(editor.id) }
+        error = model.open(file)
     }
 }

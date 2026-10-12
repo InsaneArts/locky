@@ -49,6 +49,9 @@ final class AppModel {
     /// Packages with a newer commit upstream than the one pinned.
     var available: [PackUpdate] { updates.filter { $0.error == nil && $0.current != nil && $0.latest != nil && $0.current != $0.latest } }
 
+    /// The editors and terminals on this Mac, found once when the Config page first needs them.
+    private(set) var editors: (editors: [Editor], terminals: [Terminal])?
+
     /// What the window asks the app to do.
     @ObservationIgnored var lockNow: () -> Void = {}
     @ObservationIgnored var preview: (_ theme: String?) -> Void = { _ in }
@@ -99,6 +102,36 @@ final class AppModel {
             self?.updates = report.updates
             self?.lastUpdateCheck = Date()
             done?()
+        }
+    }
+
+    func findEditors() async {
+        guard editors == nil else { return }
+        editors = await Editors.installed()
+    }
+
+    /// The editor settings.json names, else the app macOS opens .lua files with, else the first one found.
+    var editor: Editor? {
+        guard let list = editors?.editors else { return nil }
+        return list.first { $0.id == store.settings["editor"].string } ?? list.first { $0.id == "default" } ?? list.first
+    }
+
+    /// The terminal for terminal editors: settings.json's, else Terminal.
+    var terminal: Terminal? {
+        guard let list = editors?.terminals else { return nil }
+        return list.first { $0.id == store.settings["terminal"].string } ?? list.first { $0.id == "com.apple.Terminal" } ?? list.first
+    }
+
+    /// Opens `file` (at `line`) in the chosen editor; an error goes to the log and comes back.
+    @discardableResult
+    func open(_ file: URL, line: Int? = nil) -> String? {
+        guard let editor else { return "No editor found" }
+        do {
+            try Editors.open(file, line: line, editor: editor, terminal: terminal)
+            return nil
+        } catch {
+            LogFile.shared.write(level: "warn", message: "opening \(file.lastPathComponent) in \(editor.name): \(error.localizedDescription)", source: "editor")
+            return error.localizedDescription
         }
     }
 
