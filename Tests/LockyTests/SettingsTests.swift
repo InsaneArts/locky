@@ -395,3 +395,56 @@ import Testing
         #expect(seen)
     }
 }
+
+@Suite struct ThemeScheduleTests {
+    private func date(_ hour: Int, _ minute: Int) -> Date {
+        Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 4, hour: hour, minute: minute))!
+    }
+
+    @Test func dayAndNightFollowTheClock() throws {
+        let schedule = try #require(ThemeSchedule(settings: .table([
+            "mode": .string("time"), "day": .string("glass"), "night": .string("default"),
+            "day_starts": .string("07:00"), "night_starts": .string("19:30"),
+        ])))
+        #expect(schedule.theme(at: date(6, 59), dark: false) == "default")
+        #expect(schedule.theme(at: date(7, 0), dark: true) == "glass")
+        #expect(schedule.theme(at: date(19, 29), dark: false) == "glass")
+        #expect(schedule.theme(at: date(19, 30), dark: false) == "default")
+        #expect(schedule.theme(at: date(0, 0), dark: false) == "default")
+    }
+
+    @Test func aDayThatCrossesMidnightWorks() throws {
+        // A night-shift schedule: "day" from 22:00 to 06:00.
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "phosphor"
+        schedule.night = "mocha"
+        schedule.dayStarts = 22 * 60
+        schedule.nightStarts = 6 * 60
+        #expect(schedule.theme(at: date(23, 0), dark: false) == "phosphor")
+        #expect(schedule.theme(at: date(3, 0), dark: false) == "phosphor")
+        #expect(schedule.theme(at: date(12, 0), dark: false) == "mocha")
+    }
+
+    @Test func lightAndDarkFollowTheAppearance() throws {
+        var settings = Settings()
+        var schedule = ThemeSchedule(mode: .appearance)
+        schedule.light = "station"
+        schedule.dark = "synthwave"
+        settings.schedule = schedule
+        // A round trip through settings.json.
+        #expect(settings.schedule == schedule)
+        #expect(settings.schedule?.theme(at: Date(), dark: true) == "synthwave")
+        #expect(settings.schedule?.theme(at: Date(), dark: false) == "station")
+        // A slot with no theme leaves the choice to the rest of the settings.
+        schedule.light = nil
+        #expect(schedule.theme(at: Date(), dark: false) == nil)
+    }
+
+    @Test func badValuesMeanNoSchedule() {
+        #expect(ThemeSchedule(settings: .nil) == nil)
+        #expect(ThemeSchedule(settings: .table(["mode": .string("moon")])) == nil)
+        #expect(ThemeSchedule.minutes("25:00") == nil)
+        #expect(ThemeSchedule.minutes("7:05") == 425)
+        #expect(ThemeSchedule.clock(425) == "07:05")
+    }
+}

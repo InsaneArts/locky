@@ -49,8 +49,11 @@ final class AppModel {
         self.store = store
     }
 
-    /// The theme a lock uses now: settings.json's, else init.lua's.
-    var activeTheme: String { inspection.config["theme"].string ?? store.settings["theme"].string ?? "default" }
+    /// The theme a lock uses now: the schedule's, else settings.json's, else init.lua's.
+    var activeTheme: String {
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return store.settings.schedule?.theme(at: Date(), dark: dark) ?? inspection.config["theme"].string ?? store.settings["theme"].string ?? "default"
+    }
 
     /// Reads the config again in the background. Calls that arrive while one runs fold into the next.
     func refresh() {

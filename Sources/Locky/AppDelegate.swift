@@ -129,7 +129,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func lockNow() {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
-        start(.lock, options: LockSession.Options(settings: store.settings))
+        start(.lock, options: LockSession.Options(theme: scheduledTheme(), settings: store.settings))
+    }
+
+    /// The theme schedule's pick for now, when the schedule is on and has a theme for now.
+    private func scheduledTheme() -> String? {
+        store.settings.schedule?.theme(at: Date(), dark: NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
     }
 
     /// While locked, nothing quits Locky through the normal path: that would open the Mac.
@@ -142,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func preview(theme: String?) {
         guard session?.mode != .lock else { return }
         if session?.mode == .preview { session?.end("another preview") }
-        start(.preview, options: LockSession.Options(theme: theme, settings: store.settings))
+        start(.preview, options: LockSession.Options(theme: theme ?? scheduledTheme(), settings: store.settings))
     }
 
     @objc private func openDashboard() { showWindow(.dashboard) }
