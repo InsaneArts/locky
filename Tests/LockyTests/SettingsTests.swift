@@ -610,6 +610,21 @@ import Testing
         #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: Settings.url(config: sandbox.config).path)) != nil)
     }
 
+    @Test func restoringKeepsASymlinkedFileLinked() throws {
+        let sandbox = try Sandbox()
+        let target = sandbox.root.appending(path: "dotfiles/settings.json")
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try #"{ "theme": "glass" }"#.write(to: target, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: Settings.url(config: sandbox.config), withDestinationURL: target)
+        let store = SettingsStore(config: sandbox.config)
+        try "{ broken".write(to: target, atomically: true, encoding: .utf8)
+        store.reload()
+        #expect(store.problem != nil)
+        try store.resetBrokenFile()
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: Settings.url(config: sandbox.config).path) == target.path)
+        #expect(Settings.load(file: target).settings["theme"] == .string("glass"))
+    }
+
     @Test func theStoresOwnSaveReportsOneChange() throws {
         let sandbox = try Sandbox()
         let store = SettingsStore(config: sandbox.config)

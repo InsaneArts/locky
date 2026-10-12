@@ -82,10 +82,11 @@ final class SettingsStore {
     /// Moves the broken file aside (settings.json.broken-<time>) and writes the settings Locky has gone on with:
     /// the last ones that read without an error.
     func resetBrokenFile() throws {
-        let url = Settings.url(config: config)
+        // The file a symlink points at, so the link, and the dotfiles behind it, stay.
+        let url = Settings.url(config: config).resolvingSymlinksInPath()
         let aside = url.appendingPathExtension("broken-\(Int(Date().timeIntervalSince1970))")
         try FileManager.default.moveItem(at: url, to: aside)
-        try settings.save(config: config)
+        try settings.save(file: url)
         problem = nil
         onChange?()
     }
