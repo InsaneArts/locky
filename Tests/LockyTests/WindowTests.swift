@@ -75,7 +75,9 @@ import Testing
     @Test func numbersThatAreNotFiniteShowAndSaveSafely() {
         #expect(SettingsPage.duration(.infinity) == "Off")
         #expect(SettingsPage.duration(.nan) == "Off")
-        #expect(SettingsPage.duration(1e300) == "Off")
+        // Over a day is a day, as the runtime clamps it.
+        #expect(SettingsPage.duration(1e300) == "1440 min")
+        #expect(SettingsPage.duration(100_000) == "1440 min")
         #expect(SettingsPage.duration(90) == "90 s")
         let placement = EditorPlacement(entry: .table(["widget": .string("clock"), "offset": .array([.double(.infinity), .double(-1e12)])]))
         #expect(placement.x == 0 && placement.y == -100_000)

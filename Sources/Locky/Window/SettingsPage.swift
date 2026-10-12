@@ -194,10 +194,11 @@ struct SettingsPage: View {
         }
     }
 
-    /// "45 s", "2 min". Not a finite number of seconds up to a day (init.lua may say math.huge) reads "Off", as the
-    /// runtime treats it.
+    /// "45 s", "2 min". As the runtime reads it: a value that is not a finite number (init.lua may say math.huge)
+    /// is "Off", and one over a day is a day.
     static func duration(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds > 0, seconds <= 86_400 else { return "Off" }
+        guard seconds.isFinite, seconds > 0 else { return "Off" }
+        let seconds = min(seconds, 86_400)
         return seconds < 60 || seconds.truncatingRemainder(dividingBy: 60) != 0 ? "\(Int(seconds)) s" : "\(Int(seconds / 60)) min"
     }
 }
