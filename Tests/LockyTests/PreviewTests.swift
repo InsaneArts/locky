@@ -35,7 +35,8 @@ import Testing
             "widgets": .array([
                 .table(["ref": .int(1), "widget": .string("w"), "anchor": .string("top-left"), "offset": .array([.int(30), .int(30)])]),
                 .table(["ref": .int(2), "widget": .string("w"), "opts": .table(["label": .string("x")])]),
-                .table(["widget": .string("w")]),
+                // Not the same as the second widget was: an identical one would take over its instance, and its view.
+                .table(["widget": .string("w"), "opts": .table(["label": .string("z")])]),
             ]),
             "background": .table(["color": .string("#202020")]),
             "auth": .table(["anchor": .string("top")]),
@@ -54,6 +55,30 @@ import Testing
         #expect(await session.reload(settings: Settings()))
         #expect(screen.widgets.count == 2 && screen.widgets[0] === views[0])
         #expect(screen.widgets[0].placement.anchor == .top)
+    }
+
+    /// Lua keeps the second widget's instance while the first comes back: that instance keeps its view, and the new
+    /// one does not take it for being the same widget.
+    @Test func aKeptInstanceKeepsItsViewWhenAWidgetComesBackBeforeIt() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'w', opts = { label = 'a' } }, { 'w', opts = { label = 'b' } } } }")
+        try sandbox.write("plugin/w.lua", "locky.widget.define('w', { render = function(self) return locky.ui.text(self.opts.label) end })")
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        defer { session.end("test") }
+        let screen = try #require(container.subviews.first as? LockScreenView)
+        #expect(await wait { screen.widgets.count == 2 && screen.widgets[1].model.node != nil })
+        let second = screen.widgets[1]
+        let onlySecond = Settings(["themes": .table(["t": .table(["widgets": .array([.table(["ref": .int(2), "widget": .string("w")])])])])])
+        #expect(await session.reload(settings: onlySecond))
+        #expect(screen.widgets.count == 1 && screen.widgets[0] === second)
+        #expect(await session.reload(settings: Settings()))
+        #expect(screen.widgets.count == 2 && screen.widgets[1] === second && screen.widgets[0] !== second)
+        #expect(second.model.node?.kind == .text("b"))
+        #expect(await wait { screen.widgets[0].model.node?.kind == .text("a") })
     }
 
     @Test func onlyTheThemesOwnChangesReloadInPlace() {

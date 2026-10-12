@@ -536,20 +536,27 @@ final class LockSession: NSObject, NSWindowDelegate {
     private func reconcileWidgets(from old: LuaRuntime.Started, to next: LuaRuntime.Started, on screen: LockScreenView) {
         let views = screen.widgets
         var taken = Set<Int>()
+        var reuse = [Int?](repeating: nil, count: next.theme.widgets.count)
+        // An instance Lua kept keeps its view, before any new instance looks for one.
+        for (index, id) in next.instances.enumerated() {
+            if let id, let at = old.instances.firstIndex(of: id), views.indices.contains(at), !taken.contains(at) {
+                reuse[index] = at
+                taken.insert(at)
+            }
+        }
+        // A new instance takes the view at its place, when that view showed the same widget.
+        for (index, placement) in next.theme.widgets.enumerated() where reuse[index] == nil {
+            if views.indices.contains(index), !taken.contains(index), old.theme.widgets.indices.contains(index),
+               old.theme.widgets[index].widget == placement.widget {
+                reuse[index] = index
+                taken.insert(index)
+            }
+        }
         var list: [WidgetHost] = []
         for (index, placement) in next.theme.widgets.enumerated() {
-            // The view of the same instance, else the view at the same place for the same widget.
-            var reuse: Int?
-            if let id = next.instances[index], let at = old.instances.firstIndex(of: id), views.indices.contains(at), !taken.contains(at) {
-                reuse = at
-            } else if views.indices.contains(index), !taken.contains(index), old.theme.widgets.indices.contains(index),
-                      old.theme.widgets[index].widget == placement.widget {
-                reuse = index
-            }
-            if let reuse {
-                taken.insert(reuse)
-                views[reuse].update(placement: placement, theme: next.theme, style: screen.style)
-                list.append(views[reuse])
+            if let at = reuse[index] {
+                views[at].update(placement: placement, theme: next.theme, style: screen.style)
+                list.append(views[at])
             } else {
                 let host = WidgetHost(placement: placement, theme: next.theme, style: screen.style, showsErrors: true)
                 screen.add(host)
@@ -564,7 +571,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         for (index, host) in list.enumerated() {
             if let id = next.instances[index] {
                 hosts[id] = [host]
-                if !old.instances.contains(id) { latest[id]?.forEach { $0(host) } }
+                // A view new to this instance shows its latest drawing; the instance's own view has it already.
+                let own = old.instances.firstIndex(of: id).flatMap { views.indices.contains($0) ? views[$0] : nil }
+                if own !== host { latest[id]?.forEach { $0(host) } }
             } else {
                 host.fail("theme \(next.theme.id): no widget named \"\(next.theme.widgets[index].widget)\"", disabled: true)
             }
