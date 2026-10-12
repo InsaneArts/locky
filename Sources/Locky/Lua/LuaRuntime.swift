@@ -183,8 +183,9 @@ final class LuaRuntime: @unchecked Sendable {
     }
 
     /// Loads the Lua core and runs the user's files, without a theme: for `locky check` and the pack manager.
-    /// settings.json comes in two parts: its packages before init.lua, so init.lua can require them, and
-    /// its values after init.lua, so they win.
+    /// settings.json's packages load before init.lua, so init.lua can require them. Its values apply before
+    /// init.lua too, so the code it runs sees them (privacy above all), and again after the plugin scripts, so
+    /// they win over both.
     func boot() throws {
         let vm = try LuaVM()
         self.vm = vm
@@ -208,19 +209,29 @@ final class LuaRuntime: @unchecked Sendable {
                 report("settings.json packs: \(LuaError(String(describing: error)).summary)")
             }
         }
+        let reported = applySettings(settings)
         let initFile = path.config.appending(path: "init.lua")
         if FileManager.default.fileExists(atPath: initFile.path) {
             runFile(initFile, budget: Budget.config)
         }
-        do {
-            let failures = try call("apply_settings", [settings.lua], budget: Budget.callback).first?.array ?? []
-            for case .string(let failure) in failures { report("settings.json \(failure)") }
-        } catch {
-            report("settings.json: \(LuaError(String(describing: error)).summary)")
-        }
         for script in path.pluginScripts() {
             runFile(script, budget: Budget.pluginScript)
         }
+        applySettings(settings, reported: reported)
+    }
+
+    /// Applies settings.json's values and reports each failure not in `reported`. Returns the failures.
+    @discardableResult
+    private func applySettings(_ settings: Settings, reported: [String] = []) -> [String] {
+        var failures: [String]
+        do {
+            let list = try call("apply_settings", [settings.lua], budget: Budget.callback).first?.array ?? []
+            failures = list.compactMap(\.string).map { "settings.json \($0)" }
+        } catch {
+            failures = ["settings.json: \(LuaError(String(describing: error)).summary)"]
+        }
+        for failure in failures where !reported.contains(failure) { report(failure) }
+        return failures
     }
 
     /// Ends the session: tells Lua code about it, stops every timer and process, and closes the state.

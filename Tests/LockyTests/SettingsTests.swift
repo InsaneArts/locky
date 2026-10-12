@@ -25,6 +25,28 @@ import Testing
         #expect(config["auto_unlock"] == .int(30))
     }
 
+    /// A module init.lua requires may read the user's name as it loads: privacy must be on by then.
+    @Test func codeInitLuaRunsSeesSettingsPrivacy() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        try sandbox.write("lua/mymod.lua", "return { user = locky.sys.user().name, host = locky.sys.hostname().name }")
+        try sandbox.write("init.lua", "MOD = require('mymod')")
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        #expect(try runtime.eval("return MOD.user, MOD.host") == [.string("user"), .string("Mac")])
+    }
+
+    @Test func settingsWinOverPluginScripts() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "theme": "from-settings" }"#)
+        try sandbox.write("plugin/setup.lua", "locky.setup({ theme = 'from-plugin', message = 'from the plugin' })")
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        let config = try config(runtime)
+        #expect(config["theme"] == .string("from-settings"))
+        #expect(config["message"] == .string("from the plugin"))
+    }
+
     @Test func valuesOfTheWrongTypeAreSkippedAndReported() throws {
         let sandbox = try Sandbox()
         try sandbox.write("init.lua", "locky.setup({ theme = 'from-init' })")

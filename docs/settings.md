@@ -6,13 +6,15 @@ window only reads it.
 Locky applies the layers in this order, and a later layer wins key by key:
 
 1. Locky's defaults.
-2. `init.lua` (`locky.setup`, `locky.theme.extend`, `locky.pack.add`).
+2. `init.lua` and the `plugin/` scripts (`locky.setup`, `locky.theme.extend`, `locky.pack.add`).
 3. `settings.json`.
 
 A key that settings.json leaves out keeps init.lua's value. For the values Lua reads too, the Settings page
 shows init.lua's value until you change it there, and then offers a Reset that removes the key. Packages
 are the exception to the order: settings.json's `packs` load before init.lua runs, so init.lua can
-`require` them.
+`require` them. The other values apply before init.lua runs as well, so the code init.lua runs sees them
+(with `privacy` on, a module that reads your name as it loads gets the generic one), and again after the
+plugin scripts, so they win.
 
 The file is plain JSON with sorted keys, so you can edit it by hand and keep it in your dotfiles; the
 window picks up an edit at once. A symlinked settings.json keeps its link when the window saves. If the file
