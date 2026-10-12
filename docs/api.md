@@ -7,7 +7,7 @@ minus what [plugins.md](plugins.md#the-rules-that-keep-the-lock-screen-safe) lis
 
 | | |
 |---|---|
-| `locky.setup(opts)` | Merges `opts` into `locky.config`: `theme`, `auto_unlock`, `background`, `palette`, `widgets`. |
+| `locky.setup(opts)` | Merges `opts` into `locky.config`: `theme`, `auto_unlock`, `background`, `palette`, `widgets`, and `hour24` (`true` or `false` forces a 24- or 12-hour clock in every theme). The Locky window's settings.json applies after init.lua and wins. |
 | `locky.config` | The current settings. |
 | `locky.version` | Locky's version. |
 
@@ -64,8 +64,8 @@ Everything a widget starts stops when the screen unlocks or the widget fails.
 | `locky.sys.screen()` | The main display: `width`, `height` (points), `scale` (what Locky multiplies theme sizes by), and `layout_width`, `layout_height`: the size in theme units, so a widget can span or measure the screen. |
 | `locky.sys.wallpaper()` | The main display's desktop picture as an image file path, or nil. For a dynamic wallpaper this is its thumbnail. |
 | `locky.sys.wallpaper_colors()` | Its dominant colors, most common first, as `"#rrggbb"` (up to 5; empty without a wallpaper). A theme can build its palette from them, like Material You. |
-| `locky.date.format(template, time)` | A date: `"time"`, `"date"`, a pattern used as it is (`"EEEE d MMMM"`, `"HH:mm"`), or `"skeleton:EEEEdMMMM"` (ordered the user's way). Names come in the user's language. `time` defaults to now. |
-| `locky.date.locale()` | `identifier`, `language`, `hour24`, `first_weekday` (1 is Sunday), `weekdays`, `weekdays_short`, `weekdays_abbreviated`, `months`, `months_short`. |
+| `locky.date.format(template, time)` | A date: `"time"` (24- or 12-hour as `locky.config.hour24` forces, when set), `"date"`, a pattern used as it is (`"EEEE d MMMM"`, `"HH:mm"`), or `"skeleton:EEEEdMMMM"` (ordered the user's way). Names come in the user's language. `time` defaults to now. |
+| `locky.date.locale()` | `identifier`, `language`, `hour24` (`locky.config.hour24` when set), `first_weekday` (1 is Sunday), `weekdays`, `weekdays_short`, `weekdays_abbreviated`, `months`, `months_short`. |
 
 ## Files and data
 

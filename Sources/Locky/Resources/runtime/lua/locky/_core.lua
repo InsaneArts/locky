@@ -522,9 +522,19 @@ locky.date = {
   format = function(template, time)
     validate("template", template, "string")
     validate("time", time, "number", true)
+    if template == "time" and locky.config.hour24 ~= nil then
+      template = locky.config.hour24 and "HH:mm" or "h:mm"
+    end
     return native.date_format(template, time or os.time())
   end,
-  locale = native.locale,
+  --- The user's language, weekdays, months, first weekday, and hour24 (locky.config.hour24 when it is set).
+  locale = function()
+    local locale = native.locale()
+    if locky.config.hour24 ~= nil then
+      locale.hour24 = locky.config.hour24 == true
+    end
+    return locale
+  end,
 }
 
 -------------------------------------------------------------------------------

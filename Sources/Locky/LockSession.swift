@@ -315,7 +315,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         for (index, screen) in screens.enumerated() {
             let main = index == 0
             let scale = Layout.scale(for: screen.bounds.size)
-            let style = LockyStyle(palette: theme.palette, font: theme.font, scale: scale)
+            let style = LockyStyle(palette: theme.palette, font: theme.font, scale: scale, hour24: started.hour24)
             screen.style = style
             screen.background = Backgrounds.makeView(theme.background, screen: windows[index].screen)
             if let overlay = theme.overlay {

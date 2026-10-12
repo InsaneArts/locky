@@ -8,6 +8,8 @@ struct LockyStyle: Equatable, Sendable {
     var font = FontSpec()
     /// Themes are laid out for 1440×900 points; a bigger screen scales everything up.
     var scale: CGFloat = 1
+    /// true or false forces a 24- or 12-hour "time"; nil follows the system.
+    var hour24: Bool?
 
     /// A palette role, a color name, or "#rrggbb[aa]".
     func color(_ name: String) -> Color {
@@ -198,7 +200,7 @@ struct NodeView: View, Equatable {
         case .time(let format):
             let roll = node.numeric ?? !Self.showsSeconds(format)
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                let text = SystemInfo.format(context.date, format)
+                let text = SystemInfo.format(context.date, format, hour24: style.hour24)
                 styledText(Text(text))
                     .contentTransition(roll ? .numericText() : .identity)
                     .animation(roll ? .smooth(duration: 0.6) : nil, value: text)

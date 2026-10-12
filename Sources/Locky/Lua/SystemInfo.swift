@@ -141,12 +141,13 @@ enum SystemInfo {
 
     // MARK: Dates
 
-    /// "time": the system's hours and minutes, without AM/PM. "date": weekday, month, and day, in the
-    /// system's order. "skeleton:EEEEdMMMM": those fields, ordered and punctuated for the user's language.
-    /// Anything else is a date pattern used as it is ("HH:mm", "EEE d MMM", "mm"), with month and weekday
-    /// names in the user's language.
-    static func format(_ date: Date, _ template: String) -> String {
+    /// "time": the system's hours and minutes, without AM/PM (24- or 12-hour as `hour24` forces, when set).
+    /// "date": weekday, month, and day, in the system's order. "skeleton:EEEEdMMMM": those fields, ordered and
+    /// punctuated for the user's language. Anything else is a date pattern used as it is ("HH:mm",
+    /// "EEE d MMM", "mm"), with month and weekday names in the user's language.
+    static func format(_ date: Date, _ template: String, hour24: Bool? = nil) -> String {
         switch template {
+        case "time" where hour24 != nil: return formatter(hour24 == true ? "HH:mm" : "h:mm").string(from: date)
         case "time": return date.formatted(.dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
         case "date": return date.formatted(.dateTime.weekday(.wide).month(.wide).day())
         default: return formatter(template).string(from: date)

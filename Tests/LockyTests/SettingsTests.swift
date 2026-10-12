@@ -221,3 +221,30 @@ import Testing
         #expect(catalog.contains { $0["name"] == .string("clock") })
     }
 }
+
+@Suite struct HourFormatTests {
+    @Test func settingsForceA24Or12HourClock() throws {
+        for (hour24, expected) in [(true, "17:05"), (false, "5:05")] {
+            let sandbox = try Sandbox()
+            try Settings(["hour24": .bool(hour24)]).save(config: sandbox.config)
+            let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+            #expect(runtime.bootForTest().isEmpty)
+            let time = "os.time({ year = 2026, month = 1, day = 2, hour = 17, min = 5 })"
+            #expect(try runtime.eval("return locky.date.format('time', \(time))") == [.string(expected)])
+            #expect(try runtime.eval("return locky.date.locale().hour24") == [.bool(hour24)])
+            // A pattern is used as it is: the override is only for "time".
+            #expect(try runtime.eval("return locky.date.format('HH', \(time))") == [.string("17")])
+
+            let date = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 1, day: 2, hour: 17, minute: 5)))
+            #expect(SystemInfo.format(date, "time", hour24: hour24) == expected)
+        }
+    }
+
+    @Test func withoutTheSettingTheSystemDecides() throws {
+        let sandbox = try Sandbox()
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        _ = runtime.bootForTest()
+        let system = SystemInfo.locale()["hour24"]
+        #expect(try runtime.eval("return locky.date.locale().hour24") == [system])
+    }
+}
