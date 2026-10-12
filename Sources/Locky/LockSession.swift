@@ -88,7 +88,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         // A preview kept behind other windows (for screenshots) never asks for Touch ID: its Touch ID view is
         // hidden, so macOS would show its own prompt on top of whatever the user is doing.
         let touchID = TouchID()
-        if touchID.isAvailable, mode != .embedded, !(mode == .preview && options.behind) { self.touchID = touchID }
+        if touchID.isAvailable, mode != .embedded, !(mode == .preview && options.behind), options.settings["touch_id"].bool != false {
+            self.touchID = touchID
+        }
 
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
         openWindows()
@@ -385,9 +387,11 @@ final class LockSession: NSObject, NSWindowDelegate {
     // MARK: Safety
 
     /// Prototype only. The lock opens after `seconds`. If the main thread hangs, a timer on another thread
-    /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q quits at once.
+    /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q quits at once, unless settings.json's
+    /// emergency_exit is false.
     private func armSafety(after seconds: Double) {
-        if keyMonitor == nil {
+        banner.quits = options.settings["emergency_exit"].bool != false
+        if keyMonitor == nil, banner.quits {
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 // Only these four keys count, so Caps Lock or Fn being on does not stop it.
                 if event.modifierFlags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command], event.keyCode == 12 { exit(0) }
@@ -570,6 +574,8 @@ struct SafetyBanner: View {
     @MainActor @Observable
     final class Model {
         var opensAt: Date?
+        /// Whether ⌃⌥⌘Q quits.
+        var quits = true
     }
 
     let model: Model
@@ -577,7 +583,7 @@ struct SafetyBanner: View {
     var body: some View {
         if let opensAt = model.opensAt {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text("Prototype · opens in \(max(0, Int(opensAt.timeIntervalSince(context.date).rounded()))) s · ⌃⌥⌘Q quits")
+                Text("Prototype · opens in \(max(0, Int(opensAt.timeIntervalSince(context.date).rounded()))) s" + (model.quits ? " · ⌃⌥⌘Q quits" : ""))
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.horizontal, 12)
