@@ -167,6 +167,21 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
     }
 
+    /// After a switch to another theme, the old theme's screen stays until the new one is ready: its widgets are not
+    /// the new theme's to drag.
+    @Test func theCanvasWaitsForTheNextThemesScreen() async throws {
+        let page = try await open()
+        try page.sandbox.write("themes/u.lua", "return { background = { color = '#402020' }, widgets = { { 'box', anchor = 'top' } } }")
+        page.model.refresh()
+        // The new file starts t's preview again; wait for it to be back.
+        #expect(await wait(page.window) { page.model.inspection.theme("u") != nil })
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(await wait(page.window) { frame(of: .widget(1), page) != nil })
+        page.model.selectedTheme = "u"
+        #expect(await wait(page.window) { page.preview.editables.isEmpty })
+        #expect(await wait(page.window) { frame(of: .widget(0), page) == CGRect(x: 620, y: 0, width: 200, height: 100) })
+    }
+
     @Test func thePasswordFieldMovesToo() async throws {
         let page = try await open()
         #expect(await wait(page.window) { frame(of: .passwordField, page) != nil })

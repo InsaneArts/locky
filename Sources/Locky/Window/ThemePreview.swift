@@ -129,9 +129,10 @@ final class ThemePreviewView: NSView {
     }
 
     /// The current screen's items the editor can select, with their frames in layout points: none while the screen
-    /// shows another theme, or the theme without the window's changes.
+    /// shows another theme (one the editor left, waiting for its replacement to load, or the one Locky fell back to),
+    /// or the theme without the window's changes.
     var editables: [(item: EditorItem, frame: CGRect)] {
-        guard let current, current.session.shows(theme: current.key.theme) else { return [] }
+        guard let current, let wanted, !current.key.needsRestart(for: wanted), current.session.shows(theme: wanted.theme) else { return [] }
         return current.session.editables
     }
 
