@@ -438,6 +438,8 @@ import Testing
         let catalog = try runtime.sync { try runtime.call("widget_catalog", budget: 1) }.first?.array ?? []
         let w = try #require(catalog.first { $0["name"] == .string("w") })
         #expect(w["opts"] == .table(["style": .string("list"), "size": .int(14)]))
+        // Without init.lua's: what kind of value each option takes.
+        #expect(w["defaults"] == .table(["style": .string("list"), "size": .int(12)]))
         #expect(w["choices"]["style"] == .array([.string("list"), .string("dots")]))
     }
 

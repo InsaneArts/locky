@@ -196,6 +196,21 @@ import Testing
     }
 }
 
+@Suite struct OptionControlTests {
+    /// The agents widget's offline line: text, or false to hide the widget when herdr is off.
+    @Test func textThatCanBeOffKeepsItsKind() {
+        let own: LuaValue = .string("herdr is not running")
+        // Turned off by the theme or by init.lua: a switch that turns the widget's own text back on.
+        #expect(OptionControl.textOrOff(.bool(false), own: own, inherited: .bool(false)) == "herdr is not running")
+        // Turned back on in the window: still a switch, so it can go off again.
+        #expect(OptionControl.textOrOff(.string("offline"), own: own, inherited: .bool(false)) == "herdr is not running")
+        // Text the theme never turns off, and a true switch, stay as they are.
+        #expect(OptionControl.textOrOff(.string("offline"), own: own, inherited: .string("x")) == nil)
+        #expect(OptionControl.textOrOff(.bool(false), own: .bool(true), inherited: .bool(false)) == nil)
+        #expect(OptionControl.textOrOff(.bool(false), own: nil, inherited: .bool(false)) == nil)
+    }
+}
+
 @MainActor
 @Suite struct ThemeEditingTests {
     /// The case Lua's anExactRefKeepsItsPlacement covers: the editor's list must be the one the preview shows.

@@ -179,7 +179,8 @@ private struct WidgetInspector: View {
                 Section {
                     ForEach(keys, id: \.self) { key in
                         OptionRow(key: key, value: placement.opts[key] ?? inherited[key] ?? .nil, choices: info?.choices[key],
-                                  fallback: info?.opts[key], palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
+                                  own: info?.defaults[key], inherited: inherited[key],
+                                  palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
                                   live: { draft = settings(key, $0) },
                                   commit: { value in
                                       change { $0.opts[key] = value == inherited[key] ? nil : value }
@@ -298,7 +299,9 @@ private struct OptionRow: View {
     let value: LuaValue
     let choices: [String]?
     /// The widget's own value for the option, which tells what kind of value it takes.
-    let fallback: LuaValue?
+    let own: LuaValue?
+    /// The value before settings.json's: the theme's or init.lua's.
+    let inherited: LuaValue?
     let palette: [String: String]
     /// A change in progress, for the preview.
     let live: (LuaValue) -> Void
@@ -314,11 +317,10 @@ private struct OptionRow: View {
             Picker(label, selection: Binding(get: { current }, set: { commit(.string($0)) })) {
                 ForEach(choices.contains(current) ? choices : choices + [current], id: \.self) { Text($0.capitalizedFirst).tag($0) }
             }
+        } else if let text = OptionControl.textOrOff(value, own: own, inherited: inherited) {
+            LabeledContent(label) { TextOrOff(text: value.string, own: text, commit: commit) }
         } else {
             switch value {
-            case .bool(let on) where fallback?.string != nil:
-                // Text that a theme turned off with false, such as a header: on brings the widget's own text back.
-                Toggle(label, isOn: Binding(get: { on }, set: { commit($0 ? fallback ?? .bool(true) : .bool(false)) }))
             case .bool(let on):
                 Toggle(label, isOn: Binding(get: { on }, set: { commit(.bool($0)) }))
             case .int, .double:
@@ -402,6 +404,32 @@ private struct ColorChoice: View {
             NSColor.separatorColor.setStroke()
             NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5)).stroke()
             return true
+        }
+    }
+}
+
+/// Which control an option gets, where its value alone does not say.
+enum OptionControl {
+    /// The widget's own text for an option that holds text or false, such as a header the theme or init.lua turned
+    /// off; nil for any other option. As a plain switch it would write true, which the widget cannot draw.
+    static func textOrOff(_ value: LuaValue, own: LuaValue?, inherited: LuaValue?) -> String? {
+        guard let text = own?.string, value == .bool(false) || (value.string != nil && inherited == .bool(false)) else { return nil }
+        return text
+    }
+}
+
+/// Text that can be off: a switch, and the text while it is on. On, it starts from the widget's own text.
+private struct TextOrOff: View {
+    let text: String?
+    let own: String
+    let commit: (LuaValue) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let text { TextOption(text: text) { commit(.string($0)) } }
+            Toggle("", isOn: Binding(get: { text != nil }, set: { commit($0 ? .string(own) : .bool(false)) }))
+                .labelsHidden()
+                .toggleStyle(.switch)
         }
     }
 }

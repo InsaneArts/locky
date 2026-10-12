@@ -1393,9 +1393,9 @@ return {
     }
   end,
 
-  -- Every widget: name, description, the file that defines it, whether it sits on a card by default, its
-  -- options with init.lua's, and the values its options take. Like theme_infos, one widget that fails gets an
-  -- error row.
+  -- Every widget: name, description, the file that defines it, whether it sits on a card by default, its own
+  -- options, the same with init.lua's, and the values its options take. Like theme_infos, one widget that fails
+  -- gets an error row.
   widget_catalog = function()
     local list = {}
     for _, name in ipairs(locky.widget.list()) do
@@ -1405,7 +1405,7 @@ return {
         local opts_ok, opts = pcall(widget_opts, name, {}, false)
         return {
           name = name, description = text(definition.description), file = text(definition.file), card = definition.card == true,
-          opts = opts_ok and plain(opts) or nil, choices = plain(definition.choices),
+          opts = opts_ok and plain(opts) or nil, defaults = plain(definition.opts), choices = plain(definition.choices),
         }
       end)
       list[#list + 1] = ok and info or { name = name, error = error_text(info) }

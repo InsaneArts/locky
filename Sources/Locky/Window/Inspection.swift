@@ -24,6 +24,8 @@ struct Inspection: Sendable {
         var card = false
         /// Its options with init.lua's: what a placement the window adds starts with.
         var opts: [String: LuaValue] = [:]
+        /// Its own options, without init.lua's: what kind of value each one takes.
+        var defaults: [String: LuaValue] = [:]
         /// The values its options take, for the editor's menus.
         var choices: [String: [String]] = [:]
     }
@@ -93,7 +95,7 @@ struct Inspection: Sendable {
                 result.widgets = ((try? runtime.call("widget_catalog", budget: 1).first?.array) ?? []).map { info in
                     WidgetInfo(name: info["name"].string ?? "?", description: info["description"].string,
                                file: info["file"].string.map { URL(fileURLWithPath: $0) }, card: info["card"].bool ?? false,
-                               opts: info["opts"].table ?? [:],
+                               opts: info["opts"].table ?? [:], defaults: info["defaults"].table ?? [:],
                                choices: (info["choices"].table ?? [:]).compactMapValues { $0.array?.compactMap(\.string) })
                 }
             }
