@@ -15,7 +15,9 @@ struct ThemesPage: View {
                 HStack(spacing: 0) {
                     stage(info)
                     Divider()
+                    // A fresh editor per theme: one theme's layout must never be saved as another's.
                     ThemeEditor(model: model, theme: info)
+                        .id(info.id)
                         .frame(width: 360)
                 }
             } else {

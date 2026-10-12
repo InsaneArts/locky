@@ -65,6 +65,8 @@ struct ThemeEditor: View {
             layout = value
             layoutError = nil
         case .failure(let error):
+            // Without this theme's layout, nothing may be added: refs need it.
+            layout = nil
             layoutError = error.message
         }
     }
