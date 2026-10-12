@@ -136,6 +136,7 @@ require("weather").setup({ city = "Tbilisi" })
 
 `locky pack update` moves every package to the newest commit of its version and rewrites
 `locky-pack-lock.json`; `locky pack clean` deletes packages `init.lua` no longer adds.
+`locky pack check` fetches and lists the packages `update` would move, and moves none.
 
 Follow Neovim's conventions: `setup(opts)` only merges options (use `locky.tbl.deep_extend`), keep
 `plugin/<name>.lua` small, and give every option a default.

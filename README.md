@@ -55,6 +55,7 @@ locky check [--theme NAME]        run your config, plugins, and a theme; list ev
 locky health                      like :checkhealth
 locky themes | widgets            what is installed
 locky pack list|sync|update|clean plugins from git, pinned by locky-pack-lock.json
+locky pack check                  which plugins have updates; installs none
 locky preview --theme NAME        the lock screen in a window
 ```
 

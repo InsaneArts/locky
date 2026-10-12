@@ -8,7 +8,7 @@ import Metal
 ///   locky check [--theme NAME]     run init.lua, plugins, and a theme; report every error
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
-///   locky pack list|sync|update|clean
+///   locky pack list|check|sync|update|clean
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
 ///   locky lock [--theme NAME]
 ///   locky window [section] [--theme NAME] [--behind]
@@ -74,7 +74,7 @@ enum CLI {
             return 0
         case "pack":
             guard let action = arguments.dropFirst().first.flatMap(PackManager.Action.init(rawValue:)) else {
-                print("usage: locky pack list|sync|update|clean")
+                print("usage: locky pack list|check|sync|update|clean")
                 return 2
             }
             let report = PackManager(path: .standard()).run(action)
@@ -90,7 +90,7 @@ enum CLI {
               health                 check Locky, Lua, plugins, Touch ID, and git
               themes                 list themes
               widgets                list widgets
-              pack list|sync|update|clean
+              pack list|check|sync|update|clean
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
               window [dashboard|themes|plugins|config|settings] [--theme NAME] [--size 1240x780]

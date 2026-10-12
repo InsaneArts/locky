@@ -13,6 +13,8 @@ struct PackManager {
         /// Fetches and moves each package to the newest commit of its version (a tag, branch, or commit),
         /// or of the default branch; then rewrites the lockfile.
         case update
+        /// Fetches each package and says which ones `update` would move. Changes no checkout and no lockfile.
+        case check
         /// Deletes packages Locky installed that init.lua no longer adds.
         case clean
         case list
@@ -38,6 +40,8 @@ struct PackManager {
     struct Report {
         var lines: [String]
         var ok: Bool
+        /// `check` only: what it found for each package.
+        var updates: [PackUpdate] = []
         var text: String { lines.joined(separator: "\n") }
     }
 
@@ -102,6 +106,7 @@ struct PackManager {
             return Report(lines: lines, ok: false)
         }
         var updated = lockfile
+        var checked: [PackUpdate] = []
 
         switch action {
         case .list:
@@ -152,6 +157,15 @@ struct PackManager {
                 if !success { ok = false }
             }
             if specs.isEmpty { lines.append("No packages to install.") }
+        case .check:
+            for spec in specs where spec.dir == nil {
+                guard let src = spec.src else { continue }
+                let update = check(spec, src: src, locked: lockfile.plugins[spec.name])
+                checked.append(update)
+                lines.append(update.line)
+                if update.error != nil { ok = false }
+            }
+            if checked.isEmpty { lines.append("No packages to check.") }
         }
         if action != .list, updated != lockfile {
             do {
@@ -161,7 +175,13 @@ struct PackManager {
                 lines.append("cannot write \(LuaError.shortenPaths(path.lockfile.path)): \(error.localizedDescription)")
             }
         }
-        return Report(lines: lines, ok: ok)
+        return Report(lines: lines, ok: ok, updates: checked)
+    }
+
+    /// `check`'s result for each package, for the window. A busy run, an unreadable lockfile, and init.lua errors
+    /// appear only in run(.check)'s lines.
+    func checkUpdates() -> [PackUpdate] {
+        run(.check).updates
     }
 
     /// A real git clone: a folder (not a symlink) with its own .git.
@@ -219,6 +239,31 @@ struct PackManager {
         if fresh { return ("installed \(spec.name) at \(rev.prefix(7))", true) }
         if before != rev { return ("updated \(spec.name) \(before.prefix(7)) → \(rev.prefix(7))", true) }
         return ("\(spec.name) is up to date (\(rev.prefix(7)))", true)
+    }
+
+    /// Fetches an installed package and finds the commit `update` would move it to, without moving it.
+    private func check(_ spec: Spec, src: String, locked: Lockfile.Entry?) -> PackUpdate {
+        let dir = path.packs.appending(path: spec.name)
+        guard let locked, isClone(dir) else { return PackUpdate(name: spec.name) }
+        var result = PackUpdate(name: spec.name, current: locked.rev)
+        // The clone still fetches from the old source; sync moves it to the new one.
+        guard runGit(["-C", dir.path, "remote", "get-url", "origin"]).output == src else {
+            result.error = "its source is now \(src); run `locky pack sync`"
+            return result
+        }
+        guard fetch(dir) else {
+            result.error = "fetch failed"
+            return result
+        }
+        // As update resolves it: a branch follows origin; a tag or a commit is used as it is.
+        let target = spec.version.map { hasCommit("origin/\($0)", in: dir) ? "origin/\($0)" : $0 } ?? "origin/HEAD"
+        let latest = runGit(["-C", dir.path, "rev-parse", "--verify", "--quiet", "--end-of-options", "\(target)^{commit}"])
+        guard latest.ok else {
+            result.error = "cannot find \(spec.version ?? "the default branch") upstream"
+            return result
+        }
+        result.latest = latest.output
+        return result
     }
 
     /// Fetches tags and branches, drops branches deleted upstream, and follows a renamed default branch.
@@ -287,6 +332,24 @@ struct PackManager {
             return (false, trim(output), "git took longer than \(Int(timeout)) s and was stopped")
         }
         return (process.terminationStatus == 0, trim(output), trim(errors))
+    }
+}
+
+/// What `locky pack check` found for one package from git.
+struct PackUpdate: Equatable {
+    var name: String
+    /// The locked commit; nil when the package is not installed.
+    var current: String?
+    /// The commit its version (or the default branch) names upstream, after a fetch.
+    var latest: String?
+    /// Why the check failed.
+    var error: String?
+
+    /// "name: up to date", "name: update available abc1234 → def5678", "name: not installed", or the error.
+    var line: String {
+        if let error { return "\(name): \(error)" }
+        guard let current, let latest else { return "\(name): not installed" }
+        return current == latest ? "\(name): up to date" : "\(name): update available \(current.prefix(7)) → \(latest.prefix(7))"
     }
 }
 

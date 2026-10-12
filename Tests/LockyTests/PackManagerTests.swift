@@ -3,15 +3,19 @@ import Testing
 @testable import Locky
 
 @Suite struct PackManagerTests {
-    private func git(_ arguments: [String], in dir: URL) throws {
+    @discardableResult
+    private func git(_ arguments: [String], in dir: URL) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = ["-C", dir.path] + arguments
-        process.standardOutput = FileHandle.nullDevice
+        let out = Pipe()
+        process.standardOutput = out
         process.standardError = FileHandle.nullDevice
         try process.run()
+        let output = out.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         #expect(process.terminationStatus == 0, "git \(arguments.joined(separator: " "))")
+        return String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// A git repository holding a tiny Locky plugin.
@@ -133,5 +137,118 @@ import Testing
         #expect(PackManager(path: sandbox.path()).specs().problems.first?.contains("must not start with '-'") == true)
         try sandbox.write("init.lua", "locky.pack.add({ 'a/One', 'b/one' })")
         #expect(PackManager(path: sandbox.path()).specs().problems.first?.contains("two packages are named") == true)
+    }
+
+    // MARK: check
+
+    /// Adds `repo` as the package "hello" at `version` and syncs it.
+    private func synced(_ repo: URL, version: String? = nil, in sandbox: Sandbox) throws -> PackManager {
+        let pin = version.map { ", version = \"\($0)\"" } ?? ""
+        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(repo.path)\", name = \"hello\"\(pin) } })")
+        let manager = PackManager(path: sandbox.path())
+        #expect(manager.run(.sync).ok)
+        return manager
+    }
+
+    /// Commits a new greeting upstream on `branch` and returns the commit.
+    private func commit(_ greeting: String, on branch: String = "main", in repo: URL) throws -> String {
+        try git(["checkout", "--quiet", branch], in: repo)
+        try "return { greeting = \"\(greeting)\" }".write(to: repo.appending(path: "lua/hello/init.lua"), atomically: true, encoding: .utf8)
+        try git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-am", greeting], in: repo)
+        let rev = try git(["rev-parse", "HEAD"], in: repo)
+        try git(["checkout", "--quiet", "main"], in: repo)
+        return rev
+    }
+
+    @Test func checkSaysUpToDate() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let report = try synced(repo, in: sandbox).run(.check)
+        let head = try git(["rev-parse", "HEAD"], in: repo)
+        #expect(report.ok)
+        #expect(report.text == "hello: up to date")
+        #expect(report.updates == [PackUpdate(name: "hello", current: head, latest: head)])
+    }
+
+    @Test func checkFindsANewCommitOnTheDefaultBranch() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        let old = try git(["rev-parse", "HEAD"], in: repo)
+        let new = try commit("hi", in: repo)
+        let report = manager.run(.check)
+        #expect(report.ok)
+        #expect(report.text == "hello: update available \(old.prefix(7)) → \(new.prefix(7))")
+        #expect(manager.checkUpdates() == [PackUpdate(name: "hello", current: old, latest: new)])
+    }
+
+    @Test func aPinnedCommitIsNeverAnUpdate() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, version: try git(["rev-parse", "HEAD"], in: repo), in: sandbox)
+        _ = try commit("hi", in: repo)
+        #expect(manager.run(.check).text == "hello: up to date")
+    }
+
+    @Test func aBranchFollowsItsOwnCommits() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        try git(["branch", "dev"], in: repo)
+        let manager = try synced(repo, version: "dev", in: sandbox)
+        let old = try git(["rev-parse", "dev"], in: repo)
+        // A commit on the default branch is not one on dev.
+        _ = try commit("main only", in: repo)
+        #expect(manager.run(.check).text == "hello: up to date")
+        let new = try commit("dev only", on: "dev", in: repo)
+        #expect(manager.checkUpdates() == [PackUpdate(name: "hello", current: old, latest: new)])
+    }
+
+    @Test func aTagMeansItsCommit() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let tag = ["-c", "user.name=t", "-c", "user.email=t@t", "tag", "--force", "--annotate", "--message", "v1", "v1"]
+        try git(tag, in: repo)
+        let manager = try synced(repo, version: "v1", in: sandbox)
+        // The annotated tag's own object is not the commit it names.
+        #expect(manager.run(.check).text == "hello: up to date")
+        let old = try git(["rev-parse", "HEAD"], in: repo)
+        let new = try commit("hi", in: repo)
+        try git(tag, in: repo)
+        #expect(manager.checkUpdates() == [PackUpdate(name: "hello", current: old, latest: new)])
+    }
+
+    @Test func aMissingCloneIsNotInstalledAndStaysMissing() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        let clone = sandbox.packs.appending(path: "hello")
+        try FileManager.default.removeItem(at: clone)
+        let report = manager.run(.check)
+        #expect(report.ok)
+        #expect(report.text == "hello: not installed")
+        #expect(report.updates == [PackUpdate(name: "hello")])
+        #expect(!FileManager.default.fileExists(atPath: clone.path))
+    }
+
+    @Test func checkMovesNoCheckoutAndNoLockfile() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        _ = try commit("hi", in: repo)
+        let clone = sandbox.packs.appending(path: "hello")
+        let head = try git(["rev-parse", "HEAD"], in: clone)
+        let lockfile = try Data(contentsOf: sandbox.path().lockfile)
+
+        #expect(manager.run(.check).text.contains("update available"))
+        // A source changed in init.lua is reported, and the clone keeps fetching from the old one until sync.
+        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(repo.path)-moved\", name = \"hello\" } })")
+        let moved = manager.run(.check)
+        #expect(!moved.ok)
+        #expect(moved.text == "hello: its source is now \(repo.path)-moved; run `locky pack sync`")
+
+        #expect(try git(["rev-parse", "HEAD"], in: clone) == head)
+        #expect(try git(["status", "--porcelain"], in: clone).isEmpty)
+        #expect(try git(["remote", "get-url", "origin"], in: clone) == repo.path)
+        #expect(try Data(contentsOf: sandbox.path().lockfile) == lockfile)
     }
 }
