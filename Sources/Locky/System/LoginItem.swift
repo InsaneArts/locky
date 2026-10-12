@@ -25,8 +25,9 @@ enum LoginItem {
         switch status {
         case .enabled: return .enabled
         case .requiresApproval: return .requiresApproval
-        case .notRegistered: return .notRegistered
-        case .notFound: return .unavailable("macOS cannot find Locky.app's login item")
+        // Apple's forums report notFound for a main app that was never registered or was switched off. register()
+        // is the way out of both, and its error says what is wrong otherwise.
+        case .notRegistered, .notFound: return .notRegistered
         @unknown default: return .unavailable("macOS reports a login item status Locky does not know")
         }
     }

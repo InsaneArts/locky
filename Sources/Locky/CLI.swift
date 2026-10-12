@@ -9,11 +9,12 @@ import Metal
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
 ///   locky pack list|check|sync|update|clean
+///   locky login [on|off]
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
 ///   locky lock [--theme NAME]
 ///   locky window [section] [--theme NAME] [--behind]
 enum CLI {
-    static let commands: Set<String> = ["check", "health", "themes", "widgets", "pack", "help", "--help", "-h", "version", "--version"]
+    static let commands: Set<String> = ["check", "health", "themes", "widgets", "pack", "login", "help", "--help", "-h", "version", "--version"]
 
     /// The GUI's options, for `preview`, `lock`, and `window [section]`.
     struct GUILaunch {
@@ -80,6 +81,27 @@ enum CLI {
             let report = PackManager(path: .standard()).run(action)
             print(report.text)
             return report.ok ? 0 : 1
+        case "login":
+            let word = arguments.dropFirst().first
+            guard word == nil || word == "on" || word == "off" else {
+                print("usage: locky login [on|off]")
+                return 2
+            }
+            if let word {
+                do {
+                    try LoginItem.set(word == "on")
+                } catch {
+                    print("error: \(error.localizedDescription)")
+                    return 1
+                }
+            }
+            switch LoginItem.status {
+            case .enabled: print("Locky opens at login.")
+            case .requiresApproval: print("Locky's login item waits for approval in System Settings › General › Login Items.")
+            case .notRegistered: print("Locky does not open at login.")
+            case .unavailable(let message): print(message)
+            }
+            return 0
         case "version", "--version":
             print("Locky \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"), \(String(cString: locky_lua_release()))")
             return 0
@@ -91,6 +113,7 @@ enum CLI {
               themes                 list themes
               widgets                list widgets
               pack list|check|sync|update|clean
+              login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
               window [dashboard|themes|plugins|config|settings] [--theme NAME] [--size 1240x780]
@@ -198,6 +221,13 @@ enum CLI {
 
         if LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) { ok("Touch ID is available") }
         else { warn("Touch ID is not available", "unlock with your password") }
+
+        switch LoginItem.status {
+        case .enabled: ok("opens at login")
+        case .requiresApproval: warn("the login item waits for approval", "allow Locky in System Settings › General › Login Items")
+        case .notRegistered: warn("Locky does not open at login", "Settings › General: Locky locks by itself only while it runs")
+        case .unavailable(let message): lines.append("  INFO    \(message)")
+        }
 
         let git = Process()
         git.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")

@@ -7,11 +7,12 @@ import Testing
 @Suite struct LoginItemTests {
     private let app = URL(fileURLWithPath: "/Applications/Locky.app")
 
-    @Test func serviceStatusesMapOneToOne() {
+    @Test func serviceStatusesMap() {
         #expect(LoginItem.status(.enabled, bundle: app) == .enabled)
         #expect(LoginItem.status(.requiresApproval, bundle: app) == .requiresApproval)
         #expect(LoginItem.status(.notRegistered, bundle: app) == .notRegistered)
-        #expect(LoginItem.status(.notFound, bundle: app) == .unavailable("macOS cannot find Locky.app's login item"))
+        // What macOS 26 reports for an app never registered: register() must stay possible.
+        #expect(LoginItem.status(.notFound, bundle: app) == .notRegistered)
     }
 
     @Test func aBareExecutableCannotOpenAtLogin() {
