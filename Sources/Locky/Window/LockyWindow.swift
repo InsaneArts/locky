@@ -16,8 +16,13 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .unified
         window.contentViewController = NSHostingController(rootView: MainView(model: model))
-        window.setFrameAutosaveName("LockyWindow")
-        if !window.setFrameUsingName("LockyWindow") { window.center() }
+        // A screenshot run sizes the window as it needs; it must not become the user's saved size.
+        if AppDelegate.isTool {
+            window.center()
+        } else {
+            window.setFrameAutosaveName("LockyWindow")
+            if !window.setFrameUsingName("LockyWindow") { window.center() }
+        }
         super.init(window: window)
         window.delegate = self
     }
