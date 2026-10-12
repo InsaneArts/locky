@@ -857,7 +857,7 @@ final class LogFile: @unchecked Sendable {
     static let shared = LogFile()
     private let lock = NSLock()
     /// Locky.app logs to ~/Library/Logs; tests and other hosts log to a temporary folder.
-    private let url: URL = Bundle.main.bundleIdentifier == "com.tornikegomareli.Locky"
+    let url: URL = Bundle.main.bundleIdentifier == "com.tornikegomareli.Locky"
         ? FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/Locky/locky.log")
         : FileManager.default.temporaryDirectory.appending(path: "locky-test-logs/locky.log")
     private var handle: FileHandle?

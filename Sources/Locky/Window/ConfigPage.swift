@@ -90,6 +90,11 @@ struct ConfigPage: View {
             Button("Show in Finder", systemImage: "folder") {
                 NSWorkspace.shared.activateFileViewerSelecting([FileManager.default.fileExists(atPath: url.path) ? url : model.store.config])
             }
+            Button("Open Log", systemImage: "doc.text.magnifyingglass") {
+                LogFile.shared.write(level: "info", message: "log opened", source: "locky")
+                NSWorkspace.shared.open(LogFile.shared.url)
+            }
+            .help("What plugins print, and every error: ~/Library/Logs/Locky/locky.log")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
