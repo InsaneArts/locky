@@ -60,3 +60,19 @@ struct Settings: Equatable, Sendable {
         set { self["packs"] = newValue.isEmpty ? .nil : .array(newValue) }
     }
 }
+
+extension Settings {
+    /// themes.<theme>.<key>: the window's change to a theme's "background" or "widgets".
+    func themeEdit(_ theme: String, _ key: String) -> LuaValue {
+        self["themes"][theme][key]
+    }
+
+    /// Sets themes.<theme>.<key>, or removes it for nil; a theme left with no changes goes too.
+    mutating func setThemeEdit(_ theme: String, _ key: String, _ value: LuaValue?) {
+        var themes = self["themes"].table ?? [:]
+        var entry = themes[theme]?.table ?? [:]
+        entry[key] = value
+        themes[theme] = entry.isEmpty ? nil : .table(entry)
+        self["themes"] = themes.isEmpty ? .nil : .table(themes)
+    }
+}

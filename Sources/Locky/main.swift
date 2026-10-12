@@ -11,7 +11,7 @@ for key in ProcessInfo.processInfo.environment.keys where key.hasPrefix("HERDR_"
 // mistyped command and gets the usage, not a second menu bar app. Arguments starting with "-" come from
 // macOS or Xcode (such as -NSDocumentRevisionsDebugMode) and start the app.
 let arguments = Array(CommandLine.arguments.dropFirst())
-if let command = arguments.first, !command.hasPrefix("-") || CLI.commands.contains(command), !["preview", "lock"].contains(command) {
+if let command = arguments.first, !command.hasPrefix("-") || CLI.commands.contains(command), !["preview", "lock", "window"].contains(command) {
     exit(CLI.run(arguments))
 }
 

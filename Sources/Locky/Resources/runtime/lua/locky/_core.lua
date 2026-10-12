@@ -1166,13 +1166,16 @@ return {
   theme_names = locky.theme.list,
   widget_names = locky.widget.list,
 
-  -- Each theme's name, description, author, and folder, or the error that stops it from loading.
+  -- Each theme's name, description, author, folder, and palette, or the error that stops it from loading.
   theme_infos = function()
     local list = {}
     for _, name in ipairs(locky.theme.list()) do
       local ok, theme = pcall(read_theme, name)
       if ok then
-        list[#list + 1] = { id = name, name = plain(theme.name) or name, description = plain(theme.description), author = plain(theme.author), dir = theme.dir }
+        list[#list + 1] = {
+          id = name, name = plain(theme.name) or name, description = plain(theme.description), author = plain(theme.author),
+          dir = theme.dir, palette = plain(theme.palette),
+        }
       else
         list[#list + 1] = { id = name, name = name, error = tostring(theme) }
       end
@@ -1193,12 +1196,12 @@ return {
     return { id = name, name = theme.name, background = plain(theme.background), widgets = widgets_list }
   end,
 
-  -- Every widget: name, description, and the file that defines it.
+  -- Every widget: name, description, the file that defines it, and whether it sits on a card by default.
   widget_catalog = function()
     local list = {}
     for _, name in ipairs(locky.widget.list()) do
       local definition = widgets[name]
-      list[#list + 1] = { name = name, description = plain(definition.description), file = definition.file }
+      list[#list + 1] = { name = name, description = plain(definition.description), file = definition.file, card = definition.card == true }
     end
     return list
   end,

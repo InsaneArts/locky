@@ -11,18 +11,26 @@ import Metal
 ///   locky pack list|sync|update|clean
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
 ///   locky lock [--theme NAME]
+///   locky window [section] [--theme NAME] [--behind]
 enum CLI {
     static let commands: Set<String> = ["check", "health", "themes", "widgets", "pack", "help", "--help", "-h", "version", "--version"]
 
-    /// The GUI's options, for `preview` and `lock`.
+    /// The GUI's options, for `preview`, `lock`, and `window [section]`.
     struct GUILaunch {
         var mode: LockSession.Mode?
+        /// `window`: open the Locky window at this page.
+        @MainActor var window: AppModel.Section? {
+            guard arguments.first == "window" else { return nil }
+            return arguments.dropFirst().first.flatMap(AppModel.Section.init(rawValue:)) ?? .dashboard
+        }
         var theme: String?
         var size: CGSize?
         var behind = false
+        private var arguments: [String] = []
 
         static func parse(_ arguments: [String]) -> GUILaunch {
             var launch = GUILaunch()
+            launch.arguments = arguments
             launch.mode = arguments.first == "preview" ? .preview : arguments.first == "lock" ? .lock : nil
             launch.theme = value("--theme", in: arguments)
             if let size = value("--size", in: arguments)?.split(separator: "x").compactMap({ Double($0) }), size.count == 2 {
@@ -85,6 +93,7 @@ enum CLI {
               pack list|sync|update|clean
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
+              window [dashboard|themes|plugins|config|settings] [--theme NAME]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2

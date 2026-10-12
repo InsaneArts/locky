@@ -13,6 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var themeNames: [String] = []
     /// settings.json: what the menu and the window change.
     private let store = SettingsStore()
+    private lazy var model: AppModel = {
+        let model = AppModel(store: store)
+        model.lockNow = { [weak self] in self?.lockNow() }
+        model.preview = { [weak self] theme in self?.preview(theme: theme) }
+        return model
+    }()
+    private var windowController: LockyWindowController?
     /// The theme picked in the menu (settings.json's theme). It wins over init.lua's until "Use init.lua's
     /// Theme" clears it.
     private var pickedTheme: String? {
@@ -24,6 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? FileManager.default.createDirectory(at: store.config, withIntermediateDirectories: true)
         store.migrateMenuTheme()
         store.watch()
+        store.onChange = { [weak self] in
+            guard let self, windowController?.window?.isVisible == true else { return }
+            model.refresh()
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locky")
         let menu = NSMenu()
@@ -37,12 +48,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             start(mode, options: LockSession.Options(theme: launch.theme, previewSize: launch.size ?? CGSize(width: 1440, height: 900),
                                                      behind: launch.behind, settings: store.settings))
         }
+        if let section = launch.window {
+            model.selectedTheme = launch.theme
+            showWindow(section, behind: launch.behind)
+        }
+    }
+
+    /// Opening Locky again (from Finder, Spotlight, or the Dock) opens its window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWindow(nil)
+        return false
+    }
+
+    private func showWindow(_ section: AppModel.Section?, behind: Bool = false) {
+        let controller = windowController ?? LockyWindowController(model: model)
+        windowController = controller
+        controller.show(section, behind: behind)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(item("Lock Now", #selector(lockNow)))
-        menu.addItem(item("Preview", #selector(preview)))
+        menu.addItem(item("Preview", #selector(previewFromMenu)))
         menu.addItem(.separator())
 
         let themes = NSMenu()
@@ -71,6 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(submenu("Plugins", plugins))
 
         menu.addItem(.separator())
+        menu.addItem(item("Dashboard…", #selector(openDashboard)))
+        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("Check Config", #selector(checkConfig)))
         menu.addItem(item("Open Config Folder", #selector(openConfig)))
         menu.addItem(item("Open Log", #selector(openLog)))
@@ -107,7 +136,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         session?.mode == .lock ? .terminateCancel : .terminateNow
     }
-    @objc private func preview() { start(.preview, options: LockSession.Options(settings: store.settings)) }
+    @objc private func previewFromMenu() { preview(theme: nil) }
+
+    /// A preview window of `theme` (nil: the theme a lock would use), replacing an open preview.
+    private func preview(theme: String?) {
+        guard session?.mode != .lock else { return }
+        if session?.mode == .preview { session?.end("another preview") }
+        start(.preview, options: LockSession.Options(theme: theme, settings: store.settings))
+    }
+
+    @objc private func openDashboard() { showWindow(.dashboard) }
+    @objc private func openSettings() { showWindow(.settings) }
 
     @objc private func pickTheme(_ sender: NSMenuItem) {
         pickedTheme = sender.representedObject as? String
