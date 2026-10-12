@@ -31,6 +31,8 @@ final class AppModel {
     }
 
     var section: Section = .dashboard
+    /// Opened behind other windows for screenshots: previews keep running although hidden.
+    var screenshots = false
     /// The theme the Themes page shows.
     var selectedTheme: String?
     let store: SettingsStore

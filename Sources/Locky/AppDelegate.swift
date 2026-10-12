@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if let section = launch.window {
             model.selectedTheme = launch.theme
+            model.screenshots = launch.behind
             showWindow(section, behind: launch.behind, size: launch.size)
         }
     }

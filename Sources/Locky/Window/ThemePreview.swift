@@ -2,15 +2,19 @@ import AppKit
 import SwiftUI
 
 /// A theme's lock screen, live: laid out at 1440×900 like a real screen and scaled down to fit. It reads
-/// settings.json when it starts, so it shows the window's latest changes after each restart.
+/// settings.json when it starts, so it shows the window's latest changes after each restart. It stops
+/// while its window is hidden, so a forgotten window costs nothing.
 struct ThemePreview: NSViewRepresentable {
     var theme: String
     /// Bumped to start the preview again, after a change to the theme.
     var generation = 0
+    /// Keeps running behind other windows: for screenshots.
+    var alwaysLive = false
 
     func makeNSView(context: Context) -> ThemePreviewView { ThemePreviewView() }
 
     func updateNSView(_ view: ThemePreviewView, context: Context) {
+        view.alwaysLive = alwaysLive
         view.show(theme: theme, generation: generation)
     }
 
@@ -23,6 +27,7 @@ struct ThemePreview: NSViewRepresentable {
 final class ThemePreviewView: NSView {
     static let layoutSize = CGSize(width: 1440, height: 900)
 
+    var alwaysLive = false
     /// Rounds the corners, in screen points.
     private let clip = NSView()
     /// Holds the lock screen at the layout size; its frame is the scaled-down size.
@@ -30,6 +35,7 @@ final class ThemePreviewView: NSView {
     private var session: LockSession?
     private var shown: (theme: String, generation: Int)?
     private var pending: Task<Void, Never>?
+    private var occlusion: NSObjectProtocol?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -52,22 +58,55 @@ final class ThemePreviewView: NSView {
         guard shown?.theme != theme || shown?.generation != generation else { return }
         let first = shown == nil || shown?.theme != theme
         shown = (theme, generation)
-        pending?.cancel()
-        pending = Task { [weak self] in
-            if !first { try? await Task.sleep(for: .milliseconds(250)) }
-            guard !Task.isCancelled, let self else { return }
-            session?.end("preview changed")
-            layoutSubtreeIfNeeded()
-            let session = LockSession(mode: .embedded, options: LockSession.Options(theme: theme, previewSize: Self.layoutSize, container: canvas))
-            self.session = session
-            session.begin()
-        }
+        restart(after: first ? 0 : 0.25)
     }
 
     func stop() {
         pending?.cancel()
         session?.end("preview closed")
         session = nil
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusion = nil
+    }
+
+    private var visible: Bool { alwaysLive || (window?.occlusionState.contains(.visible) ?? false) }
+
+    private func restart(after delay: Double) {
+        pending?.cancel()
+        pending = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard !Task.isCancelled, let self else { return }
+            session?.end("preview changed")
+            session = nil
+            // A hidden preview starts when its window shows.
+            guard let shown, visible else { return }
+            layoutSubtreeIfNeeded()
+            let session = LockSession(mode: .embedded, options: LockSession.Options(theme: shown.theme, previewSize: Self.layoutSize, container: canvas))
+            self.session = session
+            session.begin()
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusion = nil
+        guard let window else { return }
+        occlusion = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window,
+                                                           queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.visibilityChanged() }
+        }
+        visibilityChanged()
+    }
+
+    private func visibilityChanged() {
+        if visible, session == nil, shown != nil {
+            restart(after: 0)
+        } else if !visible, session != nil {
+            pending?.cancel()
+            session?.end("window hidden")
+            session = nil
+        }
     }
 
     override func layout() {
