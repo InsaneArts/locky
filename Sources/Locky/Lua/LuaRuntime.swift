@@ -214,6 +214,8 @@ final class LuaRuntime: @unchecked Sendable {
         if FileManager.default.fileExists(atPath: initFile.path) {
             runFile(initFile, budget: Budget.config)
         }
+        // Again, so plugin scripts see settings.json's values (privacy) over what init.lua set.
+        applySettings(settings, reported: reported)
         for script in path.pluginScripts() {
             runFile(script, budget: Budget.pluginScript)
         }

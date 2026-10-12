@@ -727,4 +727,14 @@ import Testing
         #expect(list.contains { $0["id"] == .string("t") })
         #expect(list.first { $0["id"] == .string("cycle3") }?["palette"]["accent"] == .string("#ff0000"))
     }
+    @Test func pluginScriptsSeeSettingsPrivacyOverInitLuas() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        try sandbox.write("init.lua", "locky.setup({ privacy = false })")
+        try sandbox.write("plugin/p.lua", "NAME = locky.sys.user().name")
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        #expect(runtime.bootForTest().isEmpty)
+        #expect(try runtime.eval("return NAME") == [.string("user")])
+        runtime.stop()
+    }
 }
