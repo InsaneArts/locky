@@ -70,12 +70,18 @@ final class SettingsStore {
         do {
             try copy.save(config: config)
             // Read back as JSON reads it (a whole 60.0 comes back as 60), so the next file event finds no change.
-            let saved = Settings.load(config: config).settings
-            settings = saved
-            remember(saved)
+            let (saved, readProblem) = Settings.load(config: config)
+            if let readProblem {
+                settings = copy
+                self.problem = readProblem
+            } else {
+                settings = saved
+                remember(saved)
+            }
             onChange?()
         } catch {
-            self.problem = "Could not save \(LuaError.shortenPaths(Settings.url(config: config).path)): \(error.localizedDescription)"
+            let reason = (error as? LuaError)?.message ?? error.localizedDescription
+            self.problem = "Could not save \(LuaError.shortenPaths(Settings.url(config: config).path)): \(reason)"
         }
     }
 

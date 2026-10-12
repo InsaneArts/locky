@@ -625,6 +625,16 @@ import Testing
         #expect(Settings.load(file: target).settings["theme"] == .string("glass"))
     }
 
+    @Test func aSaveThatWouldPassOneMegabyteIsRefused() throws {
+        let sandbox = try Sandbox()
+        let store = SettingsStore(config: sandbox.config)
+        store.update { $0["theme"] = .string("glass") }
+        store.update { $0["message"] = .string(String(repeating: "x", count: 1_100_000)) }
+        #expect(store.problem?.contains("1 MB") == true)
+        #expect(Settings.load(config: sandbox.config).settings["theme"] == .string("glass"))
+        #expect(store.settings["theme"] == .string("glass"))
+    }
+
     @Test func theStoresOwnSaveReportsOneChange() throws {
         let sandbox = try Sandbox()
         let store = SettingsStore(config: sandbox.config)

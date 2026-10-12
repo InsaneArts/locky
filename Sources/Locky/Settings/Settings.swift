@@ -57,6 +57,8 @@ struct Settings: Equatable, Sendable {
         let object = try values.mapValues { try $0.jsonObject() }
         var data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         data.append(0x0A)
+        // load refuses a larger file, so writing one would leave settings that cannot be read back.
+        guard data.count <= 1 << 20 else { throw LuaError("settings.json would grow past 1 MB") }
         try data.write(to: url, options: .atomic)
     }
 
