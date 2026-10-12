@@ -5,6 +5,7 @@ local ui = locky.ui
 locky.widget.define("keyboard", {
   description = "The keyboard layout",
   opts = { style = "name", size = 12 },
+  choices = { style = { "name", "code" } },
   init = function(self)
     self:every(1, function(self)
       local k = locky.sys.keyboard()

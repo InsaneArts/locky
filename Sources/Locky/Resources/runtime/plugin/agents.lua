@@ -26,6 +26,7 @@ locky.widget.define("agents", {
   description = "herdr coding agents: blocked, done, and working",
   card = true,
   opts = { style = "list", rows = 4, title = "Agents", offline = "herdr is not running", every = 3, size = 13 },
+  choices = { style = { "list", "summary", "dots", "board" } },
   init = function(self)
     herdr.watch(self, self.opts.every, function(self, data)
       self:set({ data = data })

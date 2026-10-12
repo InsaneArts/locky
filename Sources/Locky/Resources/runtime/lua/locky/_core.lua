@@ -636,6 +636,8 @@ locky.widget = {}
 ---   opts          optional: default options; a theme's and the user's options merge into them
 ---   size          optional: { width, height } in points; without it the widget fits its content
 ---   card          optional: true to sit on the theme's card unless the theme says otherwise
+---   choices       optional: the values an option takes, for the Locky window's editor, such as
+---                 { style = { "list", "dots" } }
 ---   description   optional
 function locky.widget.define(name, spec)
   validate("name", name, function(v)
@@ -646,6 +648,23 @@ function locky.widget.define(name, spec)
   validate("spec.init", spec.init, "callable", true)
   validate("spec.opts", spec.opts, "table", true)
   validate("spec.size", spec.size, "table", true)
+  validate("spec.choices", spec.choices, function(v)
+    local expected = "expected lists of strings by option, such as { style = { \"list\", \"dots\" } }"
+    if type(v) ~= "table" then
+      return false, expected
+    end
+    for key, list in pairs(v) do
+      if type(key) ~= "string" or not tbl.islist(list) or #list == 0 then
+        return false, expected
+      end
+      for _, item in ipairs(list) do
+        if type(item) ~= "string" then
+          return false, expected
+        end
+      end
+    end
+    return true
+  end, true)
   local definition = tbl.extend("force", spec)
   definition.name = name
   definition.source = caller(2)
@@ -663,6 +682,14 @@ function locky.widget.list()
   local names = tbl.keys(widgets)
   sort(names)
   return names
+end
+
+-- The options a placement of widget `name` gets: the widget's defaults, then the theme's, then init.lua's
+-- (locky.setup({ widgets = ... })), then settings.json's. `with_settings = false` leaves settings.json's out.
+local function widget_opts(name, placement, with_settings)
+  local definition = widgets[name] or {}
+  return tbl.deep_extend("force", definition.opts or {}, placement.opts or {}, locky.config.widgets[name] or {},
+    with_settings ~= false and placement.settings_opts or nil)
 end
 
 local Instance = {}
@@ -1243,12 +1270,14 @@ return {
   load_theme = function(name, with_edit)
     current_theme = load_theme(name, with_edit)
     locky.theme.current = current_theme
-    -- The host gets plain data; options stay here, so they may hold functions.
+    -- The host gets plain data: options keep their functions here, and the host gets a plain copy of each
+    -- placement's options, to tell whether a widget changed when the theme editor's preview loads the theme again.
     local exported = tbl.extend("force", current_theme)
     exported.widgets = {}
     for i, placement in ipairs(current_theme.widgets) do
       exported.widgets[i] = tbl.extend("force", placement)
-      exported.widgets[i].opts = nil
+      local ok, opts = pcall(widget_opts, placement.widget, placement)
+      exported.widgets[i].opts = ok and plain(opts) or nil
       exported.widgets[i].settings_opts = nil
       local definition = widgets[placement.widget]
       exported.widgets[i].known = definition ~= nil
@@ -1271,10 +1300,8 @@ return {
     local instance = raw_setmetatable({
       id = last_instance,
       name = definition.name,
-      -- The widget's defaults, then the theme's options, then init.lua's, then settings.json's: the user has
-      -- the last word, and the window's layer wins, as everywhere.
-      opts = tbl.deep_extend("force", definition.opts or {}, placement.opts, locky.config.widgets[definition.name] or {},
-        placement.settings_opts),
+      -- The user has the last word, and the window's layer wins, as everywhere.
+      opts = widget_opts(definition.name, placement),
       state = {},
       theme = current_theme,
     }, Instance)
@@ -1348,27 +1375,38 @@ return {
     return list
   end,
 
-  -- The theme as init.lua and plugins leave it, before the window's changes: what Reset goes back to.
+  -- The theme as init.lua and plugins leave it, before the window's changes: what Reset goes back to. Each
+  -- placement's options are the ones it gets before settings.json's.
   theme_layout = function(name)
     local theme = normalize_theme(name, read_theme(name), false)
     local widgets_list = {}
     for i, placement in ipairs(theme.widgets) do
+      local ok, opts = pcall(widget_opts, placement.widget, placement, false)
       widgets_list[i] = {
         widget = placement.widget, anchor = placement.anchor, offset = placement.offset, size = placement.size,
-        align = placement.align, card = plain(placement.card), display = placement.display,
+        align = placement.align, card = plain(placement.card), display = placement.display, opts = ok and plain(opts) or nil,
       }
     end
-    return { id = name, name = theme.name, background = plain(theme.background), widgets = widgets_list }
+    return {
+      id = name, name = theme.name, background = plain(theme.background), widgets = widgets_list,
+      auth = { anchor = theme.auth.anchor, offset = plain(theme.auth.offset) },
+    }
   end,
 
-  -- Every widget: name, description, the file that defines it, and whether it sits on a card by default. Like
-  -- theme_infos, one widget that fails gets an error row.
+  -- Every widget: name, description, the file that defines it, whether it sits on a card by default, its
+  -- options with init.lua's, and the values its options take. Like theme_infos, one widget that fails gets an
+  -- error row.
   widget_catalog = function()
     local list = {}
     for _, name in ipairs(locky.widget.list()) do
       local definition = widgets[name]
       local ok, info = pcall(function()
-        return { name = name, description = text(definition.description), file = text(definition.file), card = definition.card == true }
+        -- init.lua's options may not be a table: the row still lists the widget.
+        local opts_ok, opts = pcall(widget_opts, name, {}, false)
+        return {
+          name = name, description = text(definition.description), file = text(definition.file), card = definition.card == true,
+          opts = opts_ok and plain(opts) or nil, choices = plain(definition.choices),
+        }
       end)
       list[#list + 1] = ok and info or { name = name, error = error_text(info) }
     end

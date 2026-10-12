@@ -397,6 +397,56 @@ import Testing
         #expect(started.theme.auth.style == "pill")
     }
 
+    /// The theme editor's preview tells a changed widget from an unchanged one by the options it gets.
+    @Test func eachPlacementCarriesTheOptionsItsInstanceGets() async throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("init.lua", "locky.setup({ widgets = { two = { color = 'red' } } })")
+        try Settings(["themes": .table(["t": .table(["widgets": .array([
+            .table(["ref": .int(2), "widget": .string("two"), "opts": .table(["size": .int(50)])]),
+        ])])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        let started = await runtime.start(theme: "t")
+        runtime.stop()
+        #expect(started.theme.widgets.first?.options == .table(["size": .int(50), "color": .string("red")]))
+    }
+
+    /// What the editor shows for a placement: its options before settings.json's, and the field's own place.
+    @Test func theLayoutHasOptionsBeforeSettingsAndThePasswordFieldsPlace() throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("init.lua", "locky.setup({ widgets = { two = { color = 'red' } } })")
+        try Settings(["themes": .table(["t": .table([
+            "widgets": .array([.table(["ref": .int(2), "widget": .string("two"), "opts": .table(["size": .int(50)])])]),
+            "auth": .table(["anchor": .string("top")]),
+        ])])]).save(config: sandbox.config)
+        let runtime = runtime(sandbox)
+        _ = runtime.bootForTest()
+        let layout = try runtime.sync { try runtime.call("theme_layout", [.string("t")], budget: 1) }.first ?? .nil
+        #expect(layout["widgets"][1]["opts"] == .table(["size": .int(20), "color": .string("red")]))
+        #expect(layout["auth"]["anchor"] == .string("bottom"))
+        #expect(layout["auth"]["offset"] == .array([.int(0), .int(-60)]))
+    }
+
+    @Test func theCatalogHasEachWidgetsOptionsAndChoices() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/w.lua", """
+        locky.widget.define("w", { opts = { style = "list", size = 12 }, choices = { style = { "list", "dots" } }, render = function() end })
+        """)
+        try sandbox.write("init.lua", "locky.setup({ widgets = { w = { size = 14 } } })")
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        let catalog = try runtime.sync { try runtime.call("widget_catalog", budget: 1) }.first?.array ?? []
+        let w = try #require(catalog.first { $0["name"] == .string("w") })
+        #expect(w["opts"] == .table(["style": .string("list"), "size": .int(14)]))
+        #expect(w["choices"]["style"] == .array([.string("list"), .string("dots")]))
+    }
+
+    @Test func choicesMustBeListsOfStrings() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/w.lua", "locky.widget.define('w', { choices = { style = 'list' }, render = function() end })")
+        let problems = runtime(sandbox).bootForTest()
+        #expect(problems.first?.contains("spec.choices: expected lists of strings by option") == true, "\(problems)")
+    }
+
     /// The window reads these lists with try?, so one theme or widget that failed them emptied the whole page.
     @Test func oneOddThemeOrWidgetSpoilsOnlyItsOwnRow() throws {
         let sandbox = try themeSandbox()

@@ -15,7 +15,7 @@ minus what [plugins.md](plugins.md#the-rules-that-keep-the-lock-screen-safe) lis
 
 | | |
 |---|---|
-| `locky.widget.define(name, spec)` | Defines a widget. `spec`: `render(self)` (required), `init(self)`, `opts`, `size = { w, h }`, `card`, `description`. Names may contain letters, digits, `_`, `-`, and `.`; a package prefixes its own, such as `"synthwave.sun"`. |
+| `locky.widget.define(name, spec)` | Defines a widget. `spec`: `render(self)` (required), `init(self)`, `opts`, `size = { w, h }`, `card`, `description`, and `choices` (the values an option takes, such as `{ style = { "list", "dots" } }`: the Locky window's editor offers them in a menu). Names may contain letters, digits, `_`, `-`, and `.`; a package prefixes its own, such as `"synthwave.sun"`. |
 | `locky.widget.get(name)`, `locky.widget.list()` | A definition; all names. |
 
 Inside `init` and `render`, `self` is the widget instance:

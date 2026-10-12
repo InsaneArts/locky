@@ -22,6 +22,7 @@ end
 locky.widget.define("analog", {
   description = "An analog clock",
   opts = { style = "minimal", size = 260, seconds = true },
+  choices = { style = { "minimal", "railway", "braun" } },
   init = function(self)
     self:every(self.opts.seconds and 1 or 60, function(self) self:set({ t = os.time() }) end, { align = true })
   end,

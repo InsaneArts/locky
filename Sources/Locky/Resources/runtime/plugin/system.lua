@@ -7,6 +7,7 @@ locky.widget.define("system", {
   description = "CPU and memory use",
   card = true,
   opts = { style = "rings", every = 2, size = 13, history = 60 },
+  choices = { style = { "rings", "bars", "chart", "text" } },
   init = function(self)
     self.state.history = {}
     self:every(self.opts.every, function(self)

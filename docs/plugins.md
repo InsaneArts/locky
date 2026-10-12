@@ -54,6 +54,7 @@ locky.widget.define("uptime", {
   description = "How long the Mac has been on",
   card = true,                         -- sit on the theme's card unless the theme says otherwise
   opts = { label = "Up" },             -- defaults; the theme's and the user's options merge in
+  choices = { label = { "Up", "On" } }, -- optional: the values an option takes, for the window's editor
   init = function(self)
     self:every(60, function(self)      -- runs now, then every minute; stops when the lock opens
       self:set({ seconds = locky.sys.uptime() })

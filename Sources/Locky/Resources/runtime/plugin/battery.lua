@@ -29,6 +29,7 @@ locky.widget.define("battery", {
   description = "Battery charge and time left",
   card = true,
   opts = { style = "row", low = 20, size = 15 },
+  choices = { style = { "row", "compact", "ring" } },
   init = function(self)
     self:every(30, function(self)
       self:set({ battery = locky.sys.battery() })

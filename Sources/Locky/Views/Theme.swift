@@ -68,6 +68,9 @@ struct Theme: Sendable, Equatable {
         var card: String?
         var allDisplays: Bool
         var known: Bool
+        /// The options the widget's instance gets, as plain data: the theme editor's preview keeps an instance
+        /// while they stay the same.
+        var options: LuaValue = .nil
     }
 
     var id: String
@@ -158,7 +161,8 @@ struct Theme: Sendable, Equatable {
                 align: entry["align"].string,
                 card: card,
                 allDisplays: entry["display"].string == "all",
-                known: entry["known"].bool ?? false
+                known: entry["known"].bool ?? false,
+                options: entry["opts"]
             )
         }
         background = try Self.background(value["background"], palette: palette, directory: directory, path: path)
