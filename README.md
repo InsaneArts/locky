@@ -9,7 +9,7 @@ natively with SwiftUI and Metal.
 ## Build
 
 ```sh
-Scripts/package_app.sh            # builds Locky.app
+Scripts/package_app.sh            # builds Locky.app and installs it in /Applications
 open Locky.app                    # the lock icon appears in the menu bar
 swift test                        # the test suite
 ```

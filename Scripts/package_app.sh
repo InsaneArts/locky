@@ -50,3 +50,13 @@ else
   codesign --force --options runtime --sign "$APP_IDENTITY" "$APP"
 fi
 echo "Built $APP"
+
+# Install the build in /Applications, where Launch at Login expects a stable path. INSTALL=0 skips it.
+if [[ "${INSTALL:-1}" == "1" ]]; then
+  DEST="${INSTALL_DIR:-/Applications}/$APP_NAME.app"
+  if rm -rf "$DEST" && ditto "$APP" "$DEST"; then
+    echo "Installed $DEST"
+  else
+    echo "WARN: could not install $DEST; the build is at $APP" >&2
+  fi
+fi

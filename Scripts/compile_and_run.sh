@@ -55,6 +55,8 @@ else
 fi
 
 log "==> launch app"
+# package_app.sh installs the build in /Applications; run that copy.
+[[ -d "/Applications/${APP_NAME}.app" ]] && APP_BUNDLE="/Applications/${APP_NAME}.app"
 if ! open "${APP_BUNDLE}"; then
   log "WARN: open failed; launching binary directly."
   "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}" >/dev/null 2>&1 &
