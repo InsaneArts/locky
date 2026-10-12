@@ -56,7 +56,7 @@ import Testing
         try sandbox.write("themes/broken.lua", "return 5")
         try sandbox.write("plugin/w.lua", "locky.widget.define('w', { card = true, render = function() end })")
         try Settings(["privacy": .bool(false), "packs": .array([.string("someone/locky-weather")])]).save(config: sandbox.config)
-        let inspection = await Inspection.load(config: sandbox.config)
+        let inspection = await Inspection.load(config: sandbox.config, settings: Settings.load(config: sandbox.config).settings)
         #expect(inspection.loaded)
         #expect(inspection.theme("mine")?.name == "Mine")
         #expect(inspection.theme("mine")?.palette["bg"] == "#123456")

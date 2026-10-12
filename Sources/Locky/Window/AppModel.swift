@@ -82,8 +82,9 @@ final class AppModel {
         refreshing = Task {
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
-            let result = await Inspection.load(config: config)
+            var result = await Inspection.load(config: config, settings: store.settings)
             guard !Task.isCancelled else { return }
+            if let problem = store.problem { result.problems.insert(problem, at: 0) }
             inspection = result
             revision += 1
             if selectedTheme == nil || result.theme(selectedTheme!) == nil { selectedTheme = activeTheme }

@@ -56,11 +56,13 @@ struct Inspection: Sendable {
     func theme(_ id: String) -> ThemeInfo? { themes.first { $0.id == id } }
     func widget(_ name: String) -> WidgetInfo? { widgets.first { $0.name == name } }
 
-    static func load(config: URL) async -> Inspection {
+    /// `settings` is the app's copy of settings.json, which a lock uses too: while the file has an error, the last
+    /// one that read without one.
+    static func load(config: URL, settings: Settings) async -> Inspection {
         await background {
             var result = Inspection()
             let path = RuntimePath.standard(config: config)
-            let runtime = LuaRuntime(path: path, delegate: .silent)
+            let runtime = LuaRuntime(path: path, settings: settings, delegate: .silent)
             runtime.sync {
                 try? runtime.boot()
                 result.problems = runtime.problemsSoFar
