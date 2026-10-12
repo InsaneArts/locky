@@ -44,13 +44,13 @@ if [[ -n "${RELEASE_ARCHES}" ]]; then
 fi
 
 log "==> package app"
-# A stable identity keeps macOS Automation grants across rebuilds; ad-hoc signing resets them.
-APP_IDENTITY=${APP_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | head -1)}
-if [[ -n "${APP_IDENTITY}" ]]; then
+# A stable identity keeps camera and Automation grants across rebuilds; ad-hoc signing resets them. The
+# identity is never picked automatically: this Mac's keychain holds certificates of other teams.
+if [[ -n "${APP_IDENTITY:-}" ]]; then
   log "==> signing with ${APP_IDENTITY}"
   SIGNING_MODE=dev APP_IDENTITY="${APP_IDENTITY}" ARCHES="${ARCHES_VALUE}" "${ROOT_DIR}/Scripts/package_app.sh" release
 else
-  log "WARN: no Apple Development identity; ad-hoc signing resets Automation grants on every build."
+  log "==> ad-hoc signing (set APP_IDENTITY to keep permission grants across builds)"
   SIGNING_MODE=adhoc ARCHES="${ARCHES_VALUE}" "${ROOT_DIR}/Scripts/package_app.sh" release
 fi
 
