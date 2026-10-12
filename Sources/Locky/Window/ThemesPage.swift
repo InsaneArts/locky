@@ -30,9 +30,11 @@ struct ThemesPage: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 14) {
                     ForEach(model.inspection.themes) { info in
-                        ThemeCard(info: info, selected: info.id == model.selectedTheme, active: info.id == model.activeTheme)
-                            .id(info.id)
-                            .onTapGesture { model.selectedTheme = info.id }
+                        Button { model.selectedTheme = info.id } label: {
+                            ThemeCard(info: info, selected: info.id == model.selectedTheme, active: info.id == model.activeTheme)
+                        }
+                        .buttonStyle(.plain)
+                        .id(info.id)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -121,7 +123,7 @@ private struct ThemeCard: View {
         .frame(width: 168)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     @ViewBuilder private var thumbnail: some View {
