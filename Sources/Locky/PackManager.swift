@@ -244,7 +244,10 @@ struct PackManager {
     /// Fetches an installed package and finds the commit `update` would move it to, without moving it.
     private func check(_ spec: Spec, src: String, locked: Lockfile.Entry?) -> PackUpdate {
         let dir = path.packs.appending(path: spec.name)
-        guard let locked, isClone(dir) else { return PackUpdate(name: spec.name) }
+        guard isClone(dir) else { return PackUpdate(name: spec.name) }
+        // Installed, but the lockfile has no commit for it (dotfiles without the lockfile): there is nothing to
+        // compare with until sync pins one.
+        guard let locked else { return PackUpdate(name: spec.name, unlocked: true) }
         var result = PackUpdate(name: spec.name, current: locked.rev)
         // The clone still fetches from the old source; sync moves it to the new one.
         guard runGit(["-C", dir.path, "remote", "get-url", "origin"]).output == src else {
@@ -344,16 +347,20 @@ struct PackManager {
 /// What `locky pack check` found for one package from git.
 struct PackUpdate: Equatable {
     var name: String
-    /// The locked commit; nil when the package is not installed.
+    /// The locked commit; nil when the package is not installed or not locked.
     var current: String?
     /// The commit its version (or the default branch) names upstream, after a fetch.
     var latest: String?
     /// Why the check failed.
     var error: String?
+    /// Installed, but the lockfile has no commit for it.
+    var unlocked = false
 
-    /// "name: up to date", "name: update available abc1234 → def5678", "name: not installed", or the error.
+    /// "name: up to date", "name: update available abc1234 → def5678", "name: not installed", "name: not locked; …",
+    /// or the error.
     var line: String {
         if let error { return "\(name): \(error)" }
+        if unlocked { return "\(name): not locked; run `locky pack sync`" }
         guard let current, let latest else { return "\(name): not installed" }
         return current == latest ? "\(name): up to date" : "\(name): update available \(current.prefix(7)) → \(latest.prefix(7))"
     }

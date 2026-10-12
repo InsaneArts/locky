@@ -258,6 +258,18 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: clone.path))
     }
 
+    /// Dotfiles without the lockfile: the clone is there, but nothing pins it. That is not "not installed".
+    @Test func aCloneWithoutALockEntryIsNotLocked() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        try FileManager.default.removeItem(at: sandbox.path().lockfile)
+        let report = manager.run(.check)
+        #expect(report.ok)
+        #expect(report.text == "hello: not locked; run `locky pack sync`")
+        #expect(report.updates == [PackUpdate(name: "hello", unlocked: true)])
+    }
+
     @Test func checkMovesNoCheckoutAndNoLockfile() throws {
         let sandbox = try Sandbox()
         let repo = try makePlugin(in: sandbox, greeting: "hello")
