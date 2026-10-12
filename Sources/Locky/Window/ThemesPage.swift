@@ -35,6 +35,8 @@ struct ThemesPage: View {
                 .task(id: "\(info.id)-\(model.inspection.sources)") {
                     let next = ThemeEditing(theme: info, model: model)
                     await next.load()
+                    // A newer load replaced this one.
+                    guard !Task.isCancelled else { return }
                     editing = next
                 }
                 .onChange(of: info.id) {
