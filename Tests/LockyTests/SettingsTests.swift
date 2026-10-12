@@ -309,6 +309,9 @@ import Testing
         ("5", ""),
         (#"{ "background": { "blur": "soft" } }"#, ".background.blur"),
         (##"{ "background": { "gradient": ["#000000", 5] } }"##, ".background.gradient"),
+        (#"{ "auth": 5 }"#, ".auth"),
+        (#"{ "auth": { "anchor": "middle" } }"#, ".auth.anchor"),
+        (#"{ "auth": { "offset": [1] } }"#, ".auth.offset"),
     ])
     func aBadFieldIsReportedAndTheThemeLoadsWithoutTheEdit(edit: String, field: String) async throws {
         let sandbox = try themeSandbox()
@@ -379,6 +382,19 @@ import Testing
         #expect(three["file"].string?.hasSuffix("config/plugin/widgets.lua") == true)
         // The core widgets are there too.
         #expect(catalog.contains { $0["name"] == .string("clock") })
+    }
+
+    @Test func settingsMoveThePasswordField() async throws {
+        let sandbox = try themeSandbox()
+        try sandbox.write("settings.json", #"{ "themes": { "t": { "auth": { "anchor": "top-left", "offset": [40, 50] } } } }"#)
+        let runtime = runtime(sandbox)
+        let started = await runtime.start(theme: "t")
+        runtime.stop()
+        #expect(started.problems.isEmpty, "\(started.problems)")
+        #expect(started.theme.auth.anchor == .topLeft)
+        #expect(started.theme.auth.offset == CGPoint(x: 40, y: 50))
+        // Only the place changes; the rest of the field is the theme's.
+        #expect(started.theme.auth.style == "pill")
     }
 
     /// The window reads these lists with try?, so one theme or widget that failed them emptied the whole page.

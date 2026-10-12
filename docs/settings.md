@@ -26,7 +26,7 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 |---|---|---|
 | `theme` | A theme id, such as `"mocha"` | Themes › Use This Theme, or the menu |
 | `schedule` | `{ "mode": "time", "day": "glass", "night": "default", "day_starts": "07:00", "night_starts": "19:00" }`, or `{ "mode": "appearance", "light": "glass", "dark": "default" }` | Settings › Theme Schedule |
-| `themes` | `{ "<id>": { "background": {…}, "widgets": […] } }`: see below | Themes › Background and Widgets |
+| `themes` | `{ "<id>": { "background": {…}, "widgets": […], "auth": {…} } }`: see below | Themes › Background and Widgets |
 | `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, a git URL, or `{ "src": …, "version": …, "name": … }` | Plugins › Install |
 | `message` | A line under the password field | Settings › Lock Screen |
 | `hour24` | `true` or `false`: a 24- or 12-hour clock in every theme | Settings › Lock Screen |
@@ -67,6 +67,9 @@ adds a widget:
 If the theme changes later (a plugin update moves its widgets), an entry finds its placement by widget name,
 and an entry whose widget the theme no longer has goes away. A bad entry is reported, and the theme loads
 without the change.
+
+`themes.<id>.auth` moves the password field, such as `{ "anchor": "bottom", "offset": [0, -80] }`. The rest of
+the field stays the theme's.
 
 ## The window
 

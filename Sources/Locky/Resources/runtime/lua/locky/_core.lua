@@ -893,18 +893,28 @@ local function settings_background(where, background)
   return result
 end
 
--- What the window changed in `theme`: its background, and its widget list. A widget entry with `ref` is the
--- theme's own placement number `ref` (keeping its options) with the entry's fields on top; an entry without
--- `ref` adds a widget. Returns nil for no change; raises on a bad entry, so nothing half-applies.
+-- What the window changed in `theme`: its background, its widget list, and where its password field sits. A
+-- widget entry with `ref` is the theme's own placement number `ref` (keeping its options) with the entry's
+-- fields on top; an entry without `ref` adds a widget. Returns nil for no change; raises on a bad entry, so
+-- nothing half-applies.
 local function settings_edit(name, theme, edit)
   local where = "settings.json themes." .. name
   validate(where, edit, "table", true)
-  if edit == nil or (edit.background == nil and edit.widgets == nil) then
+  if edit == nil or (edit.background == nil and edit.widgets == nil and edit.auth == nil) then
     return nil
   end
   local result = {}
   if edit.background ~= nil then
     result.background = settings_background(where .. ".background", edit.background)
+  end
+  if edit.auth ~= nil then
+    validate(where .. ".auth", edit.auth, "table")
+    validate(where .. ".auth.anchor", edit.auth.anchor, function(v)
+      return anchors[v] ~= nil, "expected an anchor such as top or bottom-right"
+    end, true)
+    point(where .. ".auth.offset", edit.auth.offset)
+    -- The place only: the rest of the field is the theme's.
+    result.auth = { anchor = edit.auth.anchor, offset = edit.auth.offset and { edit.auth.offset[1], edit.auth.offset[2] } }
   end
   if edit.widgets ~= nil then
     validate(where .. ".widgets", edit.widgets, function(v)
@@ -1005,9 +1015,12 @@ local function load_theme(name, with_edit)
     end
   end
   if edit then
-    local background, widgets = theme.background, theme.widgets
+    local background, widgets, auth = theme.background, theme.widgets, theme.auth
     theme.background = edit.background or background
     theme.widgets = edit.widgets or widgets
+    if edit.auth then
+      theme.auth = tbl.deep_extend("force", type(auth) == "table" and auth or {}, edit.auth)
+    end
     local ok, normalized = pcall(normalize_theme, name, theme, edit.background ~= nil)
     if ok then
       normalized.edited = true
@@ -1016,7 +1029,7 @@ local function load_theme(name, with_edit)
     end
     -- Checked above, so this should not happen; if it does, the theme still loads.
     problems[#problems + 1] = ("settings.json themes.%s: %s"):format(name, without_core_position(normalized))
-    theme.background, theme.widgets = background, widgets
+    theme.background, theme.widgets, theme.auth = background, widgets, auth
   end
   local normalized = normalize_theme(name, theme, false)
   normalized.edited = false
