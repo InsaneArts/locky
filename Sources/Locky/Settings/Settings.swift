@@ -24,8 +24,15 @@ struct Settings: Equatable, Sendable {
     }
 
     static func load(file url: URL) -> (settings: Settings, problem: String?) {
-        guard FileManager.default.fileExists(atPath: url.path) else { return (Settings(), nil) }
         let name = LuaError.shortenPaths(url.path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            // A link to a file that is not there (dotfiles on a volume not mounted yet) is an error, not "no
+            // settings": empty settings would replace the last good ones, and a save would replace the link.
+            if let target = try? FileManager.default.destinationOfSymbolicLink(atPath: url.path) {
+                return (Settings(), "\(name) links to \(LuaError.shortenPaths(target)), which is not there")
+            }
+            return (Settings(), nil)
+        }
         do {
             // The size of the file a symlink points at, not of the link.
             let size = (try FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path)[.size] as? Int) ?? 0

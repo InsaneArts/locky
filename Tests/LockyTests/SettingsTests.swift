@@ -591,6 +591,25 @@ import Testing
         #expect(store.problem != nil)
     }
 
+    @Test func aLinkToAMissingFileIsAProblemAndKeepsTheLastGoodSettings() throws {
+        let sandbox = try Sandbox()
+        let lastGood = sandbox.root.appending(path: "support/last-good.json")
+        let good = Settings(["theme": .string("glass"), "privacy": .bool(true)])
+        try good.save(config: sandbox.config)
+        _ = SettingsStore(config: sandbox.config, lastGood: lastGood)
+        // The dotfiles volume is not mounted at login: settings.json links to nothing.
+        try FileManager.default.removeItem(at: Settings.url(config: sandbox.config))
+        try FileManager.default.createSymbolicLink(at: Settings.url(config: sandbox.config),
+                                                   withDestinationURL: sandbox.root.appending(path: "Volumes/dotfiles/settings.json"))
+        let store = SettingsStore(config: sandbox.config, lastGood: lastGood)
+        #expect(store.problem?.contains("not there") == true)
+        #expect(store.settings == good)
+        #expect(Settings.load(file: lastGood).settings == good)
+        // A change waits for the link to work again, and the link stays.
+        store.update { $0["theme"] = .string("mocha") }
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: Settings.url(config: sandbox.config).path)) != nil)
+    }
+
     @Test func theStoresOwnSaveReportsOneChange() throws {
         let sandbox = try Sandbox()
         let store = SettingsStore(config: sandbox.config)
