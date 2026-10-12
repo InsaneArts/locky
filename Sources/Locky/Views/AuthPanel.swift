@@ -347,7 +347,8 @@ struct AuthPanel: View {
     }
 
     private var hint: some View {
-        let text = auth.style == "minimal" ? "Type your password to unlock"
+        let text = model.needsClick ? "Click to unlock"
+            : auth.style == "minimal" ? "Type your password to unlock"
             : touchID == nil || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
         return Text(wrong > 0 ? "Wrong password" : text)
             .font(font(12, "medium"))

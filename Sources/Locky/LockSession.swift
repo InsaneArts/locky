@@ -233,6 +233,9 @@ final class LockSession: NSObject, NSWindowDelegate {
             }
             guard let self, !ended else { return }
             authModel.needsClick = !(windows.first?.isKeyWindow ?? false)
+            // A theme that hides the field until a key press (Glass) gets no key press now: show it, so the
+            // request to click shows too.
+            if authModel.needsClick { screens.first?.setAuthVisible(true, dim: auth?.dim ?? 0, animated: true) }
         }
     }
 
