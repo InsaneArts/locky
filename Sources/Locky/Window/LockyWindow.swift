@@ -24,12 +24,14 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    /// Brings the window up at `section`. `behind` keeps it behind other windows, for screenshots.
-    func show(_ section: AppModel.Section? = nil, behind: Bool = false) {
+    /// Brings the window up at `section`. `behind` keeps it behind other windows, and `size` sets its content
+    /// size: both for screenshots.
+    func show(_ section: AppModel.Section? = nil, behind: Bool = false, size: CGSize? = nil) {
         if let section { model.section = section }
         model.startWatching()
         model.refresh()
         guard let window else { return }
+        if let size { window.setContentSize(size) }
         if behind {
             window.orderBack(nil)
             return

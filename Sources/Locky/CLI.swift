@@ -93,7 +93,7 @@ enum CLI {
               pack list|sync|update|clean
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
-              window [dashboard|themes|plugins|config|settings] [--theme NAME]
+              window [dashboard|themes|plugins|config|settings] [--theme NAME] [--size 1240x780]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2

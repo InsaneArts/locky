@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if let section = launch.window {
             model.selectedTheme = launch.theme
-            showWindow(section, behind: launch.behind)
+            showWindow(section, behind: launch.behind, size: launch.size)
         }
     }
 
@@ -60,10 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return false
     }
 
-    private func showWindow(_ section: AppModel.Section?, behind: Bool = false) {
+    private func showWindow(_ section: AppModel.Section?, behind: Bool = false, size: CGSize? = nil) {
         let controller = windowController ?? LockyWindowController(model: model)
         windowController = controller
-        controller.show(section, behind: behind)
+        controller.show(section, behind: behind, size: size)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

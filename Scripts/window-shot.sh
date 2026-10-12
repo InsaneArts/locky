@@ -4,6 +4,7 @@
 #
 #   Scripts/window-shot.sh SECTION OUT.png [THEME]      # dashboard, themes, plugins, config, or settings
 #
+# SIZE (default 1240x780) is the window's content size; a tall one shows a long page whole.
 # WAIT (seconds, default 4) is how long the page gets to load. Locky's config folder is an empty one unless
 # LOCKY_CONFIG_DIR names one. Needs Locky.app built (Scripts/package_app.sh).
 set -euo pipefail
@@ -18,7 +19,7 @@ TOOL="$ROOT/.build/window-id"
 
 CONFIG=${LOCKY_CONFIG_DIR:-$(mktemp -d)}
 TITLE="$(tr '[:lower:]' '[:upper:]' <<< "${SECTION:0:1}")${SECTION:1}"
-ARGS=(window "$SECTION" --behind)
+ARGS=(window "$SECTION" --behind --size "${SIZE:-1240x780}")
 [[ -n "${3:-}" ]] && ARGS+=(--theme "$3")
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" "$BIN" "${ARGS[@]}" >/dev/null 2>&1 &
 PID=$!
