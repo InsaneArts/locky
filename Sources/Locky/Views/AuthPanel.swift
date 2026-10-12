@@ -46,6 +46,10 @@ final class AuthModel {
     /// The lock could not take the keyboard (macOS refused it): the field asks for a click instead of looking
     /// ready for typing, so nobody types the password into the app behind the lock.
     var needsClick = false
+    /// Wrong passwords so far, and whether a check (or the wait after the third wrong one) runs. Here and not in
+    /// the field, so a rebuilt field (a display added, the power changed) keeps the wait.
+    var wrong = 0
+    var checking = false
     /// The user the field shows; privacy mode can change it while the field stays.
     var user = Auth.User(name: "", login: "user", host: "mac", picture: nil)
 }
@@ -158,8 +162,14 @@ struct AuthPanel: View {
         get { model.password }
         nonmutating set { model.password = newValue }
     }
-    @State private var checking = false
-    @State private var wrong = 0
+    private var checking: Bool {
+        get { model.checking }
+        nonmutating set { model.checking = newValue }
+    }
+    private var wrong: Int {
+        get { model.wrong }
+        nonmutating set { model.wrong = newValue }
+    }
     private var user: Auth.User { model.user }
     @FocusState private var focused: Bool
     /// The "ring" style's lit arc: where it starts (0 to 1), its role color, and a counter that restarts its fade.
