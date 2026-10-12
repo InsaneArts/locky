@@ -11,13 +11,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pendingMessages: [(title: String, text: String)] = []
     /// The themes the Theme menu lists, worked out in the background (it runs init.lua).
     private var themeNames: [String] = []
-    /// The theme picked in the menu. It wins over init.lua's until "Use init.lua's Theme" clears it.
+    /// settings.json: what the menu and the window change.
+    private let store = SettingsStore()
+    /// The theme picked in the menu (settings.json's theme). It wins over init.lua's until "Use init.lua's
+    /// Theme" clears it.
     private var pickedTheme: String? {
-        get { UserDefaults.standard.string(forKey: "theme") }
-        set { UserDefaults.standard.set(newValue, forKey: "theme") }
+        get { store.settings["theme"].string }
+        set { store.update { $0["theme"] = newValue.map(LuaValue.string) ?? .nil } }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        try? FileManager.default.createDirectory(at: store.config, withIntermediateDirectories: true)
+        store.migrateMenuTheme()
+        store.watch()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locky")
         let menu = NSMenu()
@@ -28,8 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // `locky preview` and `locky lock` (main.swift) start here with their options.
         let launch = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst()))
         if let mode = launch.mode {
-            start(mode, options: LockSession.Options(theme: launch.theme ?? pickedTheme, previewSize: launch.size ?? CGSize(width: 1440, height: 900),
-                                                     behind: launch.behind, settings: Self.settings()))
+            start(mode, options: LockSession.Options(theme: launch.theme, previewSize: launch.size ?? CGSize(width: 1440, height: 900),
+                                                     behind: launch.behind, settings: store.settings))
         }
     }
 
@@ -94,18 +100,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func lockNow() {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
-        start(.lock, options: LockSession.Options(theme: pickedTheme, settings: Self.settings()))
-    }
-
-    private static func settings() -> Settings {
-        Settings.load(config: RuntimePath.defaultConfig).settings
+        start(.lock, options: LockSession.Options(settings: store.settings))
     }
 
     /// While locked, nothing quits Locky through the normal path: that would open the Mac.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         session?.mode == .lock ? .terminateCancel : .terminateNow
     }
-    @objc private func preview() { start(.preview, options: LockSession.Options(theme: pickedTheme, settings: Self.settings())) }
+    @objc private func preview() { start(.preview, options: LockSession.Options(settings: store.settings)) }
 
     @objc private func pickTheme(_ sender: NSMenuItem) {
         pickedTheme = sender.representedObject as? String
@@ -140,9 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func checkConfig() {
-        let theme = pickedTheme
         Task.detached {
-            let report = CLI.checkReport(theme: theme)
+            let report = CLI.checkReport(theme: nil)
             await MainActor.run { [weak self] in self?.show(title: "Check Config", text: report.text) }
         }
     }
@@ -161,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func restartPreview() {
         guard session?.mode == .preview else { return }
         session?.end("theme changed")
-        start(.preview, options: LockSession.Options(theme: pickedTheme, settings: Self.settings()))
+        start(.preview, options: LockSession.Options(settings: store.settings))
     }
 
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {

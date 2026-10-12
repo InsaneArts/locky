@@ -331,3 +331,58 @@ import Testing
         #expect(started.message == "If found, call 555-0100")
     }
 }
+
+@MainActor
+@Suite struct SettingsStoreTests {
+    @Test func changesSaveAtOnce() throws {
+        let sandbox = try Sandbox()
+        let store = SettingsStore(config: sandbox.config)
+        var changes = 0
+        store.onChange = { changes += 1 }
+        store.update { $0["theme"] = .string("mocha") }
+        #expect(Settings.load(config: sandbox.config).settings["theme"] == .string("mocha"))
+        store.update { $0["theme"] = .string("mocha") }  // no change, no save
+        #expect(changes == 1)
+    }
+
+    @Test func aBrokenFileIsNeverOverwritten() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", "{ broken")
+        let store = SettingsStore(config: sandbox.config)
+        #expect(store.problem != nil)
+        store.update { $0["theme"] = .string("mocha") }
+        #expect(try String(contentsOf: Settings.url(config: sandbox.config), encoding: .utf8) == "{ broken")
+        // Reset moves it aside and starts empty.
+        try store.resetBrokenFile()
+        #expect(store.problem == nil)
+        let aside = try FileManager.default.contentsOfDirectory(atPath: sandbox.config.path).filter { $0.hasPrefix("settings.json.broken-") }
+        #expect(aside.count == 1)
+        store.update { $0["theme"] = .string("mocha") }
+        #expect(Settings.load(config: sandbox.config).settings["theme"] == .string("mocha"))
+    }
+
+    @Test func theMenusOldThemeChoiceMovesIn() throws {
+        let sandbox = try Sandbox()
+        let defaults = try #require(UserDefaults(suiteName: "locky-tests-\(UUID().uuidString)"))
+        defaults.set("wordclock", forKey: "theme")
+        let store = SettingsStore(config: sandbox.config)
+        store.migrateMenuTheme(defaults)
+        #expect(store.settings["theme"] == .string("wordclock"))
+        #expect(defaults.string(forKey: "theme") == nil)
+    }
+
+    @Test func anEditInAnotherEditorShowsUp() async throws {
+        let sandbox = try Sandbox()
+        let store = SettingsStore(config: sandbox.config)
+        store.watch()
+        // An in-place write, as some editors save.
+        let url = Settings.url(config: sandbox.config)
+        FileManager.default.createFile(atPath: url.path, contents: Data(#"{ "theme": "glass" }"#.utf8))
+        var seen = false
+        for _ in 0..<250 where !seen {
+            try await Task.sleep(for: .milliseconds(20))
+            seen = store.settings["theme"] == .string("glass")
+        }
+        #expect(seen)
+    }
+}
