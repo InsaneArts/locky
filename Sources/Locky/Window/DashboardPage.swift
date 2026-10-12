@@ -138,7 +138,10 @@ struct DashboardPage: View {
         var notes: [String] = []
         let config = model.inspection.config
         if config["privacy"].bool == true { notes.append("privacy mode") }
-        if let message = config["message"].string { notes.append("message “\(message)”") }
+        // A cleared message is an empty one that overrides init.lua's: no message, no change to list.
+        if let message = config["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
+            notes.append("message “\(message)”")
+        }
         if let hour24 = config["hour24"].bool { notes.append(hour24 ? "24-hour clock" : "12-hour clock") }
         return StatusCard(symbol: "rectangle.on.rectangle", tint: .teal, title: "Lock Screen",
                           value: notes.isEmpty ? "As the theme has it" : notes.count == 1 ? "1 change" : "\(notes.count) changes",
