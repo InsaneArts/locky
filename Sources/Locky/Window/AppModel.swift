@@ -78,6 +78,8 @@ final class AppModel {
 
     /// Why the Lock Now shortcut could not be registered, such as another app holding it.
     var shortcutProblem: String?
+    /// True for the length of a lock (AppDelegate sets it). Nothing is read on didBecomeActive then.
+    var locked = false
 
     /// What the window asks the app to do.
     @ObservationIgnored var lockNow: () -> Void = {}

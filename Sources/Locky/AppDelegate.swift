@@ -304,12 +304,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {
         guard session == nil else { return }
+        if mode == .lock { model.locked = true }
         var options = options
         if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)
         session.onEnd = { [weak self, weak session] in
             guard let self else { return }
             self.session = nil
+            if mode == .lock { model.locked = false }
             model.refresh()
             if mode == .lock { autoLock.noteUnlock() }
             // Someone typed wrong passwords and the camera caught them: show the photos.
