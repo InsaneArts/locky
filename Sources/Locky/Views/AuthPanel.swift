@@ -450,8 +450,9 @@ struct AuthPanel: View {
             }
         }
         .frame(minHeight: touchIDOffered ? 16 : nil)
-        // One element that reads the line once: the glyph's own label would say "Touch ID" twice.
-        .accessibilityElement(children: .ignore)
+        // One element that reads the line (LAAuthenticationView has no label of its own), or "Touch ID" for the glyph
+        // alone.
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(statusText ?? "Touch ID")
         .accessibilityHidden(statusText == nil && !listening)
     }
