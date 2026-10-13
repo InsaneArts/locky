@@ -37,16 +37,20 @@ import Testing
     }
 
     /// The texts the widget shows for `repo`, once it has read it.
-    private func shown(_ repo: URL, in sandbox: Sandbox) async throws -> [String] {
-        try sandbox.write("themes/g.lua", "return { widgets = { { 'git', opts = { repos = { '\(repo.path)' } } } } }")
+    private func shown(_ repo: URL, privacy: Bool = false, in sandbox: Sandbox) async throws -> [String] {
+        try sandbox.write("themes/g.lua", "return { widgets = { { 'git', opts = { repos = { '\(repo.path)', '/' } } } } }")
+        try sandbox.write("init.lua", "locky.setup({ privacy = \(privacy) })")
         let recorder = Recorder()
         let runtime = LuaRuntime(path: sandbox.path(), delegate: recorder.delegate)
         let started = await runtime.start(theme: "g")
         defer { runtime.stop() }
         #expect(started.problems.isEmpty, "\(started.problems)")
         let id = try #require(started.instances.first ?? nil)
-        #expect(await eventually { recorder.views[id] != nil && recorder.views[id]! != nil })
-        try await Task.sleep(for: .milliseconds(300))
+        // Both rows: the repository's and the one for "/".
+        #expect(await eventually {
+            let shown = texts(recorder.views[id] ?? nil)
+            return shown.contains("●1") && shown.contains { $0.hasSuffix("not a repository") }
+        })
         return texts(recorder.views[id] ?? nil)
     }
 
@@ -54,6 +58,14 @@ import Testing
         let sandbox = try Sandbox()
         let texts = try await shown(try repository(in: sandbox), in: sandbox)
         #expect(texts.contains("secret-repo") && texts.contains("feature-x") && texts.contains("●1"), "\(texts)")
+        #expect(texts.contains { $0.hasPrefix("secret subject · ") } && texts.contains("/: not a repository"), "\(texts)")
+    }
+
+    /// Repository and branch names say what you work on: privacy mode shows the counts only.
+    @Test func privacyModeShowsCountsOnly() async throws {
+        let sandbox = try Sandbox()
+        let texts = try await shown(try repository(in: sandbox), privacy: true, in: sandbox)
+        #expect(texts == ["●1", "not a repository"], "\(texts)")
     }
 
     /// A repository's config could run a program each time the widget asks for its status.

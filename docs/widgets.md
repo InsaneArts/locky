@@ -61,5 +61,6 @@ name.
 | `quote` | A short quote that changes every half hour. | `source`: `builtin`, `fortune`; `quotes` (your own list of `{ text, author }`); `every` |
 | `life` | Conway's Game of Life, evolving quietly. | `columns`, `rows`, `every`, `cell` |
 
-Privacy mode (`privacy = true`) keeps names out: the user's and the Mac's, the place, the network address, commit
-messages, and herdr's titles and workspaces.
+Privacy mode (`privacy = true`) keeps names out: the user's and the Mac's, the place, the network address, git's
+repositories, branches, and commit messages (the git widget shows only its counts), and herdr's titles and
+workspaces.
