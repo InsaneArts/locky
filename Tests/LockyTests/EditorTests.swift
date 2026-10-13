@@ -244,6 +244,46 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
     }
 
+    private func click(_ page: Page, at point: CGPoint) {
+        page.overlay.mouseDown(with: event(.leftMouseDown, at: point, on: page))
+        page.overlay.mouseUp(with: event(.leftMouseUp, at: point, on: page))
+    }
+
+    @Test func voiceOverSeesAGroupOfButtonsThatSelect() async throws {
+        let page = try await open()
+        let overlay = page.overlay
+        // Both widgets and the password field, laid out.
+        #expect(await wait(page.window) { page.preview.editables.count == 3 })
+        #expect(overlay.isAccessibilityElement() && overlay.accessibilityRole() == .group && overlay.accessibilityLabel() == "Lock Screen")
+        let elements = try #require(overlay.accessibilityChildren() as? [CanvasItemElement])
+        let again = try #require(overlay.accessibilityChildren() as? [CanvasItemElement])
+        // The same objects while nothing changes: AppKit leaves them to the view that made them.
+        #expect(elements.count == 3 && zip(elements, again).allSatisfy { $0 === $1 })
+        #expect(elements.allSatisfy { ($0.accessibilityParent() as? CanvasOverlay) === overlay && $0.accessibilityRole() == .button })
+        #expect(elements.map { $0.accessibilityLabel() ?? "" }.sorted() == ["Box", "Box", "Password Field"])
+        let box = try #require(elements.first { $0.item == .widget(1) })
+        #expect(box.accessibilityPerformPress())
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+    }
+
+    @Test func editDeleteRemovesTheSelectedWidgetOnly() async throws {
+        let page = try await open()
+        let delete = NSMenuItem(title: "Delete", action: #selector(CanvasOverlay.delete(_:)), keyEquivalent: "")
+        #expect(!page.overlay.validateMenuItem(delete))
+        #expect(await wait(page.window) { frame(of: .passwordField, page) != nil })
+        let field = try #require(frame(of: .passwordField, page))
+        click(page, at: CGPoint(x: field.midX, y: field.midY))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .passwordField })
+        #expect(!page.overlay.validateMenuItem(delete))
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+        #expect(page.overlay.validateMenuItem(delete))
+        page.overlay.delete(nil)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        #expect(saved(page).themeEdit("t", "widgets").array?.count == 1)
+    }
+
     @Test func thePasswordFieldMovesToo() async throws {
         let page = try await open()
         #expect(await wait(page.window) { frame(of: .passwordField, page) != nil })

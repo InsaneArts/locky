@@ -311,6 +311,9 @@ final class CanvasOverlay: NSView {
     private var hovered: EditorItem?
     /// Hover follows the pointer only in the key window: another window's turn clears it.
     private var resignKey: NSObjectProtocol?
+    /// VoiceOver's button for each item. AppKit leaves elements to the view that makes them, so they stay the same
+    /// objects while the items stay the same.
+    private var elements: [CanvasItemElement] = []
     private struct Drag {
         var item: EditorItem
         var start: CGPoint
@@ -426,6 +429,11 @@ final class CanvasOverlay: NSView {
         canvas?.move(drag.item, placed.anchor, placed.offset)
     }
 
+    /// Edit ▸ Delete: the selected widget goes.
+    @objc func delete(_ sender: Any?) {
+        if case .widget(let index)? = canvas?.selection { canvas?.remove(index) }
+    }
+
     /// With the canvas focused: the arrow keys move what is selected, Delete removes a selected widget, and Escape
     /// clears the selection.
     override func keyDown(with event: NSEvent) {
@@ -494,6 +502,30 @@ final class CanvasOverlay: NSView {
         CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale).insetBy(dx: -3, dy: -3)
     }
 
+    // MARK: VoiceOver
+
+    // The canvas is a group named "Lock Screen" with a button per item, named as the inspector names it.
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Lock Screen" }
+
+    override func accessibilityChildren() -> [Any]? {
+        let items = canvas == nil ? [] : preview?.editables ?? []
+        if elements.map(\.item) != items.map(\.item) {
+            elements = items.map { CanvasItemElement(item: $0.item, parent: self) }
+        }
+        for (element, editable) in zip(elements, items) {
+            element.setAccessibilityLabel(canvas?.name(editable.item))
+            element.setAccessibilityFrameInParentSpace(viewRect(editable.frame))
+        }
+        return elements
+    }
+
+    /// VoiceOver pressed an item's button.
+    fileprivate func press(_ item: EditorItem) {
+        canvas?.select(item)
+    }
+
     /// A rounded line 3 points around an item: a wide dark stroke under a narrow light one, so one of the two reads on
     /// any background.
     private func outline(_ frame: CGRect, dark: (width: CGFloat, alpha: CGFloat), light: (width: CGFloat, color: NSColor)) {
@@ -504,5 +536,34 @@ final class CanvasOverlay: NSView {
         path.lineWidth = light.width
         light.color.setStroke()
         path.stroke()
+    }
+}
+
+extension CanvasOverlay: NSMenuItemValidation {
+    /// Edit ▸ Delete works while a widget is selected; the password field stays.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(delete(_:)) else { return true }
+        if case .widget? = canvas?.selection { return true }
+        return false
+    }
+}
+
+/// One item on the canvas, for VoiceOver: a button that selects it.
+final class CanvasItemElement: NSAccessibilityElement {
+    let item: EditorItem
+
+    init(item: EditorItem, parent: CanvasOverlay) {
+        self.item = item
+        super.init()
+        setAccessibilityParent(parent)
+        setAccessibilityRole(.button)
+    }
+
+    /// AppKit asks on the main thread.
+    override func accessibilityPerformPress() -> Bool {
+        guard let overlay = accessibilityParent() as? CanvasOverlay else { return false }
+        let item = item
+        MainActor.assumeIsolated { overlay.press(item) }
+        return true
     }
 }
