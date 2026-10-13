@@ -8,6 +8,39 @@ locky.theme.extend("default", function(theme)
 end)
 ```
 
+Every core widget also draws Apple's widget families: give a placement `family = "small"` (or `circular`,
+`rectangular`, `inline`, `medium`, `large`) and it lays itself out like Apple's own widget of that size, on the
+theme's card ([themes.md](themes.md) lists the sizes). The Widgets page shows each family live.
+
+| Widget | Families |
+|---|---|
+| `agents` | inline, circular, rectangular, small, medium, large |
+| `analog` | circular, small |
+| `away` | inline, circular, rectangular, small |
+| `battery` | inline, circular, rectangular, small, medium |
+| `calendar` | circular, rectangular, small, medium, large |
+| `clock` | inline, circular, rectangular, small, medium |
+| `countdown` | inline, circular, rectangular, small |
+| `date` | inline, small |
+| `disk` | inline, circular, rectangular, small, medium |
+| `fetch` | inline, rectangular, small, medium, large |
+| `fuzzy` | inline, rectangular, small, medium |
+| `git` | inline, rectangular, small, medium, large |
+| `greeting` | inline, rectangular |
+| `keyboard` | inline, circular |
+| `life` | small, medium, large |
+| `moon` | inline, circular, rectangular, small, medium |
+| `nerdclock` | circular, rectangular, small, medium |
+| `network` | inline, circular, rectangular, small, medium |
+| `progress` | inline, circular, rectangular, small, medium |
+| `quote` | medium, large |
+| `sun` | inline, circular, rectangular, small, medium |
+| `system` | inline, circular, rectangular, small, medium |
+| `top` | inline, rectangular, small, medium, large |
+| `uptime` | inline, circular |
+| `weather` | inline, circular, rectangular, small, medium, large |
+| `worldclock` | inline, circular, rectangular, small, medium |
+
 Options go in `opts`; `locky.setup({ widgets = { weather = { units = "metric" } } })` sets them for every theme.
 Most widgets also take `size` (the text size) and `color` (a palette role or a color). The comment at the top of
 each file in `Sources/Locky/Resources/runtime/plugin/` lists every option.
