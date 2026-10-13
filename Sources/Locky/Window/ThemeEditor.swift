@@ -715,7 +715,7 @@ private struct AnchorPicker: View {
 
     private static let grid = [["top-left", "top", "top-right"], ["left", "center", "right"], ["bottom-left", "bottom", "bottom-right"]]
 
-    /// "top-left" → "Top Left": a place's name, as the password field's row shows it.
+    /// "top-left" → "Top Left": a place's name, as the password field's row shows it and VoiceOver reads its cell.
     static func name(_ anchor: String) -> String {
         anchor.split(separator: "-").map(\.capitalized).joined(separator: " ")
     }
@@ -732,15 +732,16 @@ private struct AnchorPicker: View {
                         }
                         .buttonStyle(.plain)
                         .help("Move it to the \(PositionEditor.describe(name).dropFirst(9))")
+                        .accessibilityLabel(Self.name(name))
+                        .accessibilityAddTraits(name == anchor ? .isSelected : [])
                     }
                 }
             }
         }
         .padding(5)
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-        .accessibilityElement()
-        .accessibilityLabel("Place")
-        .accessibilityValue(anchor)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Pinned To")
     }
 }
 
