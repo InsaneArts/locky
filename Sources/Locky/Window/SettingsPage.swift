@@ -41,15 +41,19 @@ struct SettingsPage: View {
     private var autoLock: some View {
         Section {
             let idle = store.settings["auto_lock"]["idle_minutes"].number.flatMap { $0.isFinite ? min(max($0, 1), 1440) : nil }
-            Toggle(isOn: Binding(get: { idle != nil }, set: { setAutoLock("idle_minutes", $0 ? .int(5) : nil) })) {
+            // The minutes show after the switch, and only while it is on.
+            LabeledContent("When the Mac is idle") {
                 HStack {
-                    Text("After the Mac is idle for")
-                    Picker("Minutes", selection: Binding(get: { Int(idle ?? 5) }, set: { setAutoLock("idle_minutes", .int($0)) })) {
-                        ForEach([1, 2, 3, 5, 10, 15, 20, 30, 45, 60], id: \.self) { Text("\($0) min").tag($0) }
+                    Toggle("When the Mac is idle", isOn: Binding(get: { idle != nil }, set: { setAutoLock("idle_minutes", $0 ? .int(5) : nil) }))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                    if let idle {
+                        Picker("Minutes", selection: Binding(get: { Int(idle) }, set: { setAutoLock("idle_minutes", .int($0)) })) {
+                            ForEach([1, 2, 3, 5, 10, 15, 20, 30, 45, 60], id: \.self) { Text("\($0) min").tag($0) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
                     }
-                    .labelsHidden()
-                    .fixedSize()
-                    .disabled(idle == nil)
                 }
             }
             Toggle("When the display sleeps", isOn: autoLockBinding("display_sleep"))
