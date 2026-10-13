@@ -18,4 +18,11 @@ import Testing
         #expect(!LockSession.isEmergencyExit(key(12, [.control, .command])))
         #expect(!LockSession.isEmergencyExit(key(13, [.control, .option, .command])))
     }
+
+    @Test func aLockWithoutTheKeyboardTapsItOrHandsOver() {
+        #expect(LockSession.keyboardAction(holds: true, tapped: false, trusted: false) == .keep)
+        #expect(LockSession.keyboardAction(holds: false, tapped: true, trusted: true) == .keep)
+        #expect(LockSession.keyboardAction(holds: false, tapped: false, trusted: true) == .tap)
+        #expect(LockSession.keyboardAction(holds: false, tapped: false, trusted: false) == .handOver)
+    }
 }

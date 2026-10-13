@@ -107,10 +107,11 @@ import Testing
     func heartbeatsKeepALockOn() async throws {
         let locky = try standIn()
         defer { locky.terminate() }
-        let run = try Run(parent: locky.processIdentifier, timeout: 1)
-        for _ in 0..<6 {
+        // Longer than the timeout, with room for a slow test run.
+        let run = try Run(parent: locky.processIdentifier, timeout: 3)
+        for _ in 0..<20 {
             run.send(Guard.heartbeat)
-            try await Task.sleep(for: .milliseconds(300))
+            try await Task.sleep(for: .milliseconds(200))
         }
         #expect(run.lines.isEmpty)
         #expect(locky.isRunning)

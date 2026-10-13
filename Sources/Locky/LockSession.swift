@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon
 import GuardCore
 import SwiftUI
@@ -55,6 +56,10 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Lock only: locks the Mac with the macOS lock screen if Locky crashes, hangs, or is killed.
     private var lockGuard: LockGuard?
     private var keyMonitor: Any?
+    /// Lock only: takes the keys while another app holds the keyboard (see takeKeyboard).
+    private var keyTap: (port: CFMachPort, source: CFRunLoopSource)?
+    /// A pending check that the lock holds the keyboard.
+    private var keyboardCheck: Task<Void, Never>?
     private var keyboardObserver: NSObjectProtocol?
     private var activityMonitor: Any?
     private var idleTimer: Task<Void, Never>?
@@ -204,6 +209,12 @@ final class LockSession: NSObject, NSWindowDelegate {
         runtime?.stop()
         touchID?.stop()
         touchIDFallback?.cancel()
+        keyboardCheck?.cancel()
+        if let keyTap {
+            CGEvent.tapEnable(tap: keyTap.port, enable: false)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), keyTap.source, .commonModes)
+            CFMachPortInvalidate(keyTap.port)
+        }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
@@ -247,14 +258,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         // A display added, removed, or rearranged during the lock gets covered too.
         observe(.default, NSApplication.didChangeScreenParametersNotification) { $0.rebuildForDisplays() }
         // Anything that takes the keyboard (another app, a system prompt) gives it back to the password field.
-        observe(.default, NSApplication.didResignActiveNotification) { $0.reclaimKeyboard() }
+        observe(.default, NSApplication.didResignActiveNotification) { $0.keyboardTaken() }
         observe(.default, NSWindow.didResignKeyNotification) { session in
-            DispatchQueue.main.async { if !session.ended, !(session.windows.first?.isKeyWindow ?? true) { session.reclaimKeyboard() } }
-        }
-        observe(.default, NSWindow.didBecomeKeyNotification) { session in
-            guard session.windows.first?.isKeyWindow == true, session.authModel.needsClick else { return }
-            session.authModel.needsClick = false
-            session.authModel.focusRequest += 1
+            DispatchQueue.main.async { if !session.ended, !(session.windows.first?.isKeyWindow ?? true) { session.keyboardTaken() } }
         }
     }
 
@@ -266,22 +272,92 @@ final class LockSession: NSObject, NSWindowDelegate {
         authModel.focusRequest += 1
     }
 
-    /// macOS treats activation as a request it may refuse; check a few times that the lock got the keyboard.
-    /// If it still has not, the field asks for a click instead of looking ready for typing: a click on the
-    /// shield always gives it the keyboard.
+    /// macOS treats activation as a request it may refuse: ask a few times, and check that the lock holds the
+    /// keyboard 1.5 s after it started.
     private func reclaimKeyboardSoon() {
-        Task { [weak self] in
-            for _ in 0..<6 {
+        keyboardCheck = Task { [weak self] in
+            for attempt in 1...5 {
                 try? await Task.sleep(for: .milliseconds(300))
-                guard let self, !ended else { return }
-                if !(windows.first?.isKeyWindow ?? false) { reclaimKeyboard() }
+                guard let self, !Task.isCancelled, !ended else { return }
+                if attempt == 5 { checkKeyboard("Locky did not get the keyboard when the lock started") }
+                else if !holdsKeyboard { reclaimKeyboard() }
             }
-            guard let self, !ended else { return }
-            authModel.needsClick = !(windows.first?.isKeyWindow ?? false)
-            // A theme that hides the field until a key press (Glass) gets no key press now: show it, so the
-            // request to click shows too.
-            if authModel.needsClick { screens.first?.setAuthVisible(true, dim: auth?.dim ?? 0, animated: true) }
         }
+    }
+
+    /// Something took the keyboard: ask for it back, and check that the lock holds it again 1 s later.
+    private func keyboardTaken() {
+        reclaimKeyboard()
+        guard keyboardCheck == nil else { return }
+        keyboardCheck = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.checkKeyboard("Locky lost the keyboard and did not get it back")
+        }
+    }
+
+    /// Locky is the active app, with the main shield key: what is typed goes to the lock.
+    private var holdsKeyboard: Bool { NSApp.isActive && windows.first?.isKeyWindow == true }
+
+    enum KeyboardAction: Equatable { case keep, tap, handOver }
+
+    /// A lock that does not hold the keyboard must not stay up, since typing would go to the app behind it. It
+    /// takes the keys with an event tap if Accessibility allows one, or hands over to the macOS lock screen.
+    static func keyboardAction(holds: Bool, tapped: Bool, trusted: Bool) -> KeyboardAction {
+        if holds || tapped { return .keep }
+        return trusted ? .tap : .handOver
+    }
+
+    private func checkKeyboard(_ reason: String) {
+        keyboardCheck = nil
+        guard mode == .lock, !ended else { return }
+        switch Self.keyboardAction(holds: holdsKeyboard, tapped: keyTap != nil, trusted: AXIsProcessTrusted()) {
+        case .keep: break
+        case .tap:
+            if takeKeyboard() {
+                LogFile.shared.write(level: "info", message: "took the keyboard with an event tap: \(reason)", source: "locky")
+            } else {
+                handOver("\(reason), and the event tap failed")
+            }
+        case .handOver: handOver(reason)
+        }
+    }
+
+    /// Takes key presses for the rest of the lock with an event tap: while another app is active, they go to
+    /// the password field and not to that app.
+    private func takeKeyboard() -> Bool {
+        let mask = [CGEventType.keyDown, .keyUp, .flagsChanged].reduce(CGEventMask(0)) { $0 | 1 << $1.rawValue }
+        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: mask,
+                                           callback: { _, type, event, session in
+                                               guard let session else { return Unmanaged.passUnretained(event) }
+                                               let lock = Unmanaged<LockSession>.fromOpaque(session).takeUnretainedValue()
+                                               let taken = MainActor.assumeIsolated { lock.tapped(type, event) }
+                                               return taken ? nil : Unmanaged.passUnretained(event)
+                                           }, userInfo: Unmanaged.passUnretained(self).toOpaque()),
+              let source = CFMachPortCreateRunLoopSource(nil, port, 0) else { return false }
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: port, enable: true)
+        keyTap = (port, source)
+        return true
+    }
+
+    /// An event from the tap. true keeps it from every other app.
+    private func tapped(_ type: CGEventType, _ event: CGEvent) -> Bool {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let keyTap { CGEvent.tapEnable(tap: keyTap.port, enable: true) }
+            return false
+        }
+        // While Locky holds the keyboard, keys take the usual way, through the event monitors.
+        guard !ended, !holdsKeyboard else { return false }
+        guard let key = NSEvent(cgEvent: event) else { return true }
+        if emergencyExit, Self.isEmergencyExit(key) {
+            handOver("⌃⌥⌘Q")
+            return true
+        }
+        displayOff?.noteActivity()
+        if activityMonitor != nil, key.type == .keyDown { activity() }
+        windows.first?.sendEvent(key)
+        return true
     }
 
     // MARK: Windows

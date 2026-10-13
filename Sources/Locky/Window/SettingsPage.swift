@@ -65,6 +65,7 @@ struct SettingsPage: View {
     private var unlock: some View {
         Section {
             Toggle("Unlock with Touch ID", isOn: store.bool("touch_id", default: true))
+            KeyboardAccess()
             Toggle(isOn: store.bool("emergency_exit", default: true)) {
                 Text("Switch to the macOS lock screen with ⌃⌥⌘Q")
                 Text("Ends Locky's lock and locks the Mac with the macOS lock screen: for when something goes wrong.")
@@ -374,6 +375,28 @@ extension SettingsStore {
         Binding(get: { self.settings[key].bool ?? fallback }, set: { value in
             self.update { $0[key] = value == fallback ? .nil : .bool(value) }
         })
+    }
+}
+
+/// Whether Locky may take the keyboard with an event tap during a lock (Accessibility), with the way to allow it.
+private struct KeyboardAccess: View {
+    @State private var trusted = AXIsProcessTrusted()
+
+    var body: some View {
+        LabeledContent {
+            if trusted {
+                Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            } else {
+                Button("Allow…") {
+                    // Shows macOS's prompt, which leads to Privacy & Security › Accessibility.
+                    trusted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+                }
+            }
+        } label: {
+            Text("Keep the keyboard on the lock screen")
+            Text("With Accessibility access, typing stays on the lock screen when another app takes the keyboard; without it, Locky switches to the macOS lock screen then.")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in trusted = AXIsProcessTrusted() }
     }
 }
 
