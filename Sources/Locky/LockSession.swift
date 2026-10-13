@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import GuardCore
 import SwiftUI
 
 /// One locked (or previewed) screen: a window per display, the Lua runtime, and the way out.
@@ -51,6 +52,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     private let authModel = AuthModel()
     private var touchID: TouchID?
     private var touchIDFallback: Task<Void, Never>?
+    /// Lock only: locks the Mac with the macOS lock screen if Locky crashes, hangs, or is killed.
+    private var lockGuard: LockGuard?
     private var safetyExit: DispatchWorkItem?
     private var autoUnlock: Task<Void, Never>?
     /// The safety timer's length while it is armed, to arm it again after a sleep.
@@ -95,6 +98,11 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     func begin() {
+        if mode == .lock {
+            lockGuard = LockGuard { [weak self] reason in self?.handOver(reason) }
+            // Without its guard, a crash would leave the shield's open session behind: the macOS lock instead.
+            if lockGuard == nil, handOver("the guard did not start") { return }
+        }
         if mode != .embedded {
             napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
         }
@@ -197,6 +205,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         guard !ended else { return }
         ended = true
         if mode != .embedded { LogFile.shared.write(level: "info", message: "\(mode == .lock ? "lock" : "preview") ended: \(reason)", source: "locky") }
+        lockGuard?.release()
         runtime?.stop()
         touchID?.stop()
         touchIDFallback?.cancel()
@@ -662,6 +671,20 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     // MARK: Safety
+
+    /// Locks the Mac with the macOS lock screen, then ends this lock: a way out that never lets anyone in. false,
+    /// with this lock kept, when the macOS lock is out of reach.
+    @discardableResult
+    private func handOver(_ reason: String) -> Bool {
+        guard mode == .lock, !ended else { return false }
+        guard SystemLock.engage(reason: reason) else {
+            LogFile.shared.write(level: "error", message: "cannot switch to the macOS lock screen (\(reason)); the lock stays", source: "locky")
+            return false
+        }
+        LogFile.shared.write(level: "warn", message: "switched to the macOS lock screen: \(reason)", source: "locky")
+        end("handed over to the macOS lock screen")
+        return true
+    }
 
     /// Prototype only. The lock opens after `seconds`. If the main thread hangs, a timer on another thread
     /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q quits at once, unless settings.json's

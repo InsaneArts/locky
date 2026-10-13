@@ -41,15 +41,21 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
+# The guard, which locks the Mac if Locky dies or hangs during a lock. Locky finds it beside its executable.
+cp "$BIN_DIR/locky-guard" "$APP/Contents/MacOS/locky-guard"
 cp -R "$ROOT/Sources/$APP_NAME/Resources/." "$APP/Contents/Resources/"
 xattr -cr "$APP"
 
-# The hardened runtime blocks the camera (intruder photos) unless Locky.entitlements allows it.
+# The guard first, then the app that contains it. The hardened runtime blocks the camera (intruder photos)
+# unless Locky.entitlements allows it.
 if [[ "$SIGNING_MODE" == "adhoc" || -z "$APP_IDENTITY" ]]; then
+  codesign --force --sign - "$APP/Contents/MacOS/locky-guard"
   codesign --force --sign - "$APP"
 elif [[ "$SIGNING_MODE" == "release" ]]; then
+  codesign --force --timestamp --options runtime --sign "$APP_IDENTITY" "$APP/Contents/MacOS/locky-guard"
   codesign --force --timestamp --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$APP_IDENTITY" "$APP"
 else
+  codesign --force --options runtime --sign "$APP_IDENTITY" "$APP/Contents/MacOS/locky-guard"
   codesign --force --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$APP_IDENTITY" "$APP"
 fi
 echo "Built $APP"
