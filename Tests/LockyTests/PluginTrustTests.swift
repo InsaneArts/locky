@@ -42,6 +42,22 @@ import Testing
         #expect(try runtime.eval("return locky.sys.user().name, locky.config.widgets.clock.format") == [.string("user"), .string("HH:mm")])
     }
 
+    /// A module init.lua requires runs before the freeze: what it keeps of the table changes nothing later, such as
+    /// when a widget of its draws.
+    @Test func whatInitLuaCodeKeptCannotChangeTheConfig() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("lua/mod.lua", """
+            local config = locky.config
+            return { later = function() config.privacy = false config.theme = 'other' end }
+            """)
+        try sandbox.write("init.lua", "locky.setup({ theme = 'mine', privacy = true }) require('mod')")
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        _ = try runtime.eval("require('mod').later()")
+        #expect(try config(runtime)["privacy"] == .bool(true))
+        #expect(try config(runtime)["theme"] == .string("mine"))
+    }
+
     @Test func theConfigStillReadsLikeATable() throws {
         let sandbox = try Sandbox()
         try sandbox.write("init.lua", "locky.setup({ palette = { accent = '#ff0000' }, widgets = { x = { list = { 1, 2, 3 } } } })")

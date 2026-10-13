@@ -622,6 +622,22 @@ function rawset(t, key, value)
   return raw_rawset(t, key, value)
 end
 
+-- A copy of a table and the tables in it, read raw and without metatables.
+local function raw_copy(t, seen)
+  if type(t) ~= "table" then
+    return t
+  end
+  seen = seen or {}
+  if not seen[t] then
+    local copy = {}
+    seen[t] = copy
+    for k, v in raw_next, t do
+      copy[raw_copy(k, seen)] = raw_copy(v, seen)
+    end
+  end
+  return seen[t]
+end
+
 -- The settings themselves, for the core: locky.config while init.lua runs, the frozen table after.
 local function current_config()
   return frozen or rawget(locky, "config")
@@ -1455,7 +1471,8 @@ return {
 
   -- After init.lua: from here on locky.config is read-only.
   freeze_config = function()
-    frozen = rawget(locky, "config")
+    -- A copy: a module init.lua required may hold the table itself, or have given it a metatable.
+    frozen = raw_copy(rawget(locky, "config"))
     raw_rawset(locky, "config", nil)
     raw_setmetatable(locky, {
       __index = function(_, key)
