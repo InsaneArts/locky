@@ -21,7 +21,7 @@ enum LoginItem {
 
     /// Only an app bundle can be a login item: `swift run` and the tests run a bare executable.
     static func status(_ status: SMAppService.Status, bundle: URL) -> Status {
-        guard bundle.pathExtension == "app" else { return .unavailable("Open at Login works only in Locky.app") }
+        guard bundle.pathExtension == "app" else { return .unavailable("Open at login works only in Locky.app.") }
         switch status {
         case .enabled: return .enabled
         case .requiresApproval: return .requiresApproval
@@ -48,4 +48,8 @@ enum LoginItem {
     static func openSystemSettings() {
         SMAppService.openSystemSettingsLoginItems()
     }
+}
+
+extension LoginItem.Status {
+    var isUnavailable: Bool { if case .unavailable = self { true } else { false } }
 }

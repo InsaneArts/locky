@@ -18,7 +18,8 @@ import Testing
     @Test func aBareExecutableCannotOpenAtLogin() {
         let bare = URL(fileURLWithPath: "/Users/me/locky/.build/debug")
         for status: SMAppService.Status in [.enabled, .requiresApproval, .notRegistered, .notFound] {
-            #expect(LoginItem.status(status, bundle: bare) == .unavailable("Open at Login works only in Locky.app"))
+            #expect(LoginItem.status(status, bundle: bare) == .unavailable("Open at login works only in Locky.app."))
         }
+        #expect(LoginItem.Status.unavailable("").isUnavailable && !LoginItem.Status.notRegistered.isUnavailable)
     }
 }

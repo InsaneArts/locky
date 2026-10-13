@@ -78,6 +78,8 @@ final class AppModel {
 
     /// Why the Lock Now shortcut could not be registered, such as another app holding it.
     var shortcutProblem: String?
+    /// Open at login, read again whenever Locky becomes active (back from System Settings).
+    private(set) var loginItem = LoginItem.status
     /// True for the length of a lock (AppDelegate sets it). Nothing is read on didBecomeActive then.
     var locked = false
 
@@ -93,9 +95,28 @@ final class AppModel {
     @ObservationIgnored private var pendingCustomize: Bool?
     @ObservationIgnored private var refreshing: Task<Void, Never>?
     @ObservationIgnored private var watchers: [FolderWatcher] = []
+    @ObservationIgnored nonisolated(unsafe) private var activation: NSObjectProtocol?
 
     init(store: SettingsStore) {
         self.store = store
+        // A lock activates Locky at its start and at every keyboard reclaim: a slow answer about login items must not
+        // hold the main thread then, which runs the guard's heartbeat.
+        activation = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                                            queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.locked else { return }
+                self.loginItem = LoginItem.status
+            }
+        }
+    }
+
+    deinit {
+        if let activation { NotificationCenter.default.removeObserver(activation) }
+    }
+
+    func setLoginItem(_ on: Bool) throws {
+        defer { loginItem = LoginItem.status }
+        try LoginItem.set(on)
     }
 
     /// Opens Customize for `id`. Callers never animate it: Customize swaps at once from any input.
