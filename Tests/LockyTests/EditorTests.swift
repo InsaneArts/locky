@@ -207,6 +207,18 @@ import Testing
         #expect(saved(page).themeEdit("t", "widgets")[0]["anchor"] == .string("top-left"))
     }
 
+    /// File › Revert to Original reaches the page as a request, which runs the More menu's command and is used up.
+    @Test func aFileMenuRevertTakesTheChangesBack() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(0), page))
+        drag(page, from: CGPoint(x: box.midX, y: box.midY), by: CGPoint(x: -560, y: -330))
+        #expect(!saved(page)["themes"].isNil)
+        page.model.editorRequest = .revert
+        #expect(await wait(page.window) { saved(page)["themes"].isNil })
+        #expect(page.model.editorRequest == nil)
+        #expect(page.window.undoManager?.undoMenuItemTitle == "Undo Revert to Original")
+    }
+
     private func press(_ key: Int, shift: Bool = false, _ page: Page) {
         let text = String(Character(UnicodeScalar(UInt16(key))!))
         let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: shift ? .shift : [], timestamp: 0,
