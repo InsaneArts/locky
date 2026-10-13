@@ -450,8 +450,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         startTouchID()
 
         auth = theme.auth
-        if theme.auth.reveal == "activity", authModel.password.isEmpty {
-            screens.first?.setAuthVisible(false, dim: theme.auth.dim, animated: false)
+        if theme.auth.reveal == "activity", authModel.password.isEmpty, let screen = screens.first {
+            screen.glanceHint = NSHostingView(rootView: GlanceHint(auth: theme.auth, style: screen.style))
+            screen.setAuthVisible(false, dim: theme.auth.dim, animated: false)
             guard mode != .embedded else { return }
             windows.forEach { $0.acceptsMouseMovedEvents = true }  // the preview's window; lock windows always do
             activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDown, .scrollWheel]) { [weak self] event in
@@ -763,6 +764,17 @@ final class LockScreenView: NSView {
     }
     var authSize: CGSize = .zero { didSet { needsLayout = true } }
     private(set) var authVisible = true
+    /// Where a hidden password field will appear: "Press any key to unlock".
+    var glanceHint: NSView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let glanceHint {
+                glanceHint.alphaValue = authVisible ? 0 : 1
+                addSubview(glanceHint)
+            }
+            needsLayout = true
+        }
+    }
     private let dimLayer = CALayer()
 
     /// Shows or hides the password field. Hidden, it keeps the keyboard focus, so the first key counts.
@@ -772,6 +784,7 @@ final class LockScreenView: NSView {
             context.duration = animated ? 0.35 : 0
             context.allowsImplicitAnimation = true
             auth?.view.animator().alphaValue = visible ? 1 : 0.011
+            glanceHint?.animator().alphaValue = visible ? 0 : 1
             dimLayer.opacity = visible ? Float(dim) : 0
         }
     }
@@ -929,6 +942,10 @@ final class LockScreenView: NSView {
             } else {
                 auth.view.frame = bounds
             }
+        }
+        if let glanceHint, let field = auth?.view.frame {
+            let size = glanceHint.fittingSize
+            glanceHint.frame = CGRect(x: field.midX - size.width / 2, y: field.midY - size.height / 2, width: size.width, height: size.height).integral
         }
         if let message {
             message.view.frame = messageFrame(size: message.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale)), scale: scale)

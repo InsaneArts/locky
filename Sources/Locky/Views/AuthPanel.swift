@@ -542,6 +542,20 @@ enum Contrast {
     }
 }
 
+/// "Press any key to unlock", faint, where the password field of a theme that shows it on activity will appear.
+struct GlanceHint: View {
+    let auth: Theme.Auth
+    let style: LockyStyle
+
+    var body: some View {
+        Text("Press any key to unlock")
+            .font(style.font(size: 13 * auth.size / 14, weight: auth.font.weight ?? "medium", design: auth.font.design,
+                             family: auth.font.family, mono: false, italic: false))
+            .foregroundStyle(style.color("muted"))
+            .opacity(0.8)
+    }
+}
+
 enum StyleWeights {
     static func weight(_ name: String) -> Font.Weight { LockyStyle.weights[name] ?? .regular }
 }

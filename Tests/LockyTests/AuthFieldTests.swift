@@ -162,3 +162,39 @@ import Testing
         #expect(panel.rootView.touchIDPicture == (touchIDOn && TouchID().isAvailable))
     }
 }
+
+@MainActor
+@Suite struct GlanceHintTests {
+    private func screen(reveal: String) async throws -> (LockSession, LockScreenView) {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { background = { color = '#101010' }, auth = { reveal = '\(reveal)' } }")
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        let screen = try #require(container.subviews.first as? LockScreenView)
+        let deadline = Date().addingTimeInterval(3)
+        while screen.background == nil, Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        return (session, screen)
+    }
+
+    /// While a field that shows on activity hides, a hint says how to bring it back, where it will appear.
+    @Test func aHiddenFieldLeavesAHintInItsPlace() async throws {
+        let (session, screen) = try await screen(reveal: "activity")
+        defer { session.end("test") }
+        let hint = try #require(screen.glanceHint)
+        let field = try #require(screen.auth?.view)
+        screen.layoutSubtreeIfNeeded()
+        #expect(hint.alphaValue == 1 && field.alphaValue < 0.1)
+        #expect(abs(hint.frame.midX - field.frame.midX) <= 1 && abs(hint.frame.midY - field.frame.midY) <= 1)
+        screen.setAuthVisible(true, dim: 0, animated: false)
+        #expect(hint.alphaValue == 0)
+    }
+
+    @Test func aFieldThatAlwaysShowsHasNoHint() async throws {
+        let (session, screen) = try await screen(reveal: "always")
+        defer { session.end("test") }
+        #expect(screen.glanceHint == nil)
+    }
+}
