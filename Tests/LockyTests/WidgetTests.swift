@@ -46,6 +46,16 @@ import Testing
         #expect(imperial == [.int(61), .string("F"), .int(2), .string("mph")])
         #expect(try runtime.eval("return require('locky.weather').parse('<html>', false)") == [.nil])
     }
+
+    /// A location stays one part of wttr.in's path: it cannot add to the query or leave the path.
+    @Test func weatherLocationsAreEncoded() throws {
+        let runtime = runtime(try Sandbox())
+        defer { runtime.stop() }
+        let urls = try runtime.eval("local url = require('locky.weather').url return url(''), url('New York'), url('41.7,-44.8'), url('Zürich'), url('x?format=1#a/../b%')")
+        #expect(urls == [.string("https://wttr.in/?format=j1"), .string("https://wttr.in/New+York?format=j1"),
+                         .string("https://wttr.in/41.7,-44.8?format=j1"), .string("https://wttr.in/Z%C3%BCrich?format=j1"),
+                         .string("https://wttr.in/x%3Fformat%3D1%23a%2F..%2Fb%25?format=j1")])
+    }
 }
 
 @Suite struct TimeModuleTests {
