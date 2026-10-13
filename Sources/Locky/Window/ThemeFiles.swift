@@ -64,10 +64,12 @@ struct ThemeFile: Equatable {
         return roots.contains { FileManager.default.fileExists(atPath: $0.appending(path: "themes/\(theme).lua").path) }
     }
 
-    /// The ids a new theme must not take: every theme's, and every file's in the config's themes folder.
-    static func takenIDs(_ themes: [Inspection.ThemeInfo], config: URL) -> Set<String> {
+    /// The ids a new theme must not take: every theme's, every file's in the config's themes folder, and every
+    /// id settings.json has changes for, which a theme removed in Finder leaves behind.
+    static func takenIDs(_ themes: [Inspection.ThemeInfo], settings: Settings, config: URL) -> Set<String> {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: config.appending(path: "themes").path)) ?? []
-        return Set(themes.map(\.id) + files.filter { $0.hasSuffix(".lua") }.map { String($0.dropLast(4)) })
+        let edited = (settings["themes"].table ?? [:]).keys
+        return Set(themes.map(\.id) + files.filter { $0.hasSuffix(".lua") }.map { String($0.dropLast(4)) } + edited)
     }
 
     /// The user's file for theme `id`.

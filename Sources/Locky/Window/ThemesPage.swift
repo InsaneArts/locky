@@ -141,7 +141,7 @@ struct ThemesPage: View {
 
     /// Adds the theme to the config's themes folder, and opens it in the editor.
     private func install(_ file: ThemeFile) {
-        let id = ThemeFile.id(for: file.name, taken: ThemeFile.takenIDs(model.inspection.themes, config: model.store.config))
+        let id = ThemeFile.id(for: file.name, taken: ThemeFile.takenIDs(model.inspection.themes, settings: model.store.settings, config: model.store.config))
         Task {
             do {
                 try await file.install(as: id, config: model.store.config)

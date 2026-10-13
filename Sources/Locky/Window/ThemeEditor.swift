@@ -94,7 +94,7 @@ struct ThemeEditor: View {
             problem = "A theme's name has 1 to 80 characters, on one line."
             return
         }
-        let id = ThemeFile.id(for: name, taken: ThemeFile.takenIDs(model.inspection.themes, config: model.store.config))
+        let id = ThemeFile.id(for: name, taken: ThemeFile.takenIDs(model.inspection.themes, settings: model.store.settings, config: model.store.config))
         let file = made(name: name)
         Task {
             do {

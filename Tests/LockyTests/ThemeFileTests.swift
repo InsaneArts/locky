@@ -38,6 +38,16 @@ import Testing
         #expect(ThemeFile.id(for: "../../x", taken: []) == "x")
     }
 
+    @Test func aNewIdTakesNoThemesLeftoverChanges() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return {}")
+        var settings = Locky.Settings()
+        settings.setThemeEdit("lake", "auth", .table(["anchor": .string("top")]))
+        let taken = ThemeFile.takenIDs([Inspection.ThemeInfo(id: "default", name: "Aurora")], settings: settings, config: sandbox.config)
+        #expect(taken == ["default", "mine", "lake"])
+        #expect(ThemeFile.id(for: "Lake", taken: taken) == "lake-2")
+    }
+
     @Test func aCopyOfAMadeThemeStartsFromItsBase() throws {
         let sandbox = try Sandbox()
         let first = ThemeFile(base: "default", name: "Lake", edits: [edit])
