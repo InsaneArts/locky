@@ -230,11 +230,10 @@ private struct BuiltInRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "paintpalette.fill")
-                .font(.system(size: 15))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(Color.indigo.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            icon
+                .frame(width: 48, height: 30)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.primary.opacity(0.1), lineWidth: 0.5))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.body.weight(.medium))
                 Text(Provides.text(model: model, folder: folder)).font(.callout).foregroundStyle(.secondary)
@@ -242,6 +241,21 @@ private struct BuiltInRow: View {
             Spacer()
         }
         .padding(.vertical, 1)
+    }
+
+    /// The plugin's first theme as it looks, like an app's icon in a list; a symbol for one without themes.
+    @ViewBuilder private var icon: some View {
+        let root = folder.resolvingSymlinksInPath().path + "/"
+        if let theme = model.inspection.themes.first(where: { ($0.directory?.resolvingSymlinksInPath().path ?? "").appending("/").hasPrefix(root) }),
+           let image = ThemeThumbnails.image(for: theme) {
+            Image(nsImage: image).resizable().scaledToFill()
+        } else {
+            Image(systemName: "puzzlepiece.extension.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.gray.gradient)
+        }
     }
 }
 
