@@ -6,7 +6,7 @@
 #
 # themes is the Themes window (with THEME: Customize for it); settings, plugins, and config are the Settings
 # window's panes; welcome is the Welcome window. The old names still work: dashboard is the Themes window, and
-# widgets captures the Add Widget sheet over Customize for the theme in use (or THEME).
+# widgets captures the Add Widget sheet alone, opened over Customize for the theme in use (or THEME).
 #
 # SIZE (default 1240x780) is the Themes window's content size; the Settings and Welcome windows have their own
 # sizes. WAIT (seconds, default 4) is how long the window gets to load. Locky's config folder is an empty one with
@@ -37,13 +37,17 @@ trap 'kill $PID 2>/dev/null || true' EXIT
 # Any titled window: the Themes window ("Themes", or the theme's name in Customize), the Settings window (its
 # pane's name), or the Welcome.
 ID=$("$TOOL" "$PID" "") || { echo "No Locky window appeared" >&2; exit 1; }
+SHEET=""
 if [[ $SECTION == widgets ]]; then
-  if SHEET=$("$TOOL" "$PID" "" --sheet "$ID"); then
-    ID=$SHEET
-  else
-    echo "No Add Widget sheet appeared; capturing the window"
-  fi
+  SHEET=$("$TOOL" "$PID" "" --sheet "$ID") || echo "No Add Widget sheet appeared; capturing the window"
 fi
 sleep "${WAIT:-4}"
 screencapture -x -o -l "$ID" "$OUT"
+if [[ -n $SHEET ]]; then
+  # macOS draws a sheet into the capture of its window, whichever of the two ids is captured. So the script crops
+  # the window's image to the sheet's frame, read again after the wait, when the sheet no longer moves.
+  read -r _ X Y W H WIDTH <<< "$("$TOOL" "$PID" "" --sheet "$ID")"
+  SCALE=$(( $(sips -g pixelWidth "$OUT" | awk '/pixelWidth:/ { print $2 }') / WIDTH ))
+  sips -c $((H * SCALE)) $((W * SCALE)) --cropOffset $((Y * SCALE)) $((X * SCALE)) "$OUT" >/dev/null
+fi
 echo "$OUT"
