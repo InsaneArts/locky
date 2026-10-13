@@ -233,7 +233,7 @@ enum PackSpec {
     }
 }
 
-private struct InstallSheet: View {
+struct InstallSheet: View {
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var source = ""

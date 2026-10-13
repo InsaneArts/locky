@@ -73,6 +73,7 @@ struct MainView: View {
         switch model.section {
         case .dashboard: DashboardPage(model: model)
         case .themes: ThemesPage(model: model)
+        case .widgets: WidgetsPage(model: model)
         case .plugins: PluginsPage(model: model)
         case .config: ConfigPage(model: model)
         case .settings: SettingsPage(model: model)

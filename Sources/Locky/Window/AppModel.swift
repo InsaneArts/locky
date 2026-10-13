@@ -5,7 +5,7 @@ import Foundation
 @MainActor @Observable
 final class AppModel {
     enum Section: String, CaseIterable, Identifiable {
-        case dashboard, themes, plugins, config, settings
+        case dashboard, themes, widgets, plugins, config, settings
 
         var id: String { rawValue }
 
@@ -13,6 +13,7 @@ final class AppModel {
             switch self {
             case .dashboard: "Dashboard"
             case .themes: "Themes"
+            case .widgets: "Widgets"
             case .plugins: "Plugins"
             case .config: "Config"
             case .settings: "Settings"
@@ -23,6 +24,7 @@ final class AppModel {
             switch self {
             case .dashboard: "square.grid.2x2"
             case .themes: "paintpalette"
+            case .widgets: "square.on.square"
             case .plugins: "puzzlepiece.extension"
             case .config: "curlybraces"
             case .settings: "gearshape"
