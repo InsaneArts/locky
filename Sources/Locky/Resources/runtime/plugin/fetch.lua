@@ -2,6 +2,8 @@
 --   opts.logo     "lock" (default: a padlock in block characters), or false
 --   opts.colors   false leaves out the row of color blocks
 --   opts.size, opts.color (the labels, default "accent"), opts.fields (which lines, in order)
+--   Families: rectangular, inline, small, medium, large: About This Mac (the model, chip, memory, and macOS), no
+--   user or host names.
 -- Privacy mode gives generic user and host names, as locky.sys does.
 local ui = locky.ui
 
@@ -28,10 +30,120 @@ local function span(seconds)
   return ("%d hour%s, %d min"):format(h, h == 1 and "" or "s", m)
 end
 
+-- The Mac's own picture, from its model name.
+local function picture(model)
+  if model:match("^MacBook") then
+    return "laptopcomputer"
+  elseif model:match("^iMac") then
+    return "desktopcomputer"
+  elseif model:match("^Mac mini") then
+    return "macmini"
+  elseif model:match("^Mac Studio") then
+    return "macstudio"
+  elseif model:match("^Mac Pro") then
+    return "macpro.gen3"
+  end
+  return "desktopcomputer"
+end
+
+-- About This Mac, in Apple's layouts for each family.
+local function family(f, s, o)
+  local sys, machine, hw = locky.sys.os(), locky.sys.machine(), s.hardware or {}
+  local model = hw.model or "Mac"
+  local chip = hw.chip or machine.chip
+  local memory = hw.memory or ("%.0f GB"):format(machine.memory / 1073741824)
+  local macos = ("macOS %s %s"):format(sys.codename, sys.version):gsub("  ", " ")
+  local symbol = picture(model)
+  if f == "inline" then
+    return ui.hstack { spacing = 4, ui.symbol(symbol, ui.font("subheadline")), ui.text(macos, ui.font("subheadline", { lines = 1 })) }
+  elseif f == "rectangular" then
+    return ui.vstack {
+      spacing = 1, align = "leading", fill = "both",
+      ui.hstack { spacing = 5, ui.symbol(symbol, ui.font("headline")), ui.text(model, ui.font("headline", { lines = 1 })) },
+      ui.text(chip, ui.font("subheadline", { lines = 1 })),
+      ui.text(macos, ui.font("subheadline", { color = "muted", lines = 1 })),
+    }
+  elseif f == "small" then
+    return ui.vstack {
+      spacing = 0, align = "leading", fill = "both",
+      ui.symbol(symbol, { size = 40, weight = "light", mode = "hierarchical", color = o.color }),
+      ui.spacer(),
+      ui.text(model, ui.font("headline", { lines = 1 })),
+      ui.text(chip, ui.font("footnote", { weight = "medium", lines = 1 })),
+      ui.text(macos, ui.font("footnote", { weight = "medium", color = "muted", lines = 1 })),
+    }
+  end
+  -- Label and value, as About This Mac lists them.
+  local function row(label, value, width)
+    return value and ui.hstack {
+      spacing = 10,
+      ui.text(label, ui.font("footnote", { weight = "medium", color = "muted", width = width, text_align = "trailing" })),
+      ui.text(value, ui.font("footnote", { weight = "medium", lines = 1 })),
+      ui.spacer(),
+    }
+  end
+  local uptime = s.uptime and span(s.uptime)
+  if f == "medium" then
+    return ui.hstack {
+      spacing = 18, fill = "both",
+      ui.symbol(symbol, { size = 76, weight = "ultralight", mode = "hierarchical", color = o.color, width = 110 }),
+      ui.vstack {
+        spacing = 0, align = "leading",
+        ui.text(model, ui.font("title3", { weight = "semibold", lines = 1 })),
+        ui.text(macos, ui.font("subheadline", { weight = "medium", color = "muted", lines = 1 })),
+        ui.spacer(),
+        ui.vstack {
+          spacing = 4, align = "leading",
+          row("Chip", chip, 52),
+          row("Memory", memory, 52),
+          row("Uptime", uptime, 52),
+        },
+      },
+    }
+  end
+  local used = s.memory and s.memory.used and s.memory.used / math.max(s.memory.total, 1)
+  local battery = s.battery and s.battery.present and (s.battery.percent .. "%" .. (s.battery.charging and ", charging" or ""))
+  return ui.vstack {
+    spacing = 0, fill = "both",
+    ui.spacer(),
+    ui.symbol(symbol, { size = 104, weight = "ultralight", mode = "hierarchical", color = o.color }),
+    ui.text(model, ui.font("title2", { weight = "semibold", lines = 1, padding = { 14, 0, 0, 0 } })),
+    ui.text(macos, ui.font("subheadline", { weight = "medium", color = "muted", lines = 1 })),
+    ui.spacer(),
+    ui.vstack {
+      spacing = 6, align = "leading",
+      row("Chip", chip, 96),
+      row("Memory", memory, 96),
+      row("macOS", sys.build ~= "" and ("%s (%s)"):format(sys.version, sys.build) or sys.version, 96),
+      row("Uptime", uptime, 96),
+      row("Battery", battery, 96),
+    },
+    ui.spacer(),
+    used and ui.vstack {
+      spacing = 6, align = "leading",
+      ui.hstack {
+        ui.text("Memory in use", ui.font("caption", { weight = "semibold", color = "muted" })),
+        ui.spacer(),
+        ui.text(math.floor(used * 100 + 0.5) .. "%", ui.font("caption", { weight = "semibold", color = "muted", mono = true })),
+      },
+      ui.gauge(used, { style = "linear-capacity", size = 332, color = o.color or "accent" }),
+    },
+  }
+end
+
 locky.widget.define("fetch", {
   description = "neofetch: the system, the machine, and the palette",
+  families = { "rectangular", "inline", "small", "medium", "large" },
   opts = { logo = "lock", colors = true, size = 13, fields = { "os", "host", "kernel", "uptime", "shell", "cpu", "memory", "battery" } },
   init = function(self)
+    -- The model's name ("MacBook Pro") is not in sysctl. Only these three lines are read: the report also has
+    -- the serial number.
+    if self.family then
+      self:system({ "system_profiler", "SPHardwareDataType" }, function(self, result)
+        local text = result.stdout
+        self:set({ hardware = { model = text:match("Model Name: ([^\n]+)"), chip = text:match("Chip: ([^\n]+)"), memory = text:match("Memory: ([^\n]+)") } })
+      end)
+    end
     self:system({ "uname", "-r" }, function(self, result)
       self:set({ kernel = result.stdout:match("%S+") })
     end)
@@ -43,6 +155,12 @@ locky.widget.define("fetch", {
     local o, s = self.opts, self.state
     if not s.uptime then
       return nil
+    end
+    if self.family then
+      if self.family == "circular" then
+        return nil
+      end
+      return family(self.family, s, o)
     end
     local sys, machine = locky.sys.os(), locky.sys.machine()
     local user, host = locky.sys.user().name, locky.sys.hostname().host:gsub("%.local$", "")
