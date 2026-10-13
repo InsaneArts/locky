@@ -140,3 +140,25 @@ import Testing
         #expect(Contrast.readable("muted", fg: "#ffffff", on: ["#000000"]) == nil)
     }
 }
+
+@MainActor
+@Suite struct PreviewTouchIDTests {
+    /// The theme editor's preview has no Touch ID of its own, but shows its glyph where the lock would, on a Mac
+    /// that has it and unless settings.json turns it off.
+    @Test(arguments: [true, false])
+    func thePreviewShowsTheGlyphAsAPicture(touchIDOn: Bool) async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { background = { color = '#101010' } }")
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        options.settings = Settings(touchIDOn ? [:] : ["touch_id": .bool(false)])
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        defer { session.end("test") }
+        let screen = try #require(container.subviews.first as? LockScreenView)
+        let panel = try #require(screen.auth?.view as? NSHostingView<AuthPanel>)
+        #expect(panel.rootView.touchID == nil)
+        #expect(panel.rootView.touchIDPicture == (touchIDOn && TouchID().isAvailable))
+    }
+}

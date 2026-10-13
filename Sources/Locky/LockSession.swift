@@ -51,6 +51,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Wrong passwords count across locks, except in the theme editor's preview, which takes none.
     private lazy var authModel = AuthModel(defaults: mode == .embedded ? nil : .standard)
     private var touchID: TouchID?
+    /// A preview without Touch ID on a Mac that has it: its field shows the glyph as a picture.
+    private var touchIDPicture = false
     private var touchIDFallback: Task<Void, Never>?
     private var safetyExit: DispatchWorkItem?
     private var autoUnlock: Task<Void, Never>?
@@ -128,6 +130,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         let touchID = TouchID()
         if touchID.isAvailable, mode != .embedded, !(mode == .preview && options.behind), options.settings["touch_id"].bool != false {
             self.touchID = touchID
+        } else if touchID.isAvailable, mode != .lock, options.settings["touch_id"].bool != false {
+            touchIDPicture = true
         }
 
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
@@ -390,7 +394,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                                   runtime?.queue.async { runtime?.emit("auth_failed") }
                                   self?.wrongPassword()
                               },
-                              onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded)
+                              onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded,
+                              touchIDPicture: touchIDPicture)
         screen.auth = (NSHostingView(rootView: panel), spec)
     }
 

@@ -249,6 +249,9 @@ struct AuthPanel: View {
     var onSize: (CGSize) -> Void = { _ in }
     /// false in the theme editor's preview: the field shows, but never takes the keyboard.
     var interactive = true
+    /// Previews without Touch ID on a Mac that has it: the glyph and its hint show as a picture, where the lock
+    /// shows the live ones.
+    var touchIDPicture = false
 
     private var password: String {
         get { model.password }
@@ -295,7 +298,7 @@ struct AuthPanel: View {
             secureField(placeholder: "")
                 .frame(width: 1, height: 1)
                 .opacity(0.011)
-            if touchID != nil, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick, waitText == nil {
+            if showsGlyph, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick, waitText == nil {
                 glyph.offset(y: diameter * 0.34)
             } else if auth.hint || model.needsClick || waitText != nil {
                 Text(model.needsClick ? "Click to unlock" : waitText ?? (checking ? "Verifying…" : wrong > 0 && password.isEmpty ? "Wrong password" : ""))
@@ -326,12 +329,15 @@ struct AuthPanel: View {
         .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
     }
 
-    private var showsGlyph: Bool { touchID != nil }
+    private var showsGlyph: Bool { touchID != nil || touchIDPicture }
 
     /// The Touch ID glyph, made again for each new context.
     @ViewBuilder private var glyph: some View {
         if let touchID {
             TouchIDGlyph(touchID: touchID).id(touchID.generation).frame(width: 34 * s, height: 34 * s)
+        } else if touchIDPicture {
+            Image(systemName: "touchid").resizable().scaledToFit().symbolRenderingMode(.multicolor)
+                .padding(4 * s).frame(width: 34 * s, height: 34 * s)
         }
     }
 
@@ -464,7 +470,7 @@ struct AuthPanel: View {
     private var hint: some View {
         let text = model.needsClick ? "Click to unlock"
             : auth.style == "minimal" ? "Type your password to unlock"
-            : touchID == nil || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
+            : !showsGlyph || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
         return Text(wrong > 0 ? "Wrong password" : text)
             .font(font(12, "medium"))
             .foregroundStyle(wrong > 0 ? style.color("danger") : quiet(onField: false))
