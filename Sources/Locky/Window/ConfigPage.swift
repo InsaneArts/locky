@@ -31,6 +31,11 @@ struct ConfigPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Text("Changes made in this window are saved to settings.json and override init.lua. Use Reset to go back to init.lua.")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
             header
             Divider()
             if let openError {

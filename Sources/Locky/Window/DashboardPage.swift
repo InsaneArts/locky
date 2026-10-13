@@ -74,7 +74,7 @@ struct DashboardPage: View {
     private var configCard: some View {
         let problems = model.inspection.problems
         return StatusCard(symbol: problems.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
-                          tint: problems.isEmpty ? .green : .orange, title: "Config",
+                          tint: problems.isEmpty ? .green : .orange, title: "Lua Config",
                           value: problems.isEmpty ? "No problems" : problems.count == 1 ? "1 problem" : "\(problems.count) problems",
                           detail: problems.first.map { LuaError($0).summary } ?? "init.lua, plugins, and settings.json load cleanly.") {
             model.section = .config

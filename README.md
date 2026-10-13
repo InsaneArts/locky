@@ -69,7 +69,7 @@ a theme schedule, the battery saver, and a photo after wrong passwords. It saves
 
 ## Configure
 
-`~/.config/locky/init.lua` (the window's Config page creates it with examples):
+`~/.config/locky/init.lua` (the window's Lua Config page creates it with examples):
 
 ```lua
 locky.setup({ theme = "default", palette = { accent = "#ff79c6" } })

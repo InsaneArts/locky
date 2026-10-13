@@ -15,7 +15,7 @@ final class AppModel {
             case .themes: "Themes"
             case .widgets: "Widgets"
             case .plugins: "Plugins"
-            case .config: "Config"
+            case .config: "Lua Config"
             case .settings: "Settings"
             }
         }

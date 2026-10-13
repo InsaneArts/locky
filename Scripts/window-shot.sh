@@ -25,6 +25,7 @@ else
   CONFIG=$LOCKY_CONFIG_DIR
 fi
 TITLE="$(tr '[:lower:]' '[:upper:]' <<< "${SECTION:0:1}")${SECTION:1}"
+[[ $SECTION == config ]] && TITLE="Lua Config"
 ARGS=(window "$SECTION" --behind --size "${SIZE:-1240x780}")
 [[ -n "${3:-}" ]] && ARGS+=(--theme "$3")
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \

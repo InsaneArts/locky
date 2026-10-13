@@ -86,5 +86,7 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
   and its options (a menu where the widget lists the values an option takes). With nothing selected, it shows
   the background, the widget list, Add Widget, and Reset Layout.
 - **Plugins:** install from git, update, remove, and see what each package provides.
-- **Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
+- **Lua Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
+  What the window changes is saved to settings.json and overrides init.lua; a setting's Reset goes back to
+  init.lua's value.
 - **Settings:** everything in the table above.
