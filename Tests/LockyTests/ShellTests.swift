@@ -77,4 +77,30 @@ import Testing
         plain.setAutoLock(AutoLockSettings())
         #expect(plain["auto_lock"].isNil)
     }
+
+    // MARK: Problems
+
+    /// "$CONFIG" and "$PACKS" stand for a sandbox's folders, where the files are.
+    @Test(arguments: [
+        ("$CONFIG/init.lua:3: attempt to call a nil value (global 'boom')", "$CONFIG/init.lua", 3, "Attempt to call a nil value (global 'boom')"),
+        // Lua shortens a long chunk name from the front.
+        ("...ocky/init.lua:7: unexpected symbol near '}'", "$CONFIG/init.lua", 7, "Unexpected symbol near '}'"),
+        ("~/.config/locky/settings.json is not valid JSON: no value", nil, nil, "~/.config/locky/settings.json is not valid JSON: no value"),
+        ("$PACKS/locky-weather/plugin/weather.lua:12: bad argument #1 to 'format'", "$PACKS/locky-weather/plugin/weather.lua", 12,
+         "Bad argument #1 to 'format'"),
+    ] as [(String, String?, Int?, String)])
+    func aProblemNamesItsFileAndLine(_ problem: String, _ file: String?, _ line: Int?, _ message: String) throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "")
+        let plugin = sandbox.packs.appending(path: "locky-weather/plugin/weather.lua")
+        try FileManager.default.createDirectory(at: plugin.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: plugin)
+        func real(_ text: String) -> String {
+            text.replacingOccurrences(of: "$CONFIG", with: sandbox.config.path).replacingOccurrences(of: "$PACKS", with: sandbox.packs.path)
+        }
+        let found = ConfigProblem(real(problem), config: sandbox.config)
+        #expect(found.message == message)
+        #expect(found.file?.path == file.map(real))
+        #expect(found.line == line)
+    }
 }
