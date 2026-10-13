@@ -10,7 +10,9 @@
 -- at once, and widgets in one lock share one request. data is false while there is none, otherwise:
 --   { place, temp, feels, high, low, unit ("C" or "F"), condition, code, symbol, night, humidity, wind,
 --     wind_unit, wind_dir, uv, sunrise, sunset (minutes after midnight), moon_phase, moon_illumination,
---     days = { { date, high, low, code, symbol, condition }, ... three days }, fetched (seconds since 1970) }
+--     days = { { date, high, low, code, symbol, condition }, ... three days },
+--     hours = { { at (seconds since 1970), temp, code, symbol }, ... the next five three-hour forecasts },
+--     fetched (seconds since 1970) }
 -- In privacy mode (locky.config.privacy) place is nil: the city would say where the Mac is.
 local M = {}
 
@@ -91,6 +93,22 @@ function M.parse(json, imperial, now)
       code = number(noon.weatherCode), symbol = M.symbol(noon.weatherCode, false), condition = description(noon),
     }
   end
+  -- wttr.in forecasts every three hours ("0", "300", ... "2100"); the next five from now, today's and tomorrow's.
+  local hours, at_time = {}, now or os.time()
+  for _, day in ipairs(type(reply.weather) == "table" and reply.weather or {}) do
+    local y, m, d = tostring(day.date or ""):match("^(%d+)-(%d+)-(%d+)$")
+    for _, hour in ipairs(y and type(day.hourly) == "table" and day.hourly or {}) do
+      local hhmm = tonumber(hour.time)
+      if type(hour) == "table" and hhmm then
+        local at = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = hhmm // 100, min = hhmm % 100 })
+        if at > at_time - 1800 and #hours < 5 then
+          local h = hhmm // 100 * 60
+          local dark = sunrise and sunset and (h < sunrise or h >= sunset) or false
+          hours[#hours + 1] = { at = at, temp = temp(hour, "tempC", "tempF"), code = number(hour.weatherCode), symbol = M.symbol(hour.weatherCode, dark) }
+        end
+      end
+    end
+  end
   local area = type(reply.nearest_area) == "table" and reply.nearest_area[1] or {}
   local place = type(area.areaName) == "table" and area.areaName[1] and area.areaName[1].value or nil
   return {
@@ -106,6 +124,7 @@ function M.parse(json, imperial, now)
     sunrise = sunrise, sunset = sunset,
     moon_phase = astronomy.moon_phase, moon_illumination = number(astronomy.moon_illumination),
     days = days,
+    hours = hours,
   }
 end
 
