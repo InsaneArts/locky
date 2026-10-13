@@ -1,107 +1,152 @@
 import AppKit
 import SwiftUI
 
-/// Plugins: the ones added here (settings.json), the ones init.lua adds, and the built-in theme packages,
-/// each with what it provides. Install clones from git and pins the commit, like `locky pack sync`.
+/// Settings › Plugins: the plugins settings.json and init.lua add, each with what it adds and what it may do. Install
+/// clones from git and pins the commit, like `locky pack sync`; Update… installs exactly the commit it shows.
 struct PluginsPage: View {
-    @Bindable var model: AppModel
+    let model: AppModel
     @State private var installing = false
+    /// The update the Update sheet shows.
+    @State private var reviewing: PackUpdate?
+    /// The plugin the Remove alert asks about.
     @State private var removing: Inspection.PackInfo?
-    /// The plugins Remove Unused would delete, while its confirmation shows.
-    @State private var unused: [String]?
-    @State private var reviewing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var packs: [Inspection.PackInfo] { model.inspection.packs }
+    /// settings.json's plugins in their order, then init.lua's.
+    private var packs: [Inspection.PackInfo] {
+        model.inspection.packs.filter(\.fromSettings) + model.inspection.packs.filter { !$0.fromSettings }
+    }
+
+    /// A run is in progress: the controls that start one wait. The grant switches stay live: a grant writes
+    /// settings.json and cannot race git.
+    private var isBusy: Bool { model.packRunning != nil }
+
+    /// The last run, when it failed. Its section stays at the top until the next run.
+    private var failedRun: (action: PackManager.Action, report: PackManager.Report)? {
+        model.packReport.flatMap { $0.report.ok ? nil : $0 }
+    }
 
     var body: some View {
+        Group {
+            if !model.inspection.loaded {
+                // Until the config is read, so "No Plugins" never flashes.
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if packs.isEmpty, failedRun == nil {
+                ContentUnavailableView {
+                    Label("No Plugins", systemImage: "puzzlepiece.extension")
+                } description: {
+                    Text("Plugins add themes and widgets from git repositories.")
+                } actions: {
+                    Button("Install Plugin…") { installing = true }
+                        .disabled(isBusy)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    form
+                    Divider()
+                    HStack {
+                        Spacer()
+                        Button("Install Plugin…") { installing = true }
+                            .disabled(isBusy)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                }
+            }
+        }
+        .sheet(isPresented: $installing) { InstallSheet(model: model) }
+        .sheet(item: $reviewing) { UpdateSheet(model: model, update: $0) }
+        .alert(removing.map { "Remove “\($0.name)”?" } ?? "", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+               presenting: removing) { pack in
+            Button("Cancel", role: .cancel) {}
+            // Plain, not destructive: the person chose Remove… on purpose.
+            Button("Remove") { remove(pack) }
+                .keyboardShortcut(.defaultAction)
+        } message: { pack in
+            Text(Self.removal(pack))
+        }
+    }
+
+    private var form: some View {
         Form {
-            Text("A plugin adds themes and widgets.")
-                .foregroundStyle(.secondary)
-            if let running = model.packRunning {
+            if let failedRun {
                 Section {
-                    HStack(spacing: 10) {
-                        ProgressView().controlSize(.small)
-                        Text(Self.progress(running))
-                    }
-                }
-            } else if let last = model.packReport {
-                Section {
-                    DisclosureGroup {
-                        Text(last.report.text.isEmpty ? "Nothing to do." : last.report.text)
-                            .font(.system(.callout, design: .monospaced))
+                    VStack(alignment: .leading, spacing: 4) {
+                        WarningLabel(Self.failure(failedRun.action))
+                            .font(.body.weight(.semibold))
+                        Text(failedRun.report.text)
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(8)
                             .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } label: {
-                        Label(last.report.ok ? "\(Self.done(last.action))" : "\(Self.done(last.action)) with problems",
-                              systemImage: last.report.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(last.report.ok ? Color.green : Color.orange)
                     }
                 }
             }
-            Section {
-                let added = packs.filter(\.fromSettings)
-                if added.isEmpty {
-                    Text("No plugins yet. Install one from a git repository: “user/repo” on GitHub, or an https or ssh address.")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(added) { pack in
-                    PluginRow(model: model, pack: pack, removable: true) { removing = pack }
-                }
-            } header: {
-                Text("Installed Here")
+            ForEach(packs) { pack in
+                PluginSection(pack: pack, allow: allowed(pack), summary: Provides.summary(model: model, folder: pack.folder),
+                              theme: Provides.themes(model: model, folder: pack.folder).first,
+                              update: model.available.first { $0.name == pack.name }, isRunning: isRunning(pack), isBusy: isBusy,
+                              install: { model.runPack(.sync, targets: [pack.name]) }, review: { reviewing = $0 },
+                              remove: { removing = pack }, grant: { grant($0, $1, to: pack) })
             }
-            if packs.contains(where: { !$0.fromSettings }) {
+            if packs.contains(where: { $0.dir == nil }) {
                 Section {
-                    ForEach(packs.filter { !$0.fromSettings }) { pack in
-                        PluginRow(model: model, pack: pack, removable: false) {}
-                    }
-                } header: {
-                    Text("From init.lua")
+                    Toggle("Check for updates daily", isOn: model.store.bool("update_check", default: true))
                 } footer: {
-                    Text("init.lua adds these with locky.pack.add. Change them there.")
+                    updateStatus
                 }
-            }
-            Section {
-                BuiltInRow(model: model, folder: RuntimePath.builtInRuntime, title: "Core")
-                ForEach(RuntimePath.builtInPackages, id: \.self) { folder in
-                    BuiltInRow(model: model, folder: folder, title: Provides.themeNames(model: model, folder: folder) ?? folder.lastPathComponent)
-                }
-            } header: {
-                Text("Built In")
             }
         }
         .formStyle(.grouped)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button("Check for Updates", systemImage: "arrow.clockwise") { model.checkForUpdates() }
-                    .help(model.lastUpdateCheck.map { "Last checked \($0.formatted(.relative(presentation: .named)))" } ?? "Fetch every plugin and compare it with the pinned commit")
-                Button("Update All…", systemImage: "arrow.down.circle") { model.checkForUpdates { reviewing = true } }
-                    .help("See what each plugin's newest version changes, then install it")
-                Button("Install Plugin…", systemImage: "plus") { installing = true }
-                Menu("More", systemImage: "ellipsis.circle") {
-                    Button("Remove Unused…") { unused = unusedPlugins() }
-                        .help("Delete installed plugins that neither init.lua nor this window adds")
+        // A plugin or the failure coming or going fades and moves the rows below, so the row being watched does not jump.
+        .animation(Motion.rows(reduceMotion), value: packs.map(\.name))
+        .animation(Motion.rows(reduceMotion), value: failedRun != nil)
+    }
+
+    /// The update section's footer: what the last check this session found, and Check Now.
+    private var updateStatus: some View {
+        HStack(spacing: 8) {
+            if model.packRunning == .check {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Checking for updates…")
+            } else if let checked = model.lastUpdateCheck {
+                // A check that failed has its section at the top; this line then says only when it ran.
+                let upToDate = model.available.isEmpty && failedRun?.action != .check
+                TimelineView(.everyMinute) { _ in
+                    Text(upToDate ? "Up to date · checked \(Self.ago(checked))" : "Checked \(Self.ago(checked))")
                 }
-                .menuIndicator(.hidden)
             }
+            Spacer(minLength: 8)
+            Button("Check Now") { model.checkForUpdates() }
+                .buttonStyle(.link)
+                .disabled(isBusy)
         }
-        .disabled(model.packRunning != nil)
-        .sheet(isPresented: $installing) { InstallSheet(model: model) }
-        .sheet(isPresented: $reviewing) { UpdateSheet(model: model) }
-        .confirmationDialog(unused?.isEmpty == false ? "Remove unused plugins?" : "No unused plugins",
-                            isPresented: Binding(get: { unused != nil }, set: { if !$0 { unused = nil } }), presenting: unused) { names in
-            if !names.isEmpty {
-                Button("Remove", role: .destructive) { model.runPack(.clean, work: { $0.run(.clean, removing: names) }) }
+    }
+
+    /// Whether a run works on `pack` now: the plugins it names, and for a sync, every git plugin not installed yet.
+    private func isRunning(_ pack: Inspection.PackInfo) -> Bool {
+        guard let running = model.packRunning else { return false }
+        return model.packTargets.contains(pack.name) || (running == .sync && !pack.installed && pack.dir == nil)
+    }
+
+    /// What `pack` may do. For settings.json's, its entry as the file has it now: the config is read again only after
+    /// a write, and a switch must not flip back until then.
+    private func allowed(_ pack: Inspection.PackInfo) -> [String] {
+        guard pack.fromSettings,
+              let spec = model.store.settings.packs.first(where: { PackSpec.name(of: $0)?.lowercased() == pack.name.lowercased() })
+        else { return pack.allow }
+        return spec["allow"].array?.compactMap(\.string) ?? []
+    }
+
+    /// Writes one grant to the plugin's settings.json entry.
+    private func grant(_ capability: String, _ allowed: Bool, to pack: Inspection.PackInfo) {
+        model.store.update { settings in
+            settings.packs = settings.packs.map { spec in
+                PackSpec.name(of: spec)?.lowercased() == pack.name.lowercased() ? PackSpec.allowing(capability, allowed, in: spec) : spec
             }
-        } message: { names in
-            Text(names.isEmpty ? "Every installed plugin is in use."
-                 : "Locky deletes these folders in \(LuaError.shortenPaths(RuntimePath.defaultPacks.path)):\n" + names.joined(separator: "\n"))
-        }
-        .confirmationDialog("Remove \(removing?.name ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-                            presenting: removing) { pack in
-            Button("Remove", role: .destructive) { remove(pack) }
-        } message: { pack in
-            Text(pack.alsoInConfig ? "init.lua also adds it, so it stays installed." : "Locky deletes its folder and stops using its themes and widgets.")
         }
     }
 
@@ -109,168 +154,207 @@ struct PluginsPage: View {
         model.store.update { settings in
             settings.packs.removeAll { PackSpec.name(of: $0)?.lowercased() == pack.name.lowercased() }
         }
-        if !pack.alsoInConfig { model.runPack(.clean, work: { $0.run(.clean, removing: [pack.name]) }) }
+        // Nothing saves while settings.json has an error: the plugin stays in it, so its folder stays too.
+        guard model.store.problem == nil, !pack.alsoInConfig else { return }
+        let name = pack.name
+        model.runPack(.clean, targets: [name], work: { $0.run(.clean, removing: [name]) })
     }
 
-    /// The installed plugins that neither init.lua nor this window adds: what Remove Unused deletes.
-    private func unusedPlugins() -> [String] {
-        let path = RuntimePath.standard(config: model.store.config)
-        let specs = packs.map { PackManager.Spec(name: $0.name, src: $0.src, dir: $0.dir?.path) }
-        let lockfile = (try? PackManager.readLockfile(path.lockfile)) ?? PackManager.Lockfile()
-        return PackManager(path: path).unused(specs, lockfile: lockfile)
-            .filter { FileManager.default.fileExists(atPath: path.packs.appending(path: $0).path) }
-    }
-
-    static func progress(_ action: PackManager.Action) -> String {
+    /// The failure section's title for a run of `action`.
+    static func failure(_ action: PackManager.Action) -> String {
         switch action {
-        case .sync: "Installing…"
-        case .update: "Updating plugins…"
-        case .clean: "Removing unused plugins…"
-        case .check: "Checking for updates…"
-        default: "Working…"
+        case .sync: "Couldn't install plugins"
+        case .update: "Couldn't update plugins"
+        case .clean: "Couldn't remove the plugin"
+        case .check: "Couldn't check for updates"
+        case .list: "Couldn't list plugins"
         }
     }
 
-    static func done(_ action: PackManager.Action) -> String {
-        switch action {
-        case .sync: "Installed"
-        case .update: "Updated"
-        case .clean: "Removed unused plugins"
-        case .check: "Checked for updates"
-        default: "Done"
+    /// Where a plugin comes from, for its row: "someone/locky-stars" on GitHub, the address on another host, the folder
+    /// of a local one; then its pinned version, and "init.lua" for one init.lua adds.
+    static func source(_ pack: Inspection.PackInfo) -> String {
+        var parts: [String] = []
+        if let dir = pack.dir {
+            parts.append(LuaError.shortenPaths(dir.path))
+        } else if let src = pack.src {
+            let github = "https://github.com/"
+            if src.hasPrefix(github) {
+                let path = src.dropFirst(github.count)
+                parts.append(String(path.hasSuffix(".git") ? path.dropLast(4) : path))
+            } else {
+                parts.append(src)
+            }
         }
+        if let version = pack.version { parts.append(version) }
+        if !pack.fromSettings { parts.append("init.lua") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The Remove alert's message.
+    private static func removal(_ pack: Inspection.PackInfo) -> String {
+        if pack.alsoInConfig { return "init.lua also adds it, so it stays installed." }
+        // A local folder is the person's own code: removing the plugin never deletes it.
+        if pack.dir != nil { return "Locky keeps its folder. Its themes and widgets stop showing." }
+        return "Locky deletes its folder. Its themes and widgets stop showing."
+    }
+
+    /// "just now" within a minute, else "2 minutes ago", in English like the rest of the window.
+    private static func ago(_ date: Date) -> String {
+        Date.now.timeIntervalSince(date) < 60 ? "just now"
+            : date.formatted(.relative(presentation: .named).locale(Locale(identifier: "en_US")))
     }
 }
 
-private struct PluginRow: View {
-    let model: AppModel
+/// One plugin: what it is and adds, its one action, its More menu, and for a git plugin what it may do beyond reading
+/// files. It takes values, so another plugin's change leaves it as it is.
+private struct PluginSection: View {
     let pack: Inspection.PackInfo
-    let removable: Bool
+    /// What it may do: "system" (run programs) and "files" (change files).
+    let allow: [String]
+    /// "Widget: Stars Count", or nil when it adds nothing.
+    let summary: String?
+    /// Its first theme, whose thumbnail is its icon.
+    let theme: Inspection.ThemeInfo?
+    /// The new commit the last check found for it.
+    let update: PackUpdate?
+    /// A run works on it now: a spinner takes its button's place.
+    let isRunning: Bool
+    /// A run is in progress: the controls that start one wait.
+    let isBusy: Bool
+    let install: () -> Void
+    let review: (PackUpdate) -> Void
     let remove: () -> Void
+    let grant: (_ capability: String, _ allowed: Bool) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: pack.dir == nil ? "shippingbox.fill" : "folder.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background((pack.installed ? Color.blue : Color.gray).gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(pack.name).font(.body.weight(.semibold))
-                }
-                Text(source).font(.callout.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                Text(Provides.text(model: model, folder: pack.folder)).font(.callout).foregroundStyle(.secondary)
-                if pack.dir == nil {
-                    HStack(spacing: 14) {
-                        grant("system", "Run programs")
-                        grant("files", "Change files")
+        Section {
+            header
+            // A local folder is the person's own code: it gets no grants.
+            if pack.dir == nil {
+                Group {
+                    Toggle("Run programs", isOn: allows("system"))
+                    Toggle(isOn: allows("files")) {
+                        Text("Change files")
+                        Text("Gives as much access as running programs.")
                     }
-                    .controlSize(.small)
-                    .disabled(!removable)
-                    .help(removable ? "What this plugin may do besides reading your files" : "Set allow = { ... } in its locky.pack.add entry in init.lua")
                 }
+                // init.lua's plugins show the grants init.lua gives them.
+                .disabled(!pack.fromSettings)
+                .help(pack.fromSettings ? "" : "Set allow = { … } for it in init.lua")
             }
-            Spacer(minLength: 0)
-            if !pack.installed, pack.dir == nil {
-                Button("Install") { model.runPack(.sync) }
-            }
-            Menu {
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([pack.folder]) }
-                    .disabled(!pack.installed)
-                if let src = pack.src, let url = URL(string: src), url.scheme?.hasPrefix("http") == true {
-                    Button("Open Repository") { NSWorkspace.shared.open(url) }
-                }
-                if removable {
-                    Divider()
-                    Button("Remove…", role: .destructive, action: remove)
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
         }
-        .padding(.vertical, 3)
     }
 
-    /// A checkbox for one capability, written to the plugin's settings.json entry.
-    private func grant(_ capability: String, _ title: String) -> some View {
-        Toggle(title, isOn: Binding(get: { pack.allow.contains(capability) }, set: { allowed in
-            model.store.update { settings in
-                settings.packs = settings.packs.map { spec in
-                    PackSpec.name(of: spec)?.lowercased() == pack.name.lowercased() ? PackSpec.allowing(capability, allowed, in: spec) : spec
-                }
-            }
-        }))
-        .toggleStyle(.checkbox)
-    }
-
-    private var source: String {
-        if let dir = pack.dir { return LuaError.shortenPaths(dir.path) }
-        var text = pack.src ?? "?"
-        if let version = pack.version { text += " @ \(version)" }
-        if let commit = pack.commit { text += " · \(commit.prefix(7))" }
-        return text
-    }
-}
-
-private struct BuiltInRow: View {
-    let model: AppModel
-    let folder: URL
-    let title: String
-
-    var body: some View {
+    private var header: some View {
         HStack(spacing: 12) {
             icon
-                .frame(width: 48, height: 30)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.primary.opacity(0.1), lineWidth: 0.5))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.body.weight(.medium))
-                Text(Provides.text(model: model, folder: folder)).font(.callout).foregroundStyle(.secondary)
+                Text(pack.name)
+                    .font(.headline)
+                Text(PluginsPage.source(pack))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(pack.commit.map { "Pinned to commit \($0.prefix(7))" } ?? "")
+                if pack.installed, let summary {
+                    Text(summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(summary)
+                }
             }
-            Spacer()
+            Spacer(minLength: 8)
+            control
+                .controlSize(.small)
+            Menu { menuItems } label: { Image(systemName: "ellipsis") }
+                .menuStyle(.button)
+                .buttonStyle(.borderless)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Show in Finder, open the repository, or remove")
+                .accessibilityLabel("More")
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, 2)
+        .contextMenu { menuItems }
     }
 
-    /// The plugin's first theme as it looks, like an app's icon in a list; a symbol for one without themes.
-    @ViewBuilder private var icon: some View {
-        let root = folder.resolvingSymlinksInPath().path + "/"
-        if let theme = model.inspection.themes.first(where: { ($0.directory?.resolvingSymlinksInPath().path ?? "").appending("/").hasPrefix(root) }),
-           let image = ThemeThumbnails.image(for: theme) {
-            Image(nsImage: image).resizable().scaledToFill()
-        } else {
-            Image(systemName: "puzzlepiece.extension.fill")
-                .font(.system(size: 14))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.gray.gradient)
+    /// Its first theme's thumbnail, as an app's icon shows the app, else a puzzle piece. VoiceOver skips it: the name
+    /// says it.
+    private var icon: some View {
+        Group {
+            if let theme, let image = ThemeThumbnails.image(for: theme) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "puzzlepiece.extension.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.gray.gradient)
+            }
         }
+        .frame(width: 32, height: 32)
+        .clipShape(RoundedRectangle(cornerRadius: Design.Radius.thumbnail, style: .continuous))
+        .hairline(cornerRadius: Design.Radius.thumbnail, lineWidth: 0.5)
+        .accessibilityHidden(true)
+    }
+
+    /// The one control: a spinner while a run works on it, else Install, else Update… when a new commit waits.
+    @ViewBuilder private var control: some View {
+        if isRunning {
+            ProgressView()
+        } else if !pack.installed, pack.dir == nil {
+            Button("Install", action: install)
+                .disabled(isBusy)
+        } else if let update {
+            Button("Update…") { review(update) }
+                .disabled(isBusy)
+        }
+    }
+
+    /// The More menu's items, which a right-click on the row shows too.
+    @ViewBuilder private var menuItems: some View {
+        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([pack.folder]) }
+            .disabled(!pack.installed)
+        if let src = pack.src, let url = URL(string: src), url.scheme?.hasPrefix("http") == true {
+            Button("Open Repository") { NSWorkspace.shared.open(url) }
+        }
+        if pack.fromSettings {
+            Divider()
+            Button("Remove…", action: remove)
+                .disabled(isBusy)
+        }
+    }
+
+    private func allows(_ capability: String) -> Binding<Bool> {
+        Binding(get: { allow.contains(capability) }, set: { grant(capability, $0) })
     }
 }
 
-/// "Themes: Mocha · Widgets: mocha.clock, mocha.bar": what a plugin folder provides.
+/// What a plugin folder adds, for its row.
+@MainActor
 enum Provides {
-    /// The display names of the themes in `folder`, such as "Mocha", or nil when it has none.
-    @MainActor
-    static func themeNames(model: AppModel, folder: URL) -> String? {
+    /// The themes in `folder`.
+    static func themes(model: AppModel, folder: URL) -> [Inspection.ThemeInfo] {
         let root = folder.resolvingSymlinksInPath().path + "/"
-        let names = model.inspection.themes.filter { ($0.directory?.resolvingSymlinksInPath().path ?? "").appending("/").hasPrefix(root) }.map(\.name)
-        return names.isEmpty ? nil : names.joined(separator: ", ")
+        return model.inspection.themes.filter { ($0.directory?.resolvingSymlinksInPath().path ?? "").appending("/").hasPrefix(root) }
     }
 
-    @MainActor
-    static func text(model: AppModel, folder: URL) -> String {
+    /// "Themes: Stormy · Widgets: Stars Count, Stars Graph" in the names people read, with "Theme:" and "Widget:" for
+    /// one; nil when `folder` adds nothing.
+    static func summary(model: AppModel, folder: URL) -> String? {
         let root = folder.resolvingSymlinksInPath().path + "/"
-        let themes = model.inspection.themes.filter { ($0.directory?.resolvingSymlinksInPath().path ?? "").appending("/").hasPrefix(root) }
+        let themes = themes(model: model, folder: folder).map(\.name)
         let widgets = model.inspection.widgets.filter { ($0.file?.resolvingSymlinksInPath().path ?? "").hasPrefix(root) }
+            .map { EditorPlacement.title($0.name) }
         var parts: [String] = []
-        if !themes.isEmpty { parts.append("Themes: " + themes.map(\.name).joined(separator: ", ")) }
-        if !widgets.isEmpty { parts.append("Widgets: " + widgets.map(\.name).joined(separator: ", ")) }
-        return parts.isEmpty ? "No themes or widgets yet" : parts.joined(separator: " · ")
+        if !themes.isEmpty { parts.append((themes.count == 1 ? "Theme: " : "Themes: ") + themes.joined(separator: ", ")) }
+        if !widgets.isEmpty { parts.append((widgets.count == 1 ? "Widget: " : "Widgets: ") + widgets.joined(separator: ", ")) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -307,42 +391,51 @@ enum PackSpec {
     }
 }
 
+/// Install Plugin: a repository, and a version if wanted. Install adds it to settings.json and clones it.
 struct InstallSheet: View {
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var source = ""
     @State private var version = ""
+    @FocusState private var focus: Field?
+
+    enum Field { case source, version }
 
     private var problem: String? { PackSpec.problem(source: source) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Install a Plugin").font(.title3.weight(.semibold))
-            Text("A plugin adds themes and widgets. Locky clones it with git into ~/.local/share/locky/pack and pins the commit in locky-pack-lock.json, next to init.lua.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text("Install Plugin").font(.headline)
             Form {
-                TextField("Repository", text: $source, prompt: Text("user/repo or https://…"))
-                TextField("Version", text: $version, prompt: Text("Optional: a tag, branch, or commit"))
+                TextField("Repository", text: $source, prompt: Text("someone/locky-weather"))
+                    .focused($focus, equals: .source)
+                TextField("Version", text: $version, prompt: Text("Latest"))
+                    .focused($focus, equals: .version)
+                    .help("A tag, branch, or commit")
             }
             .formStyle(.columns)
-            if !source.isEmpty, let problem {
-                Label(problem, systemImage: "exclamationmark.circle").foregroundStyle(.orange).font(.callout)
+            // Once Repository is left, never while it is typed in.
+            if !source.isEmpty, focus != .source, let problem {
+                WarningLabel(problem)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Label("A plugin runs as you and can read your files. It runs programs or changes files only if you allow it on this page. Install plugins from people you trust.", systemImage: "hand.raised")
+            Label("A plugin runs as you and can read your files. Install plugins only from people you trust.", systemImage: "hand.raised")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Install") { install() }
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Install", action: install)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(problem != nil)
+                    .disabled(problem != nil || model.packRunning != nil)
             }
         }
         .padding(20)
-        .frame(width: 480)
+        .frame(width: 440)
+        .defaultFocus($focus, .source)
     }
 
     private func install() {
@@ -359,53 +452,53 @@ struct InstallSheet: View {
     }
 }
 
-/// What Update All installs, before it does: each plugin's new commits and diffstat, from the check that just ran.
-/// Update installs exactly those commits.
+/// Update: what one plugin's new commit changes, from the check that found it. Update installs exactly that commit.
 struct UpdateSheet: View {
     let model: AppModel
+    let update: PackUpdate
     @Environment(\.dismiss) private var dismiss
-    /// Kept from when the sheet opened: a check that runs meanwhile must not change what Update installs.
-    @State private var updates: [PackUpdate] = []
+    /// The log's height, so the well fits it between 120 and 320 points.
+    @State private var logHeight: CGFloat = 0
+
+    /// The commits and the diffstat as git prints them, without the indent `locky pack check` adds.
+    private var log: String {
+        update.changes.map { $0.hasPrefix("  ") ? String($0.dropFirst(2)) : $0 }.joined(separator: "\n")
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(updates.isEmpty ? "Every Plugin Is Up to Date" : "Update Plugins").font(.title3.weight(.semibold))
-            if !updates.isEmpty {
-                Text("Read what changes before you install it. A plugin runs as you.")
-                    .foregroundStyle(.secondary)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        ForEach(updates, id: \.name) { update in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(update.name)  \(update.current?.prefix(7) ?? "") → \(update.latest?.prefix(7) ?? "")")
-                                    .font(.body.weight(.semibold))
-                                Text(update.changes.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n"))
-                                    .font(.system(.callout, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
-                .frame(minHeight: 120, maxHeight: 360)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Update \(update.name)").font(.headline)
+            Text("\(update.current?.prefix(7) ?? "") → \(update.latest?.prefix(7) ?? "")")
+                .font(.subheadline.monospaced())
+                .foregroundStyle(.secondary)
+            ScrollView {
+                Text(log)
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { logHeight = $0 }
             }
+            .frame(height: min(max(logHeight, 120), 320))
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous))
             HStack {
                 Spacer()
-                if updates.isEmpty {
-                    Button("OK") { dismiss() }.keyboardShortcut(.defaultAction)
-                } else {
-                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                    Button("Update") {
-                        model.applyUpdates(updates)
-                        dismiss()
-                    }
-                    .keyboardShortcut(.defaultAction)
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Update") {
+                    model.applyUpdates([update])
+                    dismiss()
                 }
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.packRunning != nil)
             }
         }
         .padding(20)
-        .frame(width: 560)
-        .onAppear { updates = model.available }
+        .frame(width: 520)
     }
+}
+
+/// For `.sheet(item:)`: one plugin has one update.
+extension PackUpdate: Identifiable {
+    var id: String { name }
 }
