@@ -20,7 +20,9 @@ cannot do.
   seconds of a lock, or loses the keyboard during a lock and does not get it back within 1 second, it does
   not stay up, since typing would go to the app behind it. With Accessibility access (Settings › Unlock ›
   Keep the keyboard on the lock screen), it takes the keys with an event tap for the rest of the lock.
-  Without it, Locky switches to the macOS lock screen.
+  Without it, Locky switches to the macOS lock screen. It switches too when another app has secure keyboard
+  entry on (Terminal's Secure Keyboard Entry, a focused password field), which hides the keys from any event
+  tap.
 - **No injected code.** Locky.app and the guard are signed with the hardened runtime, so
   `DYLD_INSERT_LIBRARIES` cannot load code into them.
 - **Other launches are ignored.** While a lock is on, Locky ignores requests from another launch, such as

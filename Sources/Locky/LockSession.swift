@@ -303,23 +303,40 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     /// A lock that does not hold the keyboard must not stay up, since typing would go to the app behind it. It
     /// takes the keys with an event tap if Accessibility allows one, or hands over to the macOS lock screen.
-    static func keyboardAction(holds: Bool, tapped: Bool, trusted: Bool) -> KeyboardAction {
-        if holds || tapped { return .keep }
+    /// Another app's secure keyboard entry hides the keys from every event tap: a hand-over then too.
+    static func keyboardAction(holds: Bool, tapped: Bool, trusted: Bool, secureInput: Bool) -> KeyboardAction {
+        if holds { return .keep }
+        if secureInput { return .handOver }
+        if tapped { return .keep }
         return trusted ? .tap : .handOver
+    }
+
+    /// Secure keyboard entry is on for another app (Terminal's Secure Keyboard Entry, a focused password field).
+    private static var secureInputElsewhere: Bool {
+        guard IsSecureEventInputEnabled() else { return false }
+        return (CGSessionCopyCurrentDictionary() as? [String: Any])?["kCGSSessionSecureInputPID"] as? Int != Int(getpid())
     }
 
     private func checkKeyboard(_ reason: String) {
         keyboardCheck = nil
         guard mode == .lock, !ended else { return }
-        switch Self.keyboardAction(holds: holdsKeyboard, tapped: keyTap != nil, trusted: AXIsProcessTrusted()) {
-        case .keep: break
+        let secureInput = Self.secureInputElsewhere
+        switch Self.keyboardAction(holds: holdsKeyboard, tapped: keyTap != nil, trusted: AXIsProcessTrusted(), secureInput: secureInput) {
+        case .keep:
+            // While the tap holds the keys, another app may turn secure keyboard entry on: check each second.
+            guard !holdsKeyboard else { return }
+            keyboardCheck = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                self?.checkKeyboard("the event tap held the keyboard")
+            }
         case .tap:
             if takeKeyboard() {
                 LogFile.shared.write(level: "info", message: "took the keyboard with an event tap: \(reason)", source: "locky")
             } else {
                 handOver("\(reason), and the event tap failed")
             }
-        case .handOver: handOver(reason)
+        case .handOver: handOver(secureInput ? "\(reason), and secure keyboard entry in another app hides the keys from an event tap" : reason)
         }
     }
 

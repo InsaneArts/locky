@@ -20,9 +20,13 @@ import Testing
     }
 
     @Test func aLockWithoutTheKeyboardTapsItOrHandsOver() {
-        #expect(LockSession.keyboardAction(holds: true, tapped: false, trusted: false) == .keep)
-        #expect(LockSession.keyboardAction(holds: false, tapped: true, trusted: true) == .keep)
-        #expect(LockSession.keyboardAction(holds: false, tapped: false, trusted: true) == .tap)
-        #expect(LockSession.keyboardAction(holds: false, tapped: false, trusted: false) == .handOver)
+        #expect(LockSession.keyboardAction(holds: true, tapped: false, trusted: false, secureInput: false) == .keep)
+        #expect(LockSession.keyboardAction(holds: false, tapped: true, trusted: true, secureInput: false) == .keep)
+        #expect(LockSession.keyboardAction(holds: false, tapped: false, trusted: true, secureInput: false) == .tap)
+        #expect(LockSession.keyboardAction(holds: false, tapped: false, trusted: false, secureInput: false) == .handOver)
+        // Another app's secure keyboard entry: an event tap would not see the keys, which go to that app.
+        #expect(LockSession.keyboardAction(holds: false, tapped: false, trusted: true, secureInput: true) == .handOver)
+        #expect(LockSession.keyboardAction(holds: false, tapped: true, trusted: true, secureInput: true) == .handOver)
+        #expect(LockSession.keyboardAction(holds: true, tapped: false, trusted: true, secureInput: true) == .keep)
     }
 }
