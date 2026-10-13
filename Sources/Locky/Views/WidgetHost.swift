@@ -134,32 +134,9 @@ private struct WidgetView: View {
         }
     }
 
-    @ViewBuilder private var chrome: some View {
-        if let card, card.style != "none", model.error == nil, model.node != nil {
-            // A circular widget sits on a disc, as on the Lock Screen; the others on a rounded card.
-            let shape = placement.family == "circular" ? AnyShape(Circle())
-                : AnyShape(RoundedRectangle(cornerRadius: card.radius * style.scale, style: .continuous))
-            // With a size, the card fills it and `align` places the content inside, so a dashboard's panels line up.
-            // Apple's margins: 16 points; a Lock Screen family's content runs to its edges.
-            let lockScreen = ["circular", "rectangular", "inline"].contains(placement.family ?? "")
-            let padded = content.padding(lockScreen ? 0 : 16 * style.scale)
-                .frame(maxWidth: placement.size == nil ? nil : .infinity, maxHeight: placement.size == nil ? nil : .infinity, alignment: alignment)
-            switch card.style {
-            case "solid":
-                padded.background(style.color(card.fill ?? "surface"), in: shape)
-                    .overlay(shape.stroke(style.color(card.border ?? "border"), lineWidth: 1).padding(0.5))
-            case "outline":
-                padded.overlay(shape.stroke(style.color(card.border ?? "border"), lineWidth: 1.5 * style.scale).padding(0.75 * style.scale))
-            default:
-                if #available(macOS 26.0, *) {
-                    padded.glassEffect(.clear.tint(card.fill.map(style.color) ?? .black.opacity(0.18)), in: shape)
-                } else {
-                    padded.background(.ultraThinMaterial, in: shape)
-                }
-            }
-        } else {
-            content
-        }
+    private var chrome: some View {
+        WidgetChrome(card: model.error == nil && model.node != nil ? card : nil, family: placement.family,
+                   fills: placement.size != nil, alignment: alignment) { content }
     }
 
     private var alignment: Alignment {
@@ -188,6 +165,56 @@ private struct WidgetView: View {
         case .bottom: .bottom
         case .bottomRight: .bottomTrailing
         case .center: .center
+        }
+    }
+}
+
+/// A widget's card, the same on the lock screen and in the window's gallery: a disc for a circular widget, a
+/// rounded card for the others, with Apple's 16-point margins except for the Lock Screen families.
+struct WidgetChrome<Content: View>: View {
+    /// nil: no card.
+    let card: Theme.Card?
+    let family: String?
+    /// Whether the card fills a fixed size, placing the content by `alignment`.
+    let fills: Bool
+    var alignment: Alignment = .center
+    @ViewBuilder let content: Content
+    @Environment(\.lockyStyle) private var style
+
+    /// Apple's sizes, in points: what a placement's `family` gives it (docs/themes.md).
+    static func size(_ family: String) -> CGSize? {
+        switch family {
+        case "circular": CGSize(width: 76, height: 76)
+        case "rectangular": CGSize(width: 172, height: 76)
+        case "small": CGSize(width: 170, height: 170)
+        case "medium": CGSize(width: 364, height: 170)
+        case "large": CGSize(width: 364, height: 382)
+        default: nil
+        }
+    }
+
+    var body: some View {
+        if let card, card.style != "none" {
+            let shape = family == "circular" ? AnyShape(Circle())
+                : AnyShape(RoundedRectangle(cornerRadius: card.radius * style.scale, style: .continuous))
+            let lockScreen = ["circular", "rectangular", "inline"].contains(family ?? "")
+            let padded = content.padding(lockScreen ? 0 : 16 * style.scale)
+                .frame(maxWidth: fills ? .infinity : nil, maxHeight: fills ? .infinity : nil, alignment: alignment)
+            switch card.style {
+            case "solid":
+                padded.background(style.color(card.fill ?? "surface"), in: shape)
+                    .overlay(shape.stroke(style.color(card.border ?? "border"), lineWidth: 1).padding(0.5))
+            case "outline":
+                padded.overlay(shape.stroke(style.color(card.border ?? "border"), lineWidth: 1.5 * style.scale).padding(0.75 * style.scale))
+            default:
+                if #available(macOS 26.0, *) {
+                    padded.glassEffect(.clear.tint(card.fill.map(style.color) ?? .black.opacity(0.18)), in: shape)
+                } else {
+                    padded.background(.ultraThinMaterial, in: shape)
+                }
+            }
+        } else {
+            content
         }
     }
 }
