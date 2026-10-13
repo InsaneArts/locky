@@ -34,7 +34,7 @@ struct SettingsPage: View {
             .disabled(store.problem != nil)
         }
         .formStyle(.grouped)
-        .pageWidth()
+        .scrollingPageWidth()
     }
 
     // MARK: Sections

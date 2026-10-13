@@ -87,10 +87,26 @@ struct MainView: View {
 }
 
 extension View {
-    /// The width of the pages that read from top to bottom (the Dashboard, Plugins, and Settings), from the
-    /// leading edge. A grouped form grows no wider than about this by itself. Pages that are a gallery or an
-    /// editor (Themes, Widgets, Lua Config) use the whole window.
+    /// The width of the pages that read from top to bottom (the Dashboard, Plugins, Settings, and the Welcome),
+    /// from the leading edge. Pages that are a gallery or an editor (Themes, Widgets, Lua Config) use the whole
+    /// window.
     func pageWidth() -> some View {
         frame(maxWidth: 760).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The same width for a page that scrolls by itself, such as a grouped form: its scroll view still fills the
+    /// window, so the page scrolls wherever the pointer is.
+    func scrollingPageWidth() -> some View {
+        modifier(ScrollingPageWidth())
+    }
+}
+
+private struct ScrollingPageWidth: ViewModifier {
+    @State private var width: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .contentMargins(.trailing, max(0, width - 760), for: .scrollContent)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }

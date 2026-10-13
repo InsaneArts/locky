@@ -66,7 +66,7 @@ struct PluginsPage: View {
             }
         }
         .formStyle(.grouped)
-        .pageWidth()
+        .scrollingPageWidth()
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Remove Unused", systemImage: "trash") { model.runPack(.clean) }
