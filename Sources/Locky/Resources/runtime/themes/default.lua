@@ -22,10 +22,12 @@ return {
     { "date", anchor = "top", offset = { 0, 100 }, opts = { size = 20, weight = "semibold", color = "#ffffffd9", shadow = 8 } },
     -- numeric = false: rolling digits this large cost about 0.4 s of CPU at each minute change.
     { "clock", anchor = "top", offset = { 0, 114 }, opts = { size = 150, weight = "light", tracking = -2, shadow = 6, color = "fg", numeric = false } },
-    -- A quiet status row in the bottom corners. The keyboard code has a fixed width, so the battery can sit
-    -- beside it; without a battery the keyboard keeps the corner. The agents line hides when herdr is off.
+    -- Under the clock, as on the iPhone's Lock Screen: two circles and a rectangle, centered as a row.
+    { "weather", family = "circular", anchor = "top", offset = { -138, 304 } },
+    { "battery", family = "circular", anchor = "top", offset = { -48, 304 } },
+    { "sun", family = "rectangular", anchor = "top", offset = { 90, 304 } },
+    -- A quiet status line in the bottom corners. The agents line hides when herdr is off.
     { "agents", anchor = "bottom-left", offset = { 32, -30 }, card = false, opts = { style = "summary", offline = false, size = 12 } },
-    { "battery", anchor = "bottom-right", offset = { -92, -30 }, card = false, opts = { style = "compact", size = 12 } },
     { "keyboard", anchor = "bottom-right", offset = { -32, -30 }, opts = { style = "code", size = 12, color = "muted" } },
   },
 }
