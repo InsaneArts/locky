@@ -42,15 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     static let request = Notification.Name("com.tornikegomareli.Locky.request")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // A tool run draws in the appearance LOCKY_APPEARANCE names ("light" or "dark"), for screenshots of both;
-        // anything else leaves the Mac's own.
-        if Self.isTool {
-            switch ProcessInfo.processInfo.environment["LOCKY_APPEARANCE"] {
-            case "light": NSApp.appearance = NSAppearance(named: .aqua)
-            case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
-            default: break
-            }
-        }
         // No tabs: the windows are a main window, a settings window, and the Welcome.
         NSWindow.allowsAutomaticWindowTabbing = false
         try? Settings.createFolder(store.config)
