@@ -264,6 +264,7 @@ enum CLI {
     static func ensureConfig() {
         let fm = FileManager.default
         let config = RuntimePath.defaultConfig
+        try? Settings.createFolder(config)
         try? fm.createDirectory(at: config.appending(path: "lua"), withIntermediateDirectories: true)
         let file = config.appending(path: "init.lua")
         if !fm.fileExists(atPath: file.path) {

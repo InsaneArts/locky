@@ -17,7 +17,8 @@ are the exception to the order: settings.json's `packs` load before init.lua run
 plugin scripts, so they win.
 
 The file is plain JSON with sorted keys, so you can edit it by hand and keep it in your dotfiles; the
-window picks up an edit at once. A symlinked settings.json keeps its link when the window saves. If the file
+window picks up an edit at once. A symlinked settings.json keeps its link when the window saves. Locky writes
+the file with mode 0600, and a config folder it creates with mode 0700, so only you can read them. If the file
 has an error, Locky says so in the window and in `locky check`, and does not overwrite it.
 
 ## Keys

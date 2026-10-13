@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     static let request = Notification.Name("com.tornikegomareli.Locky.request")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        try? FileManager.default.createDirectory(at: store.config, withIntermediateDirectories: true)
+        try? Settings.createFolder(store.config)
         if !Self.isTool { store.migrateMenuTheme() }
         store.watch()
         let tool = Self.isTool
