@@ -300,13 +300,17 @@ final class ThemePreviewView: NSView {
     }
 }
 
-/// The theme editor's layer over the preview: the grid, and outlines on the hovered and the selected item. A click
-/// selects an item, and a drag moves it (onto the grid while the grid shows); a click elsewhere clears the
-/// selection.
+/// The theme editor's layer over the preview: the grid, and outlines. While the pointer is over the canvas, every
+/// item it can select has a faint outline and the one under the pointer a stronger one; the selected item has the
+/// accent color. A click selects an item, and a drag moves it (onto the grid while the grid shows); a click elsewhere
+/// clears the selection.
 @MainActor
 final class CanvasOverlay: NSView {
     weak var preview: ThemePreviewView?
+    private var pointerInside = false
     private var hovered: EditorItem?
+    /// Hover follows the pointer only in the key window: another window's turn clears it.
+    private var resignKey: NSObjectProtocol?
     private struct Drag {
         var item: EditorItem
         var start: CGPoint
@@ -342,9 +346,31 @@ final class CanvasOverlay: NSView {
                                        owner: self))
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let resignKey { NotificationCenter.default.removeObserver(resignKey) }
+        resignKey = window.map { window in
+            NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pointerLeft() }
+            }
+        }
+    }
+
+    /// A hidden canvas hears no pointer: it starts without hover when it shows again.
+    override func viewDidHide() {
+        super.viewDidHide()
+        pointerLeft()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        pointerInside = true
+        needsDisplay = true
+    }
+
     override func mouseMoved(with event: NSEvent) {
         let found = item(at: layoutPoint(event))?.item
-        if found != hovered {
+        if found != hovered || !pointerInside {
+            pointerInside = true
             hovered = found
             needsDisplay = true
         }
@@ -352,9 +378,14 @@ final class CanvasOverlay: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        pointerLeft()
+        NSCursor.arrow.set()
+    }
+
+    private func pointerLeft() {
+        pointerInside = false
         hovered = nil
         needsDisplay = true
-        NSCursor.arrow.set()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -367,6 +398,7 @@ final class CanvasOverlay: NSView {
         }
         if canvas.selection != hit.item { canvas.select(hit.item) }
         drag = Drag(item: hit.item, start: point, frame: hit.frame)
+        needsDisplay = true
         NSCursor.closedHand.set()
     }
 
@@ -387,7 +419,8 @@ final class CanvasOverlay: NSView {
     override func mouseUp(with event: NSEvent) {
         defer {
             drag = nil
-            NSCursor.openHand.set()
+            (item(at: layoutPoint(event)) == nil ? NSCursor.arrow : NSCursor.openHand).set()
+            needsDisplay = true
         }
         guard let drag, let placed = drag.placed else { return }
         canvas?.move(drag.item, placed.anchor, placed.offset)
@@ -413,12 +446,19 @@ final class CanvasOverlay: NSView {
         guard let canvas else { return }
         if canvas.grid { drawGrid() }
         let items = preview?.editables ?? []
-        if let hovered, hovered != canvas.selection, let frame = items.first(where: { $0.item == hovered })?.frame {
-            outline(frame, color: .white.withAlphaComponent(0.75), width: 1)
+        // The item being dragged shows as selected from the first frame, before the selection reaches the page.
+        let selected = drag?.item ?? canvas.selection
+        if pointerInside {
+            let strong = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+            for (item, frame) in items where item != selected && item != hovered {
+                outline(frame, dark: (2, strong ? 0.35 : 0.15), light: (1, .white.withAlphaComponent(strong ? 0.6 : 0.25)))
+            }
         }
-        if let selection = canvas.selection, let frame = items.first(where: { $0.item == selection })?.frame {
-            outline(frame, color: .controlAccentColor, width: 2)
-            label(canvas.name(selection), on: frame)
+        if let hovered, hovered != selected, let frame = items.first(where: { $0.item == hovered })?.frame {
+            outline(frame, dark: (3, 0.25), light: (1, .white.withAlphaComponent(0.9)))
+        }
+        if let selected, let frame = items.first(where: { $0.item == selected })?.frame {
+            outline(frame, dark: (4, 0.25), light: (2, .controlAccentColor))
         }
     }
 
@@ -434,43 +474,35 @@ final class CanvasOverlay: NSView {
             lines.line(to: CGPoint(x: bounds.width, y: y * scale))
         }
         lines.lineWidth = 1 / (window?.backingScaleFactor ?? 2)
-        // Dark and light at once, so the lines show on any background.
-        NSColor.black.withAlphaComponent(0.22).setStroke()
-        lines.stroke()
-        NSColor.white.withAlphaComponent(0.22).setStroke()
-        lines.stroke()
+        // The center lines are a point wide, in the same colors.
         let center = NSBezierPath()
         center.move(to: CGPoint(x: bounds.midX, y: 0))
         center.line(to: CGPoint(x: bounds.midX, y: bounds.height))
         center.move(to: CGPoint(x: 0, y: bounds.midY))
         center.line(to: CGPoint(x: bounds.width, y: bounds.midY))
         center.lineWidth = 1
-        NSColor.controlAccentColor.withAlphaComponent(0.7).setStroke()
-        center.stroke()
+        // Dark and light at once, so the lines show on any background.
+        for path in [lines, center] {
+            NSColor.black.withAlphaComponent(0.22).setStroke()
+            path.stroke()
+            NSColor.white.withAlphaComponent(0.22).setStroke()
+            path.stroke()
+        }
     }
 
     private func viewRect(_ frame: CGRect) -> CGRect {
         CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale).insetBy(dx: -3, dy: -3)
     }
 
-    private func outline(_ frame: CGRect, color: NSColor, width: CGFloat) {
+    /// A rounded line 3 points around an item: a wide dark stroke under a narrow light one, so one of the two reads on
+    /// any background.
+    private func outline(_ frame: CGRect, dark: (width: CGFloat, alpha: CGFloat), light: (width: CGFloat, color: NSColor)) {
         let path = NSBezierPath(roundedRect: viewRect(frame), xRadius: 4, yRadius: 4)
-        path.lineWidth = width
-        color.setStroke()
+        path.lineWidth = dark.width
+        NSColor.black.withAlphaComponent(dark.alpha).setStroke()
         path.stroke()
-    }
-
-    /// The item's name in a tag above it, or below it at the top edge.
-    private func label(_ text: String, on frame: CGRect) {
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white]
-        let size = (text as NSString).size(withAttributes: attributes)
-        let rect = viewRect(frame)
-        let tag = CGSize(width: size.width + 12, height: size.height + 4)
-        let y = rect.minY - tag.height - 3 >= 0 ? rect.minY - tag.height - 3 : rect.maxY + 3
-        let x = min(max(rect.minX, 0), max(bounds.width - tag.width, 0))
-        let box = CGRect(x: x, y: y, width: tag.width, height: tag.height)
-        NSColor.controlAccentColor.setFill()
-        NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
-        (text as NSString).draw(at: CGPoint(x: box.minX + 6, y: box.minY + 2), withAttributes: attributes)
+        path.lineWidth = light.width
+        light.color.setStroke()
+        path.stroke()
     }
 }
