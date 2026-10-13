@@ -291,9 +291,11 @@ final class ThemePreviewView: NSView {
                             width: fitted.width, height: fitted.height)
         stage.frame = clip.bounds
         stage.setBoundsSize(size)
-        // Each screen fills the stage at the layout size, whatever size the stage had when the screen was made.
+        // Each screen fills the stage at the layout size, whatever size the stage had when the screen was made. The size
+        // itself, not the stage's bounds: AppKit works those out from the scaled frame, a hair off (900.0000000000001),
+        // and a centered widget's frame then rounds out a point too tall.
         for container in stage.subviews {
-            container.frame = stage.bounds
+            container.frame = CGRect(origin: .zero, size: size)
             for screen in container.subviews { screen.frame = container.bounds }
         }
         overlay.frame = clip.frame
