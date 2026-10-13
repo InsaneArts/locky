@@ -10,6 +10,8 @@ final class ThemeEditing {
     /// The theme as init.lua and plugins leave it: what each change starts from, and what Reset goes back to.
     private(set) var layout: ThemeLayout?
     private(set) var layoutError: String?
+    /// The window's: each change is a step Edit ▸ Undo takes back.
+    @ObservationIgnored weak var undoManager: UndoManager?
 
     init(theme: Inspection.ThemeInfo, model: AppModel) {
         self.theme = theme
@@ -75,30 +77,31 @@ final class ThemeEditing {
         return info(placement)?.card ?? false
     }
 
-    func set(_ index: Int, _ placement: EditorPlacement) {
+    /// Saves a widget's change as the step `action` names, such as "Change Clock".
+    func set(_ index: Int, _ placement: EditorPlacement, action: String) {
         var list = placements
         guard list.indices.contains(index) else { return }
         list[index] = placement
-        write(list)
+        record(action) { write(list) }
     }
 
     func remove(_ index: Int) {
         var list = placements
         guard list.indices.contains(index) else { return }
-        list.remove(at: index)
-        write(list)
+        let removed = list.remove(at: index)
+        record("Remove \(EditorPlacement.title(removed.widget))") { write(list) }
     }
 
     /// Adds a widget at the center; returns its place in the list.
     @discardableResult
     func add(_ widget: String) -> Int {
         let list = placements + [EditorPlacement(widget: widget)]
-        write(list)
+        record("Add \(EditorPlacement.title(widget))") { write(list) }
         return list.count - 1
     }
 
     func resetWidgets() {
-        store.update { $0.setThemeEdit(theme.id, "widgets", nil) }
+        record("Reset Layout") { store.update { $0.setThemeEdit(theme.id, "widgets", nil) } }
     }
 
     private func write(_ list: [EditorPlacement]) {
@@ -122,11 +125,18 @@ final class ThemeEditing {
     func setAuth(anchor: String, x: Double, y: Double) {
         guard layout != nil else { return }
         let place: LuaValue = .table(["anchor": .string(anchor), "offset": .array([EditorPlacement.number(x), EditorPlacement.number(y)])])
-        store.update { $0.setThemeEdit(theme.id, "auth", place) }
+        record("Move Password Field") { store.update { $0.setThemeEdit(theme.id, "auth", place) } }
     }
 
     func resetAuth() {
-        store.update { $0.setThemeEdit(theme.id, "auth", nil) }
+        record("Reset Password Field") { store.update { $0.setThemeEdit(theme.id, "auth", nil) } }
+    }
+
+    // MARK: Undo
+
+    /// Makes `change` to this theme's part of settings.json one step that Edit ▸ Undo takes back, named `action`.
+    func record(_ action: String, _ change: () -> Void) {
+        ThemeUndo.record(action, theme: theme.id, model: model, undoManager: undoManager, change)
     }
 
     // MARK: The canvas
@@ -140,9 +150,26 @@ final class ThemeEditing {
             placement.anchor = anchor.rawValue
             placement.x = offset.x
             placement.y = offset.y
-            set(index, placement)
+            set(index, placement, action: "Move \(EditorPlacement.title(placement.widget))")
         case .passwordField:
             setAuth(anchor: anchor.rawValue, x: offset.x, y: offset.y)
+        }
+    }
+
+    /// An arrow key moved an item a step across and down (-1, 0, or 1 each), from the anchor it keeps.
+    func nudge(_ item: EditorItem, by delta: (x: Int, y: Int), byGrid: Bool) {
+        switch item {
+        case .widget(let index):
+            guard placements.indices.contains(index) else { return }
+            var placement = placements[index]
+            let offset = Placing.nudge(CGPoint(x: placement.x, y: placement.y), x: delta.x, y: delta.y, byGrid: byGrid)
+            placement.x = offset.x
+            placement.y = offset.y
+            set(index, placement, action: "Move \(EditorPlacement.title(placement.widget))")
+        case .passwordField:
+            let place = authPlace
+            let offset = Placing.nudge(CGPoint(x: place.x, y: place.y), x: delta.x, y: delta.y, byGrid: byGrid)
+            setAuth(anchor: place.anchor, x: offset.x, y: offset.y)
         }
     }
 
@@ -151,6 +178,41 @@ final class ThemeEditing {
         switch item {
         case .widget(let index): placements.indices.contains(index) ? EditorPlacement.title(placements[index].widget) : "Widget"
         case .passwordField: "Password Field"
+        }
+    }
+}
+
+/// Undo for the theme editor. Each step holds settings.json's themes.<id> from before a change and after it;
+/// undo puts the one back, and redo the other.
+@MainActor
+enum ThemeUndo {
+    /// Runs `change`, and registers its undo, named `action`, if it changed the theme's part of settings.json.
+    static func record(_ action: String, theme: String, model: AppModel, undoManager: UndoManager?, _ change: () -> Void) {
+        let before = model.store.settings["themes"][theme]
+        change()
+        let after = model.store.settings["themes"][theme]
+        guard let undoManager, before != after else { return }
+        register(action, theme: theme, back: before, from: after, model: model, undoManager: undoManager)
+    }
+
+    /// Registers the step that puts `back` in place of `from`; taking that step registers its own inverse, the redo.
+    private static func register(_ action: String, theme: String, back: LuaValue, from: LuaValue, model: AppModel, undoManager: UndoManager) {
+        undoManager.registerUndo(withTarget: model) { model in
+            MainActor.assumeIsolated {
+                // The theme being changed shows, so the step is seen to happen.
+                model.selectedTheme = theme
+                restore(back, theme: theme, store: model.store)
+                register(action, theme: theme, back: from, from: back, model: model, undoManager: undoManager)
+            }
+        }
+        undoManager.setActionName(action)
+    }
+
+    /// Sets settings.json's themes.<theme> to `value`, nil for no changes.
+    static func restore(_ value: LuaValue, theme: String, store: SettingsStore) {
+        store.update { settings in
+            let keys = Set((settings["themes"][theme].table ?? [:]).keys).union((value.table ?? [:]).keys)
+            for key in keys { settings.setThemeEdit(theme, key, value[key].isNil ? nil : value[key]) }
         }
     }
 }

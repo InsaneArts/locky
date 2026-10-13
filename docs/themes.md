@@ -117,6 +117,35 @@ rises with the seconds); `t` only counts from when the screen locked. Prefix you
 functions (`static float myname_noise(...)`) so they cannot clash with Locky's. A compile error appears on
 the lock screen in the preview, with its line number, and in the log.
 
+## Make and share themes in the window
+
+The Themes page makes themes without Lua. Its ⋯ menu has two commands:
+
+- **Duplicate Theme…** asks for a name and writes your own theme to `~/.config/locky/themes/<id>.lua`: the
+  selected theme with your changes to it. The new theme opens in the editor.
+- **Export Theme…** saves the theme with your changes as one `.lua` file to share. It works for a built-in theme
+  and for a theme made from one.
+
+**Import Theme…**, below the theme list, adds an exported file to `~/.config/locky/themes/`. A theme file is Lua,
+and Lua can run code, so Locky imports only files in the shape Export Theme writes. It reads the settings from
+the file as text, checks that the theme loads, and writes the file again from those settings. No code from an
+imported file runs. The file sets widget options, and a plugin's widget could run an option as a command, so
+Locky refuses a file that uses widgets that do not come with Locky. A theme written in Lua by hand goes in
+`~/.config/locky/themes/` directly.
+
+The file calls `locky.theme.derive`:
+
+```lua
+return locky.theme.derive("default", locky.json.decode([[
+{ "name": "Night Lake", "edits": [ { "background": { "color": "#203040" } } ] }
+]]))
+```
+
+`derive(base, { name, edits })` reads theme `base` and applies each edit in order. An edit has the shape of
+settings.json's `themes.<id>` (see [settings.md](settings.md)). The edits' widget options become the theme's own,
+so `locky.setup({ widgets = ... })` in init.lua still merges over them. Shaders and assets come from the base
+theme's folder.
+
 ## Changing a theme from init.lua
 
 ```lua

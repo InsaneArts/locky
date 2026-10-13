@@ -27,6 +27,10 @@ struct ThemePreview: NSViewRepresentable {
         var select: (EditorItem?) -> Void
         /// A drag ended: the item's new anchor and offset, in layout points.
         var move: (EditorItem, Anchor, CGPoint) -> Void
+        /// An arrow key: the selected item moves a step across and down (-1, 0, or 1 each), by the grid with Shift.
+        var nudge: (EditorItem, (x: Int, y: Int), Bool) -> Void
+        /// Delete: the selected widget goes.
+        var remove: (Int) -> Void
     }
 
     func makeNSView(context: Context) -> ThemePreviewView { ThemePreviewView() }
@@ -357,6 +361,22 @@ final class CanvasOverlay: NSView {
         }
         guard let drag, let placed = drag.placed else { return }
         canvas?.move(drag.item, placed.anchor, placed.offset)
+    }
+
+    /// With the canvas focused: the arrow keys move what is selected, Delete removes a selected widget, and Escape
+    /// clears the selection.
+    override func keyDown(with event: NSEvent) {
+        guard let canvas, drag == nil else { return super.keyDown(with: event) }
+        let byGrid = event.modifierFlags.contains(.shift)
+        switch (event.specialKey, canvas.selection) {
+        case (.leftArrow?, let item?): canvas.nudge(item, (-1, 0), byGrid)
+        case (.rightArrow?, let item?): canvas.nudge(item, (1, 0), byGrid)
+        case (.upArrow?, let item?): canvas.nudge(item, (0, -1), byGrid)
+        case (.downArrow?, let item?): canvas.nudge(item, (0, 1), byGrid)
+        case (.delete?, .widget(let index)?), (.deleteForward?, .widget(let index)?): canvas.remove(index)
+        case (_, _?) where event.charactersIgnoringModifiers == "\u{1b}": canvas.select(nil)
+        default: super.keyDown(with: event)
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {

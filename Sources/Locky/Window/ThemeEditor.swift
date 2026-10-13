@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The theme editor's panel. With nothing selected: the theme, its background, and its widgets and password field
-/// to select. With a widget selected: where it sits, its card, and its options. With the password field selected:
+/// The theme editor's panel. On top: the theme, and whether a lock uses it. With nothing selected: its background,
+/// and its widgets and password field to select. With a widget selected: where it sits, its card, and its options. With the password field selected:
 /// where it sits. Changes save to settings.json at once, and the preview shows them as they are made.
 struct ThemeEditor: View {
     @Bindable var model: AppModel
@@ -11,11 +11,116 @@ struct ThemeEditor: View {
     @Binding var selection: EditorItem?
     /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
     @Binding var draft: Settings?
-    @State private var adding = false
+    /// The Add Widget sheet, which the page shows.
+    @Binding var adding: Bool
+    /// The name Duplicate Theme asks for, while it asks.
+    @State private var copyName: String?
+    @State private var problem: String?
 
     private var theme: Inspection.ThemeInfo { editing.theme }
 
     var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            content
+        }
+    }
+
+    /// The theme being edited, and whether a lock uses it: the theme selected here is not always the one that locks.
+    private var header: some View {
+        let active = model.activeTheme
+        let scheduled = model.store.settings.schedule != nil
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(theme.name).font(.title3.weight(.semibold)).lineLimit(1)
+                if theme.id == active { Tag("In Use", color: .green) }
+                if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
+                Spacer(minLength: 0)
+                Menu {
+                    Button("Duplicate Theme…") { copyName = "\(theme.name) Copy" }
+                    Button("Export Theme…", action: export)
+                        .disabled(!ThemeFile.isBuiltIn(made(name: theme.name).base))
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(editing.layout == nil)
+                .help("Duplicate this theme with your changes, or export it to share")
+            }
+            if theme.id != active {
+                let name = model.inspection.theme(active)?.name ?? active
+                Text(scheduled ? "Not in use: the theme schedule shows \(name) now." : "Not in use: your lock shows \(name).")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !scheduled {
+                    Button { model.store.update { $0["theme"] = .string(theme.id) } } label: {
+                        Text("Use This Theme").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(theme.error != nil)
+                    .help("Lock with this theme from now on")
+                }
+            }
+        }
+        .padding(16)
+        .alert("Duplicate Theme", isPresented: Binding(get: { copyName != nil }, set: { if !$0 { copyName = nil } })) {
+            TextField("Name", text: Binding(get: { copyName ?? "" }, set: { copyName = $0 }))
+            Button("Duplicate") { duplicate(named: copyName ?? "") }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A theme of your own, with this theme's look and your changes to it, in your config folder's themes.")
+        }
+        .alert("Can't Save the Theme", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(problem ?? "")
+        }
+    }
+
+    /// This theme with the editor's changes, as a theme named `name`.
+    private func made(name: String) -> ThemeFile {
+        ThemeFile.made(from: theme.id, edit: model.store.settings["themes"][theme.id], name: name, config: model.store.config)
+    }
+
+    /// Writes the copy to the config's themes folder, and opens it in the editor.
+    private func duplicate(named name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard ThemeFile.isName(name) else {
+            problem = "A theme's name has 1 to 80 characters, on one line."
+            return
+        }
+        let id = ThemeFile.id(for: name, taken: ThemeFile.takenIDs(model.inspection.themes, settings: model.store.settings, config: model.store.config))
+        let file = made(name: name)
+        Task {
+            do {
+                try await file.install(as: id, config: model.store.config)
+                model.selectedTheme = id
+                model.refresh()
+            } catch {
+                problem = (error as? LuaError)?.message ?? error.localizedDescription
+            }
+        }
+    }
+
+    /// Saves the theme, with the editor's changes, as one file to share; Import Theme adds it on another Mac.
+    private func export() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(theme.id).lua"
+        panel.allowedContentTypes = [ThemeFile.type]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try made(name: theme.name).source().write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            problem = (error as? LuaError)?.message ?? error.localizedDescription
+        }
+    }
+
+    private var content: some View {
         Group {
             if let layoutError = editing.layoutError {
                 ContentUnavailableView("Can't Edit This Theme", systemImage: "exclamationmark.triangle", description: Text(layoutError))
@@ -34,28 +139,19 @@ struct ThemeEditor: View {
                 }
             }
         }
-        .sheet(isPresented: $adding) {
-            AddWidgetSheet(model: model) { name in
-                selection = .widget(editing.add(name))
-            }
-        }
+        .frame(maxHeight: .infinity)
     }
 
     private var overview: some View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(theme.name).font(.title3.weight(.semibold))
-                        if theme.id == model.activeTheme { Tag("In Use", color: .green) }
-                        if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
-                    }
                     Text(theme.description ?? theme.id).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     if let author = theme.author { Text("By \(author)").font(.caption).foregroundStyle(.tertiary) }
                 }
             }
-            Section("Background") {
-                BackgroundEditor(model: model, theme: theme, layout: editing.layout, draft: $draft)
+            Section {
+                BackgroundEditor(model: model, editing: editing, draft: $draft)
             }
             Section {
                 ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
@@ -147,7 +243,11 @@ private struct WidgetInspector: View {
     @State private var saving: Task<Void, Never>?
 
     var body: some View {
-        let placement = editing.placements[index]
+        // An undo can take the widget away before the panel goes.
+        if editing.placements.indices.contains(index) { form(editing.placements[index]) }
+    }
+
+    @ViewBuilder private func form(_ placement: EditorPlacement) -> some View {
         let info = editing.info(placement)
         let inherited = editing.inherited(placement)
         let keys = OptionRow.keys(inherited: inherited, overrides: placement.opts, choices: info?.choices ?? [:])
@@ -167,7 +267,7 @@ private struct WidgetInspector: View {
             }
             Section("Position") {
                 PositionEditor(anchor: placement.anchor, x: placement.x, y: placement.y) { anchor, x, y in
-                    change {
+                    change("Move") {
                         $0.anchor = anchor
                         $0.x = x
                         $0.y = y
@@ -193,7 +293,7 @@ private struct WidgetInspector: View {
                         Text("Options")
                         Spacer()
                         if !placement.opts.isEmpty {
-                            Button("Reset Options") { change { $0.opts = [:] } }
+                            Button("Reset Options") { change("Reset Options of") { $0.opts = [:] } }
                                 .buttonStyle(.link)
                                 .font(.callout)
                         }
@@ -217,8 +317,8 @@ private struct WidgetInspector: View {
 
     /// Changes this widget as it is now, together with the colors picked so far, which save first: a color never
     /// lands after a later change, nor brings back an older copy of the widget. An option set back to what the theme
-    /// gives it leaves settings.json.
-    private func change(_ edit: (inout EditorPlacement) -> Void = { _ in }) {
+    /// gives it leaves settings.json. `verb` names the step Edit ▸ Undo takes back, as in "Move Clock".
+    private func change(_ verb: String = "Change", _ edit: (inout EditorPlacement) -> Void = { _ in }) {
         saving?.cancel()
         saving = nil
         let colors = picked
@@ -229,7 +329,7 @@ private struct WidgetInspector: View {
         let inherited = editing.inherited(placement)
         for (key, value) in colors { placement.opts[key] = value == inherited[key] ? nil : value }
         edit(&placement)
-        editing.set(index, placement)
+        editing.set(index, placement, action: "\(verb) \(EditorPlacement.title(placement.widget))")
     }
 
     /// A color being picked: the preview shows it at once, and it saves once the picking stops for a moment.
@@ -637,8 +737,7 @@ struct AddWidgetSheet: View {
 /// colors show in the preview as they change, and save when they stop.
 private struct BackgroundEditor: View {
     @Bindable var model: AppModel
-    let theme: Inspection.ThemeInfo
-    let layout: ThemeLayout?
+    let editing: ThemeEditing
     @Binding var draft: Settings?
     /// Colors being picked: shown at once, saved once the picking stops for a moment, with the next change, or when
     /// the panel goes away.
@@ -661,6 +760,8 @@ private struct BackgroundEditor: View {
     }
 
     private var store: SettingsStore { model.store }
+    private var theme: Inspection.ThemeInfo { editing.theme }
+    private var layout: ThemeLayout? { editing.layout }
     private var edit: LuaValue { store.settings.themeEdit(theme.id, "background") }
 
     private var kind: Kind {
@@ -679,7 +780,7 @@ private struct BackgroundEditor: View {
         .onDisappear { if !picked.isEmpty { save([:]) } }
         switch kind {
         case .theme:
-            LabeledContent("Uses", value: summary(layout?.background ?? .nil))
+            LabeledContent("Shows", value: summary(layout?.background ?? .nil))
         case .wallpaper:
             slider("Blur", key: "blur", range: 0...60, fallback: 30)
             slider("Dim", key: "dim", range: 0...0.8, fallback: 0.25)
@@ -716,7 +817,7 @@ private struct BackgroundEditor: View {
             value = .table(["gradient": .array([.string(palette["bg"] ?? "#101820"), .string(palette["accent"] ?? "#0a84ff")]),
                             "angle": .int(180)])
         }
-        store.update { $0.setThemeEdit(theme.id, "background", value) }
+        editing.record("Change Background") { store.update { $0.setThemeEdit(theme.id, "background", value) } }
         draft = nil
     }
 
@@ -740,7 +841,7 @@ private struct BackgroundEditor: View {
         saving = nil
         let value = patched(picked.merging(fields) { $1 })
         picked = [:]
-        store.update { $0.setThemeEdit(theme.id, "background", value) }
+        editing.record("Change Background") { store.update { $0.setThemeEdit(theme.id, "background", value) } }
         draft = nil
     }
 
@@ -786,15 +887,15 @@ private struct BackgroundEditor: View {
         ColorWell(title: title, hex: get() ?? "#000000", pick: { pick(fields($0)) })
     }
 
-    /// What the theme's own background is, in a few words.
+    /// What the theme's own background is, in a few plain words.
     private func summary(_ background: LuaValue) -> String {
-        if let shader = background["shader"].string { return "Animated shader · \(shader)" }
-        if background["wallpaper"].bool == true { return "Desktop picture" }
-        if let image = background["image"].string { return "Image · \(URL(fileURLWithPath: image).lastPathComponent)" }
-        if let video = background["video"].string { return "Video · \(URL(fileURLWithPath: video).lastPathComponent)" }
-        if background["gradient"].array != nil { return "Gradient" }
-        if background["color"].string != nil { return "Color" }
-        return "—"
+        if background["shader"].string != nil { return "An animated scene" }
+        if background["wallpaper"].bool == true { return "Your desktop picture" }
+        if background["image"].string != nil { return "A picture" }
+        if background["video"].string != nil { return "A video" }
+        if background["gradient"].array != nil { return "A gradient" }
+        if background["color"].string != nil { return "One color" }
+        return "Nothing"
     }
 
     @MainActor

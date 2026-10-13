@@ -79,12 +79,17 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
 - **Dashboard:** the theme a lock uses now, live, with Lock Now; the config's problems, plugins and
   updates, auto-lock, unlock, and the lock screen's changes at a glance; and any photos taken after wrong
   passwords.
-- **Themes:** every theme, and the selected one in the editor. Its live preview is a canvas: click a widget or
-  the password field to select it, and drag it to move it. A widget lands pinned to the corner, edge, or center
-  of the part of the screen it is in, so it keeps its place on other screens; the Grid button shows a 30-point
-  grid and snaps what you drag to it. The panel beside the canvas shows what is selected: its place, its card,
-  and its options (a menu where the widget lists the values an option takes). With nothing selected, it shows
-  the background, the widget list, Add Widget, and Reset Layout.
+- **Themes:** every theme in a list you can search, and the selected one in the editor. The panel's top says
+  whether a lock uses the selected theme, with Use This Theme when it does not. Its live preview is a canvas:
+  click a widget or the password field (or the Password Field button below it) to select it, and drag it to move
+  it. A widget lands pinned to the corner, edge, or center of the part of the screen it is in, so it keeps its
+  place on other screens; the Grid button shows a 30-point grid and snaps what you drag to it. With the canvas
+  clicked, the arrow keys move what is selected a point (a grid step with Shift), Delete removes a selected
+  widget, and Escape clears the selection. The panel beside the canvas shows what is selected: its place, its
+  card, and its options (a menu where the widget lists the values an option takes). With nothing selected, it
+  shows the background, the widget list, Add Widget, and Reset Layout. The ⋯ menu has Duplicate Theme and Export
+  Theme, and Import Theme is below the list (see [themes.md](themes.md#make-and-share-themes-in-the-window)). Edit
+  › Undo (⌘Z) takes back each change, and Redo (⇧⌘Z) makes it again.
 - **Widgets:** every widget, live. Click one to add it to the active theme, or under Add to, to another; the
   Themes page then opens on that theme. Install Plugin… adds more.
 - **Plugins:** install from git; Update All… shows each update's commits and diffstat and installs exactly those
