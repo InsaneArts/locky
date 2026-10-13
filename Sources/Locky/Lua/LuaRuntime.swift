@@ -81,6 +81,8 @@ final class LuaRuntime: @unchecked Sendable {
         var privacy = false
         /// A line under the password field.
         var message: String? = nil
+        /// The theme asked for and its first problem, when it failed to load and another one shows.
+        var failed: (theme: String, problem: String)? = nil
     }
 
     let queue = DispatchQueue(label: "com.tornikegomareli.Locky.lua", qos: .userInitiated)
@@ -149,7 +151,8 @@ final class LuaRuntime: @unchecked Sendable {
             let seconds = settings["auto_unlock"].number.map { $0.isFinite ? min(max($0, 0), 86_400) : 0 } ?? 60
             let message = settings["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines)
             return Started(theme: .fallback, instances: [], autoUnlock: seconds, problems: problems, hour24: settings["hour24"].bool,
-                           privacy: settings["privacy"].bool ?? false, message: message?.isEmpty == false ? String(message!.prefix(200)) : nil)
+                           privacy: settings["privacy"].bool ?? false, message: message?.isEmpty == false ? String(message!.prefix(200)) : nil,
+                           failed: (themeOverride ?? settings["theme"].string ?? "default", problems[problems.count - 1]))
         }
         let config = (try? call("config", budget: Budget.callback).first) ?? .nil
         // Not a number, or infinite: off. Otherwise at most a day; a sleep of an infinite duration traps.
@@ -161,15 +164,16 @@ final class LuaRuntime: @unchecked Sendable {
         let requested = themeOverride ?? config["theme"].string ?? "default"
         bootProblems = problems.count
         var theme = loadTheme(requested)
+        let failed = theme == nil ? (requested, problems.dropFirst(bootProblems).first ?? "theme \(requested) did not load") : nil
         if theme == nil, requested != "default" { theme = loadTheme("default") }
         guard let theme else {
             return Started(theme: .fallback, instances: [], autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
-                           message: message)
+                           message: message, failed: failed)
         }
         let instances = theme.widgets.indices.map { startInstance($0, of: theme) }
         emit("lock")
         return Started(theme: theme, instances: instances, autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
-                       message: message)
+                       message: message, failed: failed)
     }
 
     /// The instance for placement `index` of the theme just loaded, started and due to draw: nil when its widget

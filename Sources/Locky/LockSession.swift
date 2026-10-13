@@ -447,6 +447,9 @@ final class LockSession: NSObject, NSWindowDelegate {
             windows.first?.title = "Locky Preview — \(theme.name)"
             for problem in started.problems { LogFile.shared.write(level: "warn", message: problem, source: "preview") }
         }
+        if mode == .lock, let failed = started.failed {
+            ThemeFailure(theme: failed.theme, fallback: theme.id, message: failed.problem, date: Date().timeIntervalSince1970).record()
+        }
         if mode == .lock, started.autoUnlock > 0 { armSafety(after: started.autoUnlock) }
         else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel(); safetySeconds = nil }
         if privacy != started.privacy {
@@ -709,6 +712,23 @@ final class LockSession: NSObject, NSWindowDelegate {
             try? await Task.sleep(for: .seconds(seconds), clock: .suspending)
             if !Task.isCancelled { self?.end("auto_unlock") }
         }
+    }
+}
+
+/// The last lock that showed another theme because the chosen one failed to load, for the Dashboard and the menu.
+/// UserDefaults keeps it under "lastThemeFailure" as JSON data: {"theme", "fallback", "message", "date"}, the date
+/// in seconds since 1970.
+struct ThemeFailure: Codable, Equatable {
+    var theme: String
+    var fallback: String
+    /// The theme's first problem.
+    var message: String
+    var date: Double
+
+    static let key = "lastThemeFailure"
+
+    func record(in defaults: UserDefaults = .standard) {
+        defaults.set(try? JSONEncoder().encode(self), forKey: Self.key)
     }
 }
 
