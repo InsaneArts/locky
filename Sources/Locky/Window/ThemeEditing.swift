@@ -68,6 +68,17 @@ final class ThemeEditing {
         on == ownCard(placement) ? nil : .bool(on)
     }
 
+    /// The family a placement draws: settings.json's, else the theme's placement's.
+    func family(_ placement: EditorPlacement) -> String? {
+        placement.rest["family"]?.string ?? themeFamily(placement)
+    }
+
+    /// The theme's own placement's family, which settings.json can change but not take away.
+    func themeFamily(_ placement: EditorPlacement) -> String? {
+        guard let base = placement.base, let widgets = layout?.widgets, widgets.indices.contains(base) else { return nil }
+        return widgets[base]["family"].string
+    }
+
     /// Whether a placement sits on a card without settings.json's say: the theme's placement's choice, or the widget's.
     private func ownCard(_ placement: EditorPlacement) -> Bool {
         if let base = placement.base, let widgets = layout?.widgets, widgets.indices.contains(base),

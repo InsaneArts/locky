@@ -274,6 +274,18 @@ private struct WidgetInspector: View {
                     }
                 }
             }
+            if let families = info?.families, !families.isEmpty {
+                Section("Size") {
+                    let options = (editing.themeFamily(placement) == nil ? [String?.none] : []) + families.map(Optional.some)
+                    Picker("Size", selection: Binding(get: { editing.family(placement) }, set: { value in
+                        change("Resize") { $0.rest["family"] = value.map(LuaValue.string) }
+                    })) {
+                        ForEach(options, id: \.self) { family in
+                            Text(family.map(FamilyPicker.name) ?? "Its Own Size").tag(family)
+                        }
+                    }
+                }
+            }
             if editing.layout?.cardStyle != "none" {
                 Section {
                     Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
