@@ -2,7 +2,7 @@
 # Renders a page of the Locky window to a PNG, without disturbing the screen: a second Locky opens the
 # window behind every other window, and quits after the capture.
 #
-#   Scripts/window-shot.sh SECTION OUT.png [THEME]      # dashboard, themes, plugins, config, or settings
+#   Scripts/window-shot.sh SECTION OUT.png [THEME]      # dashboard, themes, widgets, plugins, config, settings, or welcome
 #
 # SIZE (default 1240x780) is the window's content size; a tall one shows a long page whole.
 # WAIT (seconds, default 4) is how long the page gets to load. Locky's config folder is an empty one with

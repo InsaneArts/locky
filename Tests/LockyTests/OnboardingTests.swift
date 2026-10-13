@@ -12,6 +12,21 @@ import Testing
         deinit { defaults.removePersistentDomain(forName: name) }
     }
 
+    /// The Welcome opens by itself on the first launch only, and never in a tool run (screenshots, the source tree).
+    @MainActor @Test func theWelcomeOpensOnceAndNeverInAToolRun() {
+        let store = Defaults()
+        #expect(WelcomeView.opensAtLaunch(store.defaults, isTool: true) == false)
+        #expect(store.defaults.bool(forKey: WelcomeView.shownKey) == false)
+        #expect(WelcomeView.opensAtLaunch(store.defaults, isTool: false) == true)
+        #expect(WelcomeView.opensAtLaunch(store.defaults, isTool: false) == false)
+    }
+
+    /// `locky window welcome` (and window-shot.sh) opens it; the Lua Config page keeps "config" for them.
+    @MainActor @Test func theWelcomeIsAPageOfItsOwn() {
+        #expect(CLI.GUILaunch.parse(["window", "welcome"]).window == .welcome)
+        #expect(AppModel.Section.config.title == "Lua Config" && AppModel.Section(rawValue: "config") == .config)
+    }
+
     private let record = #"{"theme": "broken", "fallback": "default", "message": "themes/broken.lua:3: boom", "date": 1000}"#
 
     @Test func aThemeFailureReadsAsDataOrAsAString() throws {

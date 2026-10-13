@@ -71,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.selectedTheme = launch.theme
             model.screenshots = launch.behind
             showWindow(section, behind: launch.behind, size: launch.size)
+        } else if launch.mode == nil, WelcomeView.opensAtLaunch(.standard, isTool: tool) {
+            showWindow(.welcome)
         }
     }
 
@@ -177,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(submenu("Theme", themes))
         menu.addItem(item("Preview Theme", #selector(previewTheme)))
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
+        menu.addItem(item("Welcome…", #selector(openWelcome)))
         menu.addItem(.separator())
         menu.addItem(item("Quit Locky", #selector(NSApplication.terminate(_:)), key: "q"))
     }
@@ -215,6 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openSettings() { showWindow(.settings) }
+    @objc private func openWelcome() { showWindow(.welcome) }
     /// A preview of the theme a lock would use now.
     @objc private func previewTheme() { preview(theme: nil) }
 

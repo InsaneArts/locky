@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The Locky window: the dashboard, themes, plugins, the config, and settings. While it is open, Locky shows
+/// The Locky window: the dashboard, themes, plugins, the config, settings, and the first launch's Welcome. While it is open, Locky shows
 /// in the Dock and the app switcher like any app; when it closes, Locky goes back to the menu bar only.
 @MainActor
 final class LockyWindowController: NSWindowController, NSWindowDelegate {
@@ -57,7 +57,7 @@ struct MainView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(AppModel.Section.allCases, selection: Binding(get: { model.section }, set: { if let section = $0 { model.section = section } })) { section in
+            List(AppModel.Section.allCases.filter { $0 != .welcome }, selection: Binding(get: { model.section }, set: { if let section = $0 { model.section = section } })) { section in
                 Label(section.title, systemImage: section.symbol)
                     .badge(badge(for: section))
                     .tag(section)
@@ -77,6 +77,7 @@ struct MainView: View {
         case .plugins: PluginsPage(model: model)
         case .config: ConfigPage(model: model)
         case .settings: SettingsPage(model: model)
+        case .welcome: WelcomeView(model: model)
         }
     }
 

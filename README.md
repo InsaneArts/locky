@@ -14,8 +14,9 @@ open Locky.app                    # the lock icon appears in the menu bar
 swift test                        # the test suite
 ```
 
-The menu bar icon has Lock Now, the theme picker, Preview Theme, and Settings…, which opens Locky's window at
-its Settings page.
+The first launch opens Locky's window on a short Welcome: pick a theme, try it, and choose when Locky locks by
+itself. The menu bar icon has Lock Now, the theme picker, Preview Theme, Settings…, which opens Locky's window at
+its Settings page, and Welcome….
 
 ## Themes
 

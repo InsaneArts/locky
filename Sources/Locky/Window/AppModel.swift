@@ -6,6 +6,8 @@ import Foundation
 final class AppModel {
     enum Section: String, CaseIterable, Identifiable {
         case dashboard, themes, widgets, plugins, config, settings
+        /// The first launch's steps; not in the sidebar.
+        case welcome
 
         var id: String { rawValue }
 
@@ -17,6 +19,7 @@ final class AppModel {
             case .plugins: "Plugins"
             case .config: "Lua Config"
             case .settings: "Settings"
+            case .welcome: "Welcome"
             }
         }
 
@@ -28,6 +31,7 @@ final class AppModel {
             case .plugins: "puzzlepiece.extension"
             case .config: "curlybraces"
             case .settings: "gearshape"
+            case .welcome: "hand.wave"
             }
         }
     }

@@ -116,7 +116,7 @@ enum CLI {
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
-              window [dashboard|themes|plugins|config|settings] [--theme NAME] [--size 1240x780]
+              window [dashboard|themes|plugins|config|settings|welcome] [--theme NAME] [--size 1240x780]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2
