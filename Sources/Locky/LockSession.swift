@@ -48,7 +48,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Each widget's latest view and failure, for widgets made later: a rebuilt display, or hosts that did
     /// not exist yet when a widget failed in its init.
     private var latest: [Int: [(WidgetHost) -> Void]] = [:]
-    private let authModel = AuthModel()
+    /// Wrong passwords count across locks, except in the theme editor's preview, which takes none.
+    private lazy var authModel = AuthModel(defaults: mode == .embedded ? nil : .standard)
     private var touchID: TouchID?
     private var touchIDFallback: Task<Void, Never>?
     private var safetyExit: DispatchWorkItem?
@@ -416,7 +417,10 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     private func startTouchID() {
         touchIDFallback?.cancel()
-        touchID?.start { [weak self] in self?.end("Touch ID") }
+        touchID?.start { [weak self] in
+            self?.authModel.succeeded()
+            self?.end("Touch ID")
+        }
     }
 
     private func apply(_ started: LuaRuntime.Started) {

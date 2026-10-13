@@ -46,12 +46,104 @@ final class AuthModel {
     /// The lock could not take the keyboard (macOS refused it): the field asks for a click instead of looking
     /// ready for typing, so nobody types the password into the app behind the lock.
     var needsClick = false
-    /// Wrong passwords so far, and whether a check (or the wait after the third wrong one) runs. Here and not in
-    /// the field, so a rebuilt field (a display added, the power changed) keeps the wait.
+    /// Wrong passwords in this lock, and whether a check runs. Here and not in the field, so a rebuilt field (a
+    /// display added, the power changed) keeps them.
     var wrong = 0
     var checking = false
+    /// Whole seconds left in the wait before the next try (0: none). Waits outlast the lock: see PasswordAttempts.
+    private(set) var waitLeft = 0
     /// The user the field shows; privacy mode can change it while the field stays.
     var user = Auth.User(name: "", login: "user", host: "mac", picture: nil)
+    /// Where wrong passwords count across locks and relaunches. nil (the theme editor's preview) counts in memory.
+    private let defaults: UserDefaults?
+    private var attempts: PasswordAttempts
+    private var waiting: Task<Void, Never>?
+
+    init(defaults: UserDefaults? = nil) {
+        self.defaults = defaults
+        attempts = defaults.map { PasswordAttempts.load($0) } ?? PasswordAttempts()
+        wait(until: attempts.nextTry)
+    }
+
+    /// A wrong password: counted here and across locks, and the next try waits as the policy says.
+    func failed() {
+        wrong += 1
+        if let defaults { attempts = PasswordAttempts.load(defaults) }
+        attempts.fail()
+        if let defaults { attempts.save(defaults) }
+        wait(until: attempts.nextTry)
+    }
+
+    /// The password or Touch ID unlocked: the count starts again.
+    func succeeded() {
+        attempts = PasswordAttempts()
+        if let defaults { attempts.save(defaults) }
+    }
+
+    private func wait(until date: Date?) {
+        waiting?.cancel()
+        waitLeft = date.map { Int(max(0, $0.timeIntervalSinceNow).rounded(.up)) } ?? 0
+        guard let date, waitLeft > 0 else { return }
+        waiting = Task { [weak self] in
+            while !Task.isCancelled {
+                let left = date.timeIntervalSinceNow
+                guard let self, left > 0 else { break }
+                waitLeft = Int(left.rounded(.up))
+                // Until the shown number changes.
+                try? await Task.sleep(for: .seconds(left - Double(waitLeft - 1) + 0.01))
+            }
+            if !Task.isCancelled { self?.waitLeft = 0 }
+        }
+    }
+}
+
+/// Wrong passwords in a row, kept in UserDefaults with the time of the last one, so neither a new lock nor a
+/// relaunch starts the count again. A success, or 15 minutes without a wrong password, does.
+struct PasswordAttempts: Equatable {
+    var count = 0
+    var last: Date?
+
+    /// Seconds before the next try after `failures` wrong passwords in a row. Like the login window: three free
+    /// tries, then 1, 2, 4, ... seconds up to 30; from the tenth, 5 minutes.
+    static func wait(after failures: Int) -> Double {
+        if failures < 3 { return 0 }
+        if failures >= 10 { return 300 }
+        return min(30, pow(2, Double(failures - 3)))
+    }
+
+    static let forgetAfter = 15.0 * 60
+
+    /// When the next try may start; nil without a wait.
+    var nextTry: Date? {
+        guard let last, Self.wait(after: count) > 0 else { return nil }
+        return last.addingTimeInterval(Self.wait(after: count))
+    }
+
+    mutating func fail(at date: Date = Date()) {
+        if let last, date.timeIntervalSince(last) >= Self.forgetAfter { count = 0 }
+        count += 1
+        last = date
+    }
+
+    /// The count as saved, or none once 15 minutes passed. A last failure in the future (the clock went back)
+    /// counts as now, so it cannot stretch the wait.
+    static func load(_ defaults: UserDefaults, now: Date = Date()) -> PasswordAttempts {
+        let count = defaults.integer(forKey: "wrongPasswords"), time = defaults.double(forKey: "lastWrongPassword")
+        guard count > 0, time > 0 else { return PasswordAttempts() }
+        let last = min(Date(timeIntervalSince1970: time), now)
+        guard now.timeIntervalSince(last) < forgetAfter else { return PasswordAttempts() }
+        return PasswordAttempts(count: count, last: last)
+    }
+
+    func save(_ defaults: UserDefaults) {
+        if let last, count > 0 {
+            defaults.set(count, forKey: "wrongPasswords")
+            defaults.set(last.timeIntervalSince1970, forKey: "lastWrongPassword")
+        } else {
+            defaults.removeObject(forKey: "wrongPasswords")
+            defaults.removeObject(forKey: "lastWrongPassword")
+        }
+    }
 }
 
 /// Touch ID drawn inside Locky's window. LAAuthenticationView takes the place of the system's Touch ID sheet,
@@ -166,11 +258,10 @@ struct AuthPanel: View {
         get { model.checking }
         nonmutating set { model.checking = newValue }
     }
-    private var wrong: Int {
-        get { model.wrong }
-        nonmutating set { model.wrong = newValue }
-    }
+    private var wrong: Int { model.wrong }
     private var user: Auth.User { model.user }
+    /// "Try again in 8 s" while the wait after wrong passwords runs.
+    private var waitText: String? { model.waitLeft > 0 ? "Try again in \(model.waitLeft) s" : nil }
     @FocusState private var focused: Bool
     /// The "ring" style's lit arc: where it starts (0 to 1), its role color, and a counter that restarts its fade.
     @State private var arc: (start: Double, color: String, key: Int) = (0, "accent", 0)
@@ -204,12 +295,12 @@ struct AuthPanel: View {
             secureField(placeholder: "")
                 .frame(width: 1, height: 1)
                 .opacity(0.011)
-            if touchID != nil, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick {
+            if touchID != nil, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick, waitText == nil {
                 glyph.offset(y: diameter * 0.34)
-            } else if auth.hint || model.needsClick {
-                Text(model.needsClick ? "click to unlock" : checking ? "verifying" : wrong > 0 && password.isEmpty ? "wrong" : "")
+            } else if auth.hint || model.needsClick || waitText != nil {
+                Text(model.needsClick ? "Click to unlock" : waitText ?? (checking ? "Verifying…" : wrong > 0 && password.isEmpty ? "Wrong password" : ""))
                     .font(font(12, "medium"))
-                    .foregroundStyle(wrong > 0 && password.isEmpty ? style.color("danger") : style.color("muted"))
+                    .foregroundStyle(wrong > 0 && password.isEmpty && waitText == nil ? style.color("danger") : style.color("muted"))
                     .offset(y: diameter * 0.36)
             }
         }
@@ -231,8 +322,8 @@ struct AuthPanel: View {
             if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
-        // A field made during the wait after wrong passwords was disabled when it asked for focus.
-        .onChange(of: model.checking) { if !model.checking, interactive { focused = true } }
+        // A field made during a check or the wait after wrong passwords was disabled when it asked for focus.
+        .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
     }
 
     private var showsGlyph: Bool { touchID != nil }
@@ -268,8 +359,8 @@ struct AuthPanel: View {
             if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
-        // A field made during the wait after wrong passwords was disabled when it asked for focus.
-        .onChange(of: model.checking) { if !model.checking, interactive { focused = true } }
+        // A field made during a check or the wait after wrong passwords was disabled when it asked for focus.
+        .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
     }
 
     /// Sizes are given for a 14-point field and scale with auth.font.size.
@@ -296,7 +387,7 @@ struct AuthPanel: View {
     /// The native secure field, with Locky's own placeholder: SwiftUI draws a field's prompt in the system's
     /// gray, which disappears on light themes. Locky draws it in the palette's muted color instead.
     private func secureField(placeholder: String? = nil, alignment: Alignment = .leading) -> some View {
-        let text = model.needsClick ? "Click to unlock" : placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
+        let text = model.needsClick ? "Click to unlock" : waitText ?? placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
         return ZStack(alignment: alignment) {
             if password.isEmpty, !text.isEmpty {
                 Text(text).font(font(14, "regular")).foregroundStyle(style.color("muted")).allowsHitTesting(false)
@@ -307,7 +398,7 @@ struct AuthPanel: View {
                 .foregroundStyle(style.color("fg"))
                 .multilineTextAlignment(alignment == .center ? .center : .leading)
                 .focused($focused)
-                .disabled(checking || !interactive)
+                .disabled(checking || waitText != nil || !interactive)
                 .onSubmit(submit)
         }
         .shadow(color: glowColor, radius: auth.glow ?? 0)
@@ -340,7 +431,7 @@ struct AuthPanel: View {
             // The field is there and focused from the start, but only appears once you type.
             secureField(alignment: .center)
                 .frame(width: width)
-                .opacity(password.isEmpty ? 0.01 : 1)
+                .opacity(password.isEmpty && waitText == nil ? 0.01 : 1)
                 .animation(.smooth, value: password.isEmpty)
         default:
             secureField()
@@ -361,23 +452,18 @@ struct AuthPanel: View {
     }
 
     private func submit() {
-        guard !password.isEmpty, !checking else { return }
+        guard !password.isEmpty, !checking, waitText == nil else { return }
         checking = true
         Task {
             let ok = await Auth.verify(password)
+            password = ""
             checking = false
             if ok {
+                model.succeeded()
                 unlock()
             } else {
-                password = ""
-                wrong += 1
+                model.failed()
                 failed()
-                // Like the login window: after a few wrong passwords, each next try waits longer (up to 30 s).
-                if wrong >= 3 {
-                    checking = true
-                    try? await Task.sleep(for: .seconds(min(30, pow(2, Double(wrong - 3)))))
-                    checking = false
-                }
                 focused = true
             }
         }
