@@ -105,19 +105,22 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuI
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         let editing = model.editingTheme
+        // A theme command needs a theme that the config's read lists. Until the read does, Customize shows a spinner, and
+        // an id from a request may name no theme at all.
+        let listed = editing.flatMap { model.inspection.theme($0) == nil ? nil : $0 }
         switch menuItem.action {
         case #selector(customizeTheme(_:)):
             return editing == nil && model.inspection.loaded && model.inspection.theme(model.activeTheme).map { $0.error == nil } == true
         case #selector(useTheme(_:)):
-            return editing != nil && editing != model.activeTheme
+            return listed != nil && listed != model.activeTheme
         case #selector(duplicateTheme(_:)), #selector(addWidget(_:)):
-            return editing != nil
+            return listed != nil
         case #selector(exportTheme(_:)):
-            return editing.map { model.canExport($0) } == true
+            return listed.map { model.canExport($0) } == true
         case #selector(revertTheme(_:)):
-            return editing.map { !model.store.settings["themes"][$0].isNil } == true
+            return listed.map { !model.store.settings["themes"][$0].isNil } == true
         case #selector(trashTheme(_:)):
-            return editing.map { model.canTrash($0) } == true
+            return listed.map { model.canTrash($0) } == true
         case #selector(toggleGrid(_:)):
             menuItem.title = Self.isOn(Self.gridKey, default: false) ? "Hide Grid" : "Show Grid"
             return editing != nil

@@ -173,13 +173,22 @@ final class AppModel {
         return id
     }
 
-    /// Whether `id` is the person's own theme: a file in the config folder's themes/, which Move to Trash may take.
-    func canTrash(_ id: String) -> Bool { FileManager.default.fileExists(atPath: ThemeFile.file(id, config: store.config).path) }
+    /// Whether `id` is the person's own theme, which Move to Trash may take: a theme that the last read of the config
+    /// lists, with a file in the config folder's themes/. A listed id is a file name, so it never leads out of themes/.
+    func canTrash(_ id: String) -> Bool {
+        inspection.theme(id) != nil && FileManager.default.fileExists(atPath: ThemeFile.file(id, config: store.config).path)
+    }
+
+    /// Why Move to Trash left a theme where it was, in words for its alert.
+    struct TrashError: LocalizedError {
+        let errorDescription: String?
+    }
 
     /// Moves the person's own theme to the Trash; the Trash is the undo. settings.json's theme, and a schedule slot, that
     /// named it go back to the usual theme. Its changes in settings.json's themes stay, so Put Back restores them.
     /// `remove` moves the file (tests pass one that deletes).
     func trash(_ id: String, using remove: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) throws {
+        guard canTrash(id) else { throw TrashError(errorDescription: "Only your own themes can move to the Trash.") }
         try remove(ThemeFile.file(id, config: store.config))
         store.update { settings in
             if settings["theme"].string == id { settings["theme"] = .nil }

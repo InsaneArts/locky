@@ -167,6 +167,18 @@ import Testing
         #expect(model.editingTheme == nil)
     }
 
+    /// An id from a request names no file outside themes/: only a theme the config's read lists can go.
+    @Test func anIDThatIsAPathGoesNowhere() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "")
+        let model = await loaded(sandbox)
+        // themes/../init.lua is the config's init.lua.
+        #expect(!model.canTrash("../init"))
+        var removed = false
+        #expect(throws: AppModel.TrashError.self) { try model.trash("../init", using: { _ in removed = true }) }
+        #expect(!removed && FileManager.default.fileExists(atPath: sandbox.config.appending(path: "init.lua").path))
+    }
+
     @Test func anInstalledThemeTakesAFreeID() async throws {
         let sandbox = try Sandbox()
         let model = await loaded(sandbox)
@@ -197,6 +209,14 @@ import Testing
         #expect(!enabled(#selector(Commands.useTheme(_:))))
         model.customize("default")
         #expect(enabled(#selector(Commands.exportTheme(_:))) && !enabled(#selector(Commands.trashTheme(_:))))
+        // A theme the config's read does not list, such as an id from a request, takes no theme command.
+        try sandbox.write("init.lua", "")
+        model.customize("../init")
+        for action in [#selector(Commands.useTheme(_:)), #selector(Commands.duplicateTheme(_:)), #selector(Commands.exportTheme(_:)),
+                       #selector(Commands.revertTheme(_:)), #selector(Commands.trashTheme(_:)), #selector(Commands.addWidget(_:))] {
+            #expect(!enabled(action), "\(action)")
+        }
+        model.customize("default")
         let inspector = item(#selector(Commands.toggleInspector(_:)))
         #expect(controller.validateMenuItem(inspector) && inspector.title == "Hide Inspector")
     }
