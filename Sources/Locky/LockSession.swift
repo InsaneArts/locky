@@ -681,12 +681,12 @@ final class LockSession: NSObject, NSWindowDelegate {
         if next.problems != old.problems {
             screen.banner = next.problems.isEmpty ? nil : NSHostingView(rootView: ProblemsBanner(problems: next.problems))
         }
-        screen.layoutAnimated()
+        screen.layoutNow()
         return true
     }
 
     /// Gives each widget's view its new placement. A widget whose instance changed keeps its view, which shows the
-    /// old drawing until the new instance draws; new widgets get new views, and views no placement keeps fade out.
+    /// old drawing until the new instance draws; new widgets get new views, and views no placement keeps go.
     private func reconcileWidgets(from old: LuaRuntime.Started, to next: LuaRuntime.Started, on screen: LockScreenView) {
         let views = screen.widgets
         var taken = Set<Int>()
@@ -944,8 +944,8 @@ final class LockScreenView: NSView {
             needsLayout = true
         }
     }
-    /// Widgets fade in once they know their size. Off, they show at once: the theme editor's preview fades in
-    /// whole.
+    /// What changes after the scene showed fades: a widget that measures late, a new background, a removed widget.
+    /// Off in the theme editor's preview, where keys cause those changes: they happen at once.
     var fadesIn = true
     /// Called after each layout: the theme editor's canvas follows the widgets.
     var onLayout: (() -> Void)?
@@ -1044,10 +1044,14 @@ final class LockScreenView: NSView {
         }
     }
 
-    /// Takes a widget off the screen, fading it out.
+    /// Takes a widget off the screen: at once in the theme editor's preview, where a key removed it; else fading out.
     func remove(_ widget: WidgetHost) {
         widgets.removeAll { $0 === widget }
         shown.remove(ObjectIdentifier(widget))
+        guard fadesIn else {
+            widget.removeFromSuperview()
+            return
+        }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.2
             widget.animator().alphaValue = 0
@@ -1067,8 +1071,8 @@ final class LockScreenView: NSView {
         }
     }
 
-    /// A new background over the old one, faded in once it has loaded, so the screen never goes blank. It replaces
-    /// one still loading.
+    /// A new background over the old one once it has loaded, so the screen never goes blank: at once in the theme
+    /// editor's preview, else faded in. It replaces one still loading.
     func replaceBackground(with view: NSView) {
         incomingBackground?.removeFromSuperview()
         incomingBackground = nil
@@ -1087,8 +1091,15 @@ final class LockScreenView: NSView {
                 try? await Task.sleep(for: .milliseconds(30))
             }
             guard let self, incomingBackground === view else { return }
+            guard fadesIn else {
+                view.alphaValue = 1
+                incomingBackground = nil
+                background = view
+                return
+            }
             NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.3
+                context.duration = 0.25
+                context.timingFunction = Motion.easeOut
                 view.animator().alphaValue = 1
             }, completionHandler: {
                 MainActor.assumeIsolated { [weak self] in
@@ -1100,14 +1111,10 @@ final class LockScreenView: NSView {
         }
     }
 
-    /// Lays out at once, with the changes animated: a widget the editor moved glides to its new place.
-    func layoutAnimated() {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.25
-            context.allowsImplicitAnimation = true
-            needsLayout = true
-            layoutSubtreeIfNeeded()
-        }
+    /// Lays out at once, with nothing animated: the theme editor's keys move widgets up to 30 times a second.
+    func layoutNow() {
+        needsLayout = true
+        layoutSubtreeIfNeeded()
     }
 
     /// Shows the scene: the background, the overlay, and each widget that knows its size. Animated, it fades them in the

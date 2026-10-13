@@ -414,6 +414,23 @@ import Testing
         #expect(unmeasured.alphaValue == 1)
     }
 
+    /// The theme editor's preview, where keys remove widgets and change the background: nothing fades.
+    @Test func theEditorsPreviewChangesAtOnce() async throws {
+        let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        screen.fadesIn = false
+        screen.reveal(animated: false)
+        let gone = widget(size: CGSize(width: 100, height: 40))
+        screen.add(gone)
+        screen.remove(gone)
+        #expect(gone.superview == nil)
+        let first = NSView(), next = NSView()
+        screen.background = first
+        screen.replaceBackground(with: next)
+        // Nothing to load: it swaps on the next turn of the main actor.
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(screen.background === next && next.alphaValue == 1 && first.superview == nil)
+    }
+
     /// Under the scene, once the theme arrives: its own bg, opaque.
     @Test func theScreenTakesTheThemesBg() async throws {
         let sandbox = try Sandbox()
