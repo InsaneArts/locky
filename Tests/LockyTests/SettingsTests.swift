@@ -887,3 +887,70 @@ import Testing
         #expect(try mode(sandbox.root.appending(path: "other")) == 0o700)
     }
 }
+
+/// The Settings window's own rules: General's pop-ups and switches.
+@Suite struct WindowSettingsTests {
+    @Test func whenInactiveListsNeverAndTheUsualTimes() {
+        let choices = SettingsPage.idleChoices(stored: nil)
+        #expect(choices.map(\.minutes) == [nil, 1, 2, 5, 10, 15, 30, 60])
+        #expect(choices.map(\.title) == ["Never", "For 1 minute", "For 2 minutes", "For 5 minutes", "For 10 minutes", "For 15 minutes",
+                                         "For 30 minutes", "For 1 hour"])
+        // A usual time adds nothing; any other stays in the list as a custom item.
+        #expect(SettingsPage.idleChoices(stored: 5).count == 8)
+        #expect(SettingsPage.idleChoices(stored: 7).last?.minutes == 7)
+        #expect(SettingsPage.idleChoices(stored: 7).last?.title == "For 7 minutes (custom)")
+    }
+
+    @Test func turnTheDisplayOffListsTheSystemFirst() {
+        let choices = SettingsPage.displayOffChoices(stored: nil)
+        #expect(choices.map(\.seconds) == [nil, 10, 30, 60, 300])
+        #expect(choices.map(\.title) == ["Like the system", "After 10 seconds", "After 30 seconds", "After 1 minute", "After 5 minutes"])
+        #expect(SettingsPage.displayOffChoices(stored: 90).last?.title == "After 90 seconds (custom)")
+        #expect(SettingsPage.displayOffChoices(stored: 120).last?.title == "After 2 minutes (custom)")
+    }
+
+    /// settings.json may hold any number: its pop-up rounds it up, and a huge one cannot stop the pane.
+    @Test func aStoredTimeBecomesAWholeNumber() {
+        #expect(SettingsPage.whole(nil) == nil)
+        #expect(SettingsPage.whole(5) == 5)
+        #expect(SettingsPage.whole(2.5) == 3)
+        #expect(SettingsPage.whole(1e300) == 1_000_000_000)
+    }
+
+    @Test func theScreenSaverOrDisplaySwitchWritesBothKeysInPlace() {
+        var settings = Settings(["auto_lock": .table(["later": .string("kept"), "system_sleep": .bool(true)])])
+        SettingsPage.setScreenSaverOrDisplay(true, in: &settings)
+        #expect(settings["auto_lock"] == .table(["later": .string("kept"), "system_sleep": .bool(true),
+                                                 "display_sleep": .bool(true), "screen_saver": .bool(true)]))
+        SettingsPage.setScreenSaverOrDisplay(false, in: &settings)
+        #expect(settings["auto_lock"] == .table(["later": .string("kept"), "system_sleep": .bool(true)]))
+    }
+
+    @Test func hidePersonalInformationAlwaysStoresOn() {
+        // init.lua says privacy = true: off has to say false, and on says true all the same.
+        var settings = Settings()
+        SettingsPage.setPrivacy(false, base: .bool(true), in: &settings)
+        #expect(settings["privacy"] == .bool(false))
+        SettingsPage.setPrivacy(true, base: .bool(true), in: &settings)
+        #expect(settings["privacy"] == .bool(true))
+        // With nothing in init.lua, off is no key, and on is still true.
+        SettingsPage.setPrivacy(false, base: .nil, in: &settings)
+        #expect(settings["privacy"].isNil)
+        SettingsPage.setPrivacy(true, base: .nil, in: &settings)
+        #expect(settings["privacy"] == .bool(true))
+    }
+
+    /// On is stored, so an init.lua that fails before its locky.setup still hides the name.
+    @Test func privacyOnOutlivesABrokenInitLua() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "error('broken') locky.setup({ privacy = true })")
+        var settings = Settings()
+        SettingsPage.setPrivacy(true, base: .bool(true), in: &settings)
+        try settings.save(config: sandbox.config)
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        let started = await runtime.start(theme: "default")
+        runtime.stop()
+        #expect(started.problems.contains { $0.contains("broken") }, "\(started.problems)")
+        #expect(started.privacy)
+    }
+}

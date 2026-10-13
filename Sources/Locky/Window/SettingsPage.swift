@@ -1,10 +1,16 @@
 import AppKit
+import AVFoundation
+import LocalAuthentication
 import SwiftUI
 
-/// The app's settings. Each change saves to settings.json at once. Settings Lua also reads (the clock, privacy,
-/// the message) show init.lua's value until changed here, then offer a Reset.
+/// Settings › General: when the Mac locks, how it unlocks, and what the lock screen says. Each change saves to
+/// settings.json at once. A row Lua also reads stores no key while it shows init.lua's value, so the row is its own reset;
+/// Hide personal information is the exception, and stores on all the same.
 struct SettingsPage: View {
-    @Bindable var model: AppModel
+    let model: AppModel
+    /// The intruder photos, newest first. A screenshot run shows none.
+    @State private var photos: [(url: URL, date: Date)] = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: SettingsStore { model.store }
 
@@ -12,363 +18,366 @@ struct SettingsPage: View {
         Form {
             if let problem = store.problem {
                 Section {
-                    Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Button("Move the Broken File Aside and Restore the Last Good Settings") { try? store.resetBrokenFile() }
+                    WarningLabel(problem)
+                        .textSelection(.enabled)
+                    Button("Restore Last Good Settings") { try? store.resetBrokenFile() }
                 } footer: {
-                    Text("Locky does not change settings.json while it has an error, and goes on with the last settings that read without one. Fix the file in an editor, or restore those.")
+                    Text("Locky keeps using the last settings that worked. Restoring moves the broken file aside.")
                 }
             }
             // While the file has an error, everything but the way out of it waits.
             Group {
-                GeneralSettings(model: model)
-                autoLock
-                unlock
-                lockScreen
-                ScheduleSettings(model: model)
-                power
-                security
-                Section("Plugins") {
-                    Toggle("Check for plugin updates once a day", isOn: store.bool("update_check", default: true))
+                if !photos.isEmpty {
+                    PhotosSection(photos: photos, delete: delete, deleteAll: deleteAll)
                 }
+                StartSection(model: model)
+                AutoLockSection(model: model)
+                LockScreenSection(model: model)
+                UnlockSection(model: model)
             }
             .disabled(store.problem != nil)
         }
         .formStyle(.grouped)
+        .animation(Motion.rows(reduceMotion), value: store.problem)
+        .animation(Motion.rows(reduceMotion), value: photos.count)
+        .task(id: model.revision) { loadPhotos() }
     }
 
-    // MARK: Sections
+    private func loadPhotos() {
+        photos = model.screenshots ? [] : IntruderLog().photos()
+    }
 
-    private var autoLock: some View {
+    private func delete(_ photo: URL) {
+        try? IntruderLog().delete(photo)
+        loadPhotos()
+    }
+
+    private func deleteAll() {
+        try? IntruderLog().deleteAll()
+        loadPhotos()
+    }
+
+    // MARK: Rules the tests reach
+
+    /// When inactive: Never, the usual times, and a stored time that is not one of them, as "For 7 minutes (custom)".
+    nonisolated static func idleChoices(stored: Int?) -> [(minutes: Int?, title: String)] {
+        choices("Never", [1, 2, 5, 10, 15, 30, 60], stored: stored) { $0 == 60 ? "For 1 hour" : "For \(plural($0, "minute"))" }
+            .map { ($0.value, $0.title) }
+    }
+
+    /// Turn the display off: no key (the system's display sleep applies), the usual times, and a stored time that is not
+    /// one of them, as "After 90 seconds (custom)".
+    nonisolated static func displayOffChoices(stored: Int?) -> [(seconds: Int?, title: String)] {
+        choices("Like the system", [10, 30, 60, 300], stored: stored) { seconds in
+            seconds % 60 == 0 ? "After \(plural(seconds / 60, "minute"))" : "After \(plural(seconds, "second"))"
+        }
+        .map { ($0.value, $0.title) }
+    }
+
+    /// The one switch for the moment macOS treats as one ("Require password after screen saver begins or display is
+    /// turned off"): it writes both keys, in place, so auto_lock's other keys stay.
+    nonisolated static func setScreenSaverOrDisplay(_ on: Bool, in settings: inout Settings) {
+        settings.setAutoLock("display_sleep", on ? .bool(true) : nil)
+        settings.setAutoLock("screen_saver", on ? .bool(true) : nil)
+    }
+
+    /// Hide personal information. On always stores true, so privacy never depends on init.lua running: settings.json
+    /// applies after it too. Off stores false only against init.lua's true, and no key otherwise.
+    nonisolated static func setPrivacy(_ on: Bool, base: LuaValue, in settings: inout Settings) {
+        settings["privacy"] = if on { .bool(true) } else if base == .bool(true) { .bool(false) } else { .nil }
+    }
+
+    /// A stored time as its pop-up's whole number, rounded up: a billion at most, so no number in the file can stop the pane.
+    nonisolated static func whole(_ value: Double?) -> Int? {
+        value.map { Int(min($0.rounded(.up), 1e9)) }
+    }
+
+    /// A pop-up's items: `first` (no key), `usual` with their titles, and a stored value that is not one of them as a
+    /// custom item (HIG Pop-up buttons). Titles are plain English: `Duration.formatted` rounds 90 s to "2 minutes" and
+    /// follows the system language inside English strings.
+    fileprivate nonisolated static func choices(_ first: String, _ usual: [Int], stored: Int?,
+                                                title: (Int) -> String) -> [(value: Int?, title: String)] {
+        var items: [(value: Int?, title: String)] = [(nil, first)]
+        items += usual.map { ($0, title($0)) }
+        if let stored, !usual.contains(stored) { items.append((stored, title(stored) + " (custom)")) }
+        return items
+    }
+
+    /// "1 minute", "7 minutes".
+    fileprivate nonisolated static func plural(_ number: Int, _ unit: String) -> String {
+        number == 1 ? "1 \(unit)" : "\(number) \(unit)s"
+    }
+}
+
+/// The photos the camera took after wrong passwords, first in the pane while there are any.
+private struct PhotosSection: View {
+    let photos: [(url: URL, date: Date)]
+    let delete: (URL) -> Void
+    let deleteAll: () -> Void
+    @State private var confirming = false
+
+    var body: some View {
         Section {
-            let idle = store.settings["auto_lock"]["idle_minutes"].number.flatMap { $0.isFinite ? min(max($0, 1), 1440) : nil }
-            // The minutes show after the switch, and only while it is on.
-            LabeledContent("When the Mac is idle") {
-                HStack {
-                    Toggle("When the Mac is idle", isOn: Binding(get: { idle != nil }, set: { setAutoLock("idle_minutes", $0 ? .int(5) : nil) }))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    if let idle {
-                        Picker("Minutes", selection: Binding(get: { Int(idle) }, set: { setAutoLock("idle_minutes", .int($0)) })) {
-                            ForEach([1, 2, 3, 5, 10, 15, 20, 30, 45, 60], id: \.self) { Text("\($0) min").tag($0) }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
+            IntruderPhotos(photos: photos, delete: delete)
+        } header: {
+            HStack {
+                Text("Photos")
+                Spacer()
+                Button("Delete All…") { confirming = true }
+                    .buttonStyle(.link)
+                    // The person asked for it, so the button is the default one and not destructive.
+                    .alert("Delete all photos?", isPresented: $confirming) {
+                        Button("Delete All", action: deleteAll)
+                            .keyboardShortcut(.defaultAction)
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This can't be undone.")
                     }
-                }
             }
-            Toggle("When the display sleeps", isOn: autoLockBinding("display_sleep"))
-            Toggle("Before the Mac sleeps", isOn: autoLockBinding("system_sleep"))
-            Toggle("When the screen saver starts", isOn: autoLockBinding("screen_saver"))
+        } footer: {
+            Text("Locky took these when someone typed wrong passwords.")
+        }
+    }
+}
+
+/// Open at login and the Lock Now shortcut: what lets Locky lock at all.
+private struct StartSection: View {
+    let model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Section {
+            OpenAtLoginToggle(model: model, subtitle: waitsOnLocky ? "Auto-lock and the shortcut work only while Locky is open." : nil)
+            ShortcutRecorder("Lock Now shortcut", shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
+                model.store.update { $0.shortcut = shortcut }
+            }), onRecordingChange: model.recordingShortcut)
+            if let problem = model.shortcutProblem {
+                WarningLabel(problem)
+            }
+        }
+        .animation(Motion.rows(reduceMotion), value: model.loginItem)
+    }
+
+    /// Locky does not open at login, and auto-lock or the shortcut needs it running.
+    private var waitsOnLocky: Bool {
+        let settings = model.store.settings
+        return model.loginItem == .notRegistered && (settings.autoLock != AutoLockSettings() || settings.shortcut != nil)
+    }
+}
+
+/// When Locky locks by itself. Each control writes its auto_lock key in place, so keys a newer Locky knows stay.
+private struct AutoLockSection: View {
+    let model: AppModel
+
+    private var store: SettingsStore { model.store }
+
+    var body: some View {
+        let triggers = store.settings.autoLock
+        let idle = SettingsPage.whole(triggers.idleMinutes)
+        Section {
+            Picker("When inactive", selection: Binding(get: { idle }, set: { minutes in
+                store.update { $0.setAutoLock("idle_minutes", minutes.map(LuaValue.int)) }
+            })) {
+                ForEach(SettingsPage.idleChoices(stored: idle), id: \.minutes) { Text($0.title).tag($0.minutes) }
+            }
+            Toggle("When the screen saver starts or the display turns off", isOn: Binding(get: { triggers.displaySleep || triggers.screenSaver }, set: { on in
+                store.update { SettingsPage.setScreenSaverOrDisplay(on, in: &$0) }
+            }))
+            Toggle("When the Mac sleeps", isOn: Binding(get: { triggers.systemSleep }, set: { on in
+                store.update { $0.setAutoLock("system_sleep", on ? .bool(true) : nil) }
+            }))
         } header: {
             Text("Lock Automatically")
         } footer: {
-            Text("Idle time does not count while a video, a call, or a presentation keeps the display awake. If macOS also asks for your password after sleep, you unlock twice.")
+            Text("A video, call, or presentation that keeps the display on pauses the inactivity count. If macOS also asks for your password when the display turns off, you may unlock twice.")
         }
-    }
-
-    private var unlock: some View {
-        Section {
-            Toggle("Unlock with Touch ID", isOn: store.bool("touch_id", default: true))
-            KeyboardAccess()
-            Toggle(isOn: store.bool("emergency_exit", default: true)) {
-                Text("Switch to the macOS lock screen with ⌃⌥⌘Q")
-                Text("Ends Locky's lock and locks the Mac with the macOS lock screen: for when something goes wrong.")
-            }
-        } header: {
-            Text("Unlock")
-        }
-    }
-
-    private var lockScreen: some View {
-        Section("Lock Screen") {
-            MessageField(model: model)
-            LabeledContent {
-                Picker("Clock", selection: Binding(get: { effective("hour24").bool }, set: { value in
-                    store.update { $0["hour24"] = value.map(LuaValue.bool) ?? .nil }
-                })) {
-                    Text("Like the system").tag(Bool?.none)
-                    Text("12-hour").tag(Bool?.some(false))
-                    Text("24-hour").tag(Bool?.some(true))
-                }
-                .labelsHidden()
-                .fixedSize()
-            } label: {
-                Text("Clock")
-                LuaNote(model: model, key: "hour24") { $0.bool.map { $0 ? "24-hour" : "12-hour" } ?? "like the system" }
-            }
-            Toggle(isOn: Binding(get: { effective("privacy").bool ?? false }, set: { value in store.update { $0["privacy"] = .bool(value) } })) {
-                Text("Privacy mode")
-                Text("Hides agent titles and workspaces, your name and picture, and the computer's name.")
-                LuaNote(model: model, key: "privacy") { $0.bool == true ? "on" : "off" }
-            }
-        }
-    }
-
-    private var power: some View {
-        Section("Power") {
-            Toggle(isOn: store.bool("battery_saver", default: false)) {
-                Text("Battery saver")
-                Text("On battery or in Low Power Mode, backgrounds stop moving and animations turn off.")
-            }
-            LabeledContent {
-                Picker("Turn the display off", selection: Binding(get: { store.settings["display_off"].int ?? 0 }, set: { value in
-                    store.update { $0["display_off"] = value == 0 ? .nil : .int(value) }
-                })) {
-                    Text("Never").tag(0)
-                    ForEach([10, 15, 30, 60, 120, 300], id: \.self) { Text(Self.duration(Double($0))).tag($0) }
-                }
-                .labelsHidden()
-                .fixedSize()
-            } label: {
-                Text("Turn the display off after")
-                Text("While locked, when nobody touches the Mac.")
-            }
-        }
-    }
-
-    private var security: some View {
-        Section {
-            LabeledContent {
-                Picker("Photo", selection: Binding(get: { store.settings["intruder_photo"].int ?? 0 }, set: { value in
-                    store.update { $0["intruder_photo"] = value == 0 ? .nil : .int(value) }
-                    // Ask now: during a lock, the camera never asks.
-                    if value > 0, CameraAccess.status == .notDetermined { Task { _ = await CameraAccess.request() } }
-                })) {
-                    Text("Off").tag(0)
-                    ForEach([2, 3, 5, 10], id: \.self) { Text("After \($0) wrong passwords").tag($0) }
-                }
-                .labelsHidden()
-                .fixedSize()
-            } label: {
-                Text("Take a photo")
-                Text("With the camera, once per lock. The Dashboard shows the photos after you unlock.")
-            }
-            if store.settings["intruder_photo"].int != nil { CameraStatus() }
-        } header: {
-            Text("Security")
-        } footer: {
-            Text("Photos stay on this Mac, in ~/Library/Application Support/Locky/Intruders. Locky keeps the newest 20, for 30 days.")
-        }
-    }
-
-    // MARK: Helpers
-
-    /// settings.json's value, else init.lua's (or the default).
-    private func effective(_ key: String) -> LuaValue {
-        store.settings[key].isNil ? model.inspection.base[key] : store.settings[key]
-    }
-
-    private func autoLockBinding(_ key: String) -> Binding<Bool> {
-        Binding(get: { store.settings["auto_lock"][key].bool ?? false }, set: { setAutoLock(key, $0 ? .bool(true) : nil) })
-    }
-
-    private func setAutoLock(_ key: String, _ value: LuaValue?) {
-        store.update { settings in
-            var table = settings["auto_lock"].table ?? [:]
-            table[key] = value
-            settings["auto_lock"] = table.isEmpty ? .nil : .table(table)
-        }
-    }
-
-    /// "45 s", "2 min". As the runtime reads it: a value that is not a finite number (init.lua may say math.huge)
-    /// is "Off", and one over a day is a day.
-    static func duration(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds > 0 else { return "Off" }
-        let seconds = min(seconds, 86_400)
-        return seconds < 60 || seconds.truncatingRemainder(dividingBy: 60) != 0 ? "\(Int(seconds)) s" : "\(Int(seconds / 60)) min"
     }
 }
 
-/// Under a setting Lua also reads: where its value comes from, and a Reset to init.lua's.
-private struct LuaNote: View {
+/// What the lock screen says and hides, and when its display turns off.
+private struct LockScreenSection: View {
     let model: AppModel
-    let key: String
-    let describe: (LuaValue) -> String?
+
+    private var store: SettingsStore { model.store }
+
+    /// settings.json's value, else init.lua's: only true hides, as Lua reads it.
+    private var privacy: Bool {
+        (store.settings["privacy"].isNil ? model.inspection.base["privacy"] : store.settings["privacy"]).bool == true
+    }
 
     var body: some View {
-        if !model.store.settings[key].isNil {
-            HStack(spacing: 4) {
-                Text("Set here; init.lua or the default says \(describe(model.inspection.base[key]) ?? "nothing").")
-                Button("Reset") { model.store.update { $0[key] = .nil } }
-                    .buttonStyle(.link)
+        let displayOff = SettingsPage.whole(store.settings.displayOff)
+        Section("Lock Screen") {
+            MessageField(model: model)
+            Toggle(isOn: Binding(get: { privacy }, set: { on in
+                store.update { SettingsPage.setPrivacy(on, base: model.inspection.base["privacy"], in: &$0) }
+            })) {
+                Text("Hide personal information")
+                Text("Your name and picture, this Mac's name and location, network addresses, and what you are working on.")
+            }
+            // Only while locked and nobody touches the Mac; it turns the display off even when the system's display
+            // sleep is Never or another app keeps the display on.
+            Picker("Turn the display off", selection: Binding(get: { displayOff }, set: { seconds in
+                store.update { $0.displayOff = seconds.map(Double.init) }
+            })) {
+                ForEach(SettingsPage.displayOffChoices(stored: displayOff), id: \.seconds) { Text($0.title).tag($0.seconds) }
             }
         }
     }
 }
 
-/// The lock screen message. It saves when editing ends.
+/// The lock screen message. It saves on Return and when the field loses focus.
 private struct MessageField: View {
     let model: AppModel
     @State private var text = ""
     @FocusState private var focused: Bool
 
+    /// settings.json's message, else init.lua's.
     private var saved: String {
         model.store.settings["message"].string ?? model.inspection.base["message"].string ?? ""
     }
 
     var body: some View {
-        LabeledContent {
-            TextField("Message", text: $text, prompt: Text("If found, please call …"))
+        LabeledContent("Message") {
+            TextField("Message", text: $text, prompt: Text("If found, please call…"))
                 .labelsHidden()
                 .focused($focused)
                 .onSubmit(save)
                 .onChange(of: focused) { if !focused { save() } }
                 .frame(maxWidth: 320)
-        } label: {
-            Text("Message")
-            Text("Shown under the password field.")
-            LuaNote(model: model, key: "message") { $0.string.map { "“\($0)”" } }
         }
         .onAppear { text = saved }
         .onChange(of: saved) { if !focused { text = saved } }
     }
 
     private func save() {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        text = value
         guard value != saved else { return }
-        // Cleared while init.lua has a message: an empty one overrides it. Otherwise no key at all.
-        let overrides = !(model.inspection.base["message"].string ?? "").isEmpty
-        model.store.update { $0["message"] = value.isEmpty ? (overrides ? .string("") : .nil) : .string(String(value.prefix(200))) }
+        // init.lua's own message stores no key. Cleared while init.lua has one, an empty message hides it; cleared
+        // without one, it is no key at all.
+        let base = model.inspection.base["message"]
+        model.store.update { $0.setLuaValue("message", value.isEmpty && (base.string ?? "").isEmpty ? .nil : .string(value), base: base) }
     }
 }
 
-/// Launch at login and the Lock Now shortcut.
-private struct GeneralSettings: View {
+/// How the lock screen lets people in, and what it does about the ones it should not. Its rows come and go inside
+/// `withAnimation`, which animates the whole Form: with `.animation(_:value:)` on the Section, a new row came at once and
+/// the footer slid down through it.
+private struct UnlockSection: View {
     let model: AppModel
-    @State private var login = LoginItem.status
-    @State private var loginError: String?
-
-    var body: some View {
-        Section("General") {
-            Toggle(isOn: Binding(get: { login == .enabled || login == .requiresApproval }, set: { on in
-                do {
-                    try LoginItem.set(on)
-                    loginError = nil
-                } catch {
-                    loginError = error.localizedDescription
-                }
-                login = LoginItem.status
-            })) {
-                Text("Open Locky at login")
-                Text("Locky has to run to lock by itself and to answer the shortcut.")
-            }
-            .disabled({ if case .unavailable = login { return true } else { return false } }())
-            switch login {
-            case .requiresApproval:
-                HStack {
-                    Label("Allow Locky in System Settings › Login Items", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Spacer()
-                    Button("Open Login Items") { LoginItem.openSystemSettings() }
-                }
-            case .unavailable(let message):
-                Label(message, systemImage: "info.circle").foregroundStyle(.secondary)
-            default:
-                EmptyView()
-            }
-            if let loginError {
-                Label(loginError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            }
-            ShortcutRecorder(shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
-                model.store.update { $0.shortcut = shortcut }
-            }), onRecordingChange: model.recordingShortcut) {
-                Text("Lock Now shortcut")
-                Text("Works in every app. Needs ⌘ or ⌃, or an F-key. Click to record; Delete clears it.")
-            }
-            if let problem = model.shortcutProblem {
-                Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in login = LoginItem.status }
-    }
-}
-
-/// A different theme by time of day, or with Light and Dark mode.
-private struct ScheduleSettings: View {
-    let model: AppModel
+    @State private var hasTouchID = Self.touchIDHardware()
+    @State private var trusted = AXIsProcessTrusted()
+    @State private var cameraStatus = CameraAccess.status
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: SettingsStore { model.store }
-    private var schedule: ThemeSchedule? { store.settings.schedule }
+    /// The wrong password that takes a photo, as the lock reads it; nil is Never.
+    private var photoThreshold: Int? { store.settings["intruder_photo"].int.flatMap { $0 > 0 ? $0 : nil } }
 
     var body: some View {
+        let threshold = photoThreshold
         Section {
-            Picker("Change the theme", selection: Binding(get: { schedule?.mode }, set: { setMode($0) })) {
-                Text("Never").tag(ThemeSchedule.Mode?.none)
-                Text("By time of day").tag(ThemeSchedule.Mode?.some(.time))
-                Text("With Light and Dark mode").tag(ThemeSchedule.Mode?.some(.appearance))
+            if hasTouchID {
+                Toggle("Unlock with Touch ID", isOn: store.bool("touch_id", default: true))
             }
-            if let schedule {
-                switch schedule.mode {
-                case .time:
-                    slot("Day theme", theme: \.day, starts: \.dayStarts)
-                    slot("Night theme", theme: \.night, starts: \.nightStarts)
-                case .appearance:
-                    themePicker("Light mode theme", \.light)
-                    themePicker("Dark mode theme", \.dark)
+            Picker(selection: Binding(get: { threshold }, set: { value in
+                withAnimation(Motion.rows(reduceMotion)) {
+                    store.update { $0["intruder_photo"] = value.map(LuaValue.int) ?? .nil }
                 }
+                if value != nil { askForCamera() }
+            })) {
+                ForEach(SettingsPage.choices("Never", [2, 3, 5, 10], stored: threshold) { "After \(SettingsPage.plural($0, "wrong password"))" },
+                        id: \.value) { Text($0.title).tag($0.value) }
+            } label: {
+                Text("Take a photo")
+                if threshold != nil { Text("Photos stay on this Mac for up to 30 days.") }
             }
+            if threshold != nil {
+                CameraStatus(status: cameraStatus, ask: askForCamera)
+            }
+            KeyboardAccess(trusted: $trusted)
         } header: {
-            Text("Theme Schedule")
+            Text("Unlock")
         } footer: {
-            if schedule != nil {
-                Text("The schedule picks each lock's theme. Now: \(model.inspection.theme(model.activeTheme)?.name ?? model.activeTheme).")
+            if store.settings["emergency_exit"].bool != false {
+                Text("If something goes wrong on the lock screen, press ⌃⌥⌘Q to switch to the macOS lock screen.")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // A lock activates Locky at its start and at each keyboard reclaim: nothing is read then.
+            guard !model.locked else { return }
+            let touchID = Self.touchIDHardware(), keyboard = AXIsProcessTrusted(), camera = CameraAccess.status
+            withAnimation(Motion.rows(reduceMotion)) {
+                hasTouchID = touchID
+                trusted = keyboard
+                cameraStatus = camera
             }
         }
     }
 
-    private func setMode(_ mode: ThemeSchedule.Mode?) {
-        let current = model.activeTheme
-        store.update { settings in
-            guard let mode else {
-                settings.schedule = nil
-                return
-            }
-            var schedule = settings.schedule ?? ThemeSchedule(mode: mode)
-            schedule.mode = mode
-            if mode == .time {
-                schedule.day = schedule.day ?? current
-                schedule.night = schedule.night ?? current
-            } else {
-                schedule.light = schedule.light ?? current
-                schedule.dark = schedule.dark ?? current
-            }
-            settings.schedule = schedule
+    /// Whether this Mac has Touch ID, also with its lid closed or in lockout: `biometryType` "is set no matter what the
+    /// call returns".
+    static func touchIDHardware() -> Bool {
+        let context = LAContext()
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        return context.biometryType == .touchID
+    }
+
+    /// Asks for the camera now, while the person is here: during a lock the camera never asks.
+    private func askForCamera() {
+        guard CameraAccess.status == .notDetermined else { return }
+        let animation = Motion.rows(reduceMotion)
+        Task {
+            _ = await CameraAccess.request()
+            let status = CameraAccess.status
+            withAnimation(animation) { cameraStatus = status }
         }
     }
+}
 
-    private func slot(_ title: String, theme: WritableKeyPath<ThemeSchedule, String?>, starts: WritableKeyPath<ThemeSchedule, Int>) -> some View {
-        LabeledContent(title) {
-            HStack {
-                themeMenu(theme)
-                Text("from").foregroundStyle(.secondary)
-                DatePicker("Starts", selection: Binding(get: {
-                    let minutes = schedule?[keyPath: starts] ?? 0
-                    return Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
-                }, set: { date in
-                    let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-                    update { $0[keyPath: starts] = (parts.hour ?? 0) * 60 + (parts.minute ?? 0) }
-                }), displayedComponents: .hourAndMinute)
-                .labelsHidden()
+/// The camera, while Locky may not use it: a way to ask, or the way to System Settings. Nothing once it may.
+private struct CameraStatus: View {
+    let status: AVAuthorizationStatus
+    let ask: () -> Void
+
+    var body: some View {
+        switch status {
+        case .authorized:
+            EmptyView()
+        case .notDetermined:
+            LabeledContent("Needs camera access.") {
+                Button("Allow…", action: ask)
+            }
+        default:
+            LabeledContent {
+                Button("Open Camera Settings") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")!)
+                }
+            } label: {
+                WarningLabel("Camera access is off.")
             }
         }
     }
+}
 
-    private func themePicker(_ title: String, _ theme: WritableKeyPath<ThemeSchedule, String?>) -> some View {
-        LabeledContent(title) { themeMenu(theme) }
-    }
+/// Accessibility, which lets the lock screen keep the keyboard when another app takes it, while Locky does not have it.
+/// Nothing once it does.
+private struct KeyboardAccess: View {
+    @Binding var trusted: Bool
 
-    private func themeMenu(_ theme: WritableKeyPath<ThemeSchedule, String?>) -> some View {
-        Picker("Theme", selection: Binding(get: { schedule?[keyPath: theme] }, set: { value in update { $0[keyPath: theme] = value } })) {
-            Text("The usual theme").tag(String?.none)
-            ForEach(model.inspection.themes) { Text($0.name).tag(String?.some($0.id)) }
+    var body: some View {
+        if !trusted {
+            LabeledContent {
+                Button("Allow…") {
+                    // Shows macOS's prompt, which leads to Privacy & Security › Accessibility.
+                    trusted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+                }
+            } label: {
+                Text("Keep the keyboard on the lock screen")
+                Text("Needs Accessibility access.")
+            }
         }
-        .labelsHidden()
-        .fixedSize()
-    }
-
-    private func update(_ change: (inout ThemeSchedule) -> Void) {
-        guard var schedule else { return }
-        change(&schedule)
-        store.update { $0.schedule = schedule }
     }
 }
 
@@ -379,58 +388,5 @@ extension SettingsStore {
         Binding(get: { self.settings[key].bool ?? fallback }, set: { value in
             self.update { $0[key] = value == fallback ? .nil : .bool(value) }
         })
-    }
-}
-
-/// Whether Locky may take the keyboard with an event tap during a lock (Accessibility), with the way to allow it.
-private struct KeyboardAccess: View {
-    @State private var trusted = AXIsProcessTrusted()
-
-    var body: some View {
-        LabeledContent {
-            if trusted {
-                Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            } else {
-                Button("Allow…") {
-                    // Shows macOS's prompt, which leads to Privacy & Security › Accessibility.
-                    trusted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-                }
-            }
-        } label: {
-            Text("Keep the keyboard on the lock screen")
-            Text("With Accessibility access, typing stays on the lock screen when another app takes the keyboard; without it, Locky switches to the macOS lock screen then.")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in trusted = AXIsProcessTrusted() }
-    }
-}
-
-/// Whether Locky may use the camera, with the way to change it.
-private struct CameraStatus: View {
-    @State private var status = CameraAccess.status
-
-    var body: some View {
-        HStack {
-            switch status {
-            case .authorized:
-                Label("Locky may use the camera", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            case .notDetermined:
-                Label("Locky needs your permission to use the camera", systemImage: "camera").foregroundStyle(.secondary)
-                Spacer()
-                Button("Allow…") {
-                    Task {
-                        _ = await CameraAccess.request()
-                        status = CameraAccess.status
-                    }
-                }
-            default:
-                Label("Locky may not use the camera, so it takes no photo", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                Spacer()
-                Button("Open Privacy Settings") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")!)
-                }
-            }
-        }
-        .onAppear { status = CameraAccess.status }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in status = CameraAccess.status }
     }
 }
