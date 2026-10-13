@@ -242,8 +242,27 @@ import Testing
     @Test func anIDThatIsAPathGoesNowhere() async throws {
         let sandbox = try Sandbox()
         try sandbox.write("init.lua", "")
+        // themes/../init.lua is the config's init.lua once the themes folder exists.
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
         let model = await loaded(sandbox)
-        // themes/../init.lua is the config's init.lua.
+        #expect(!model.canTrash("../init"))
+        var removed = false
+        #expect(throws: AppModel.TrashError.self) { try model.trash("../init", using: { _ in removed = true }) }
+        #expect(!removed && FileManager.default.fileExists(atPath: sandbox.config.appending(path: "init.lua").path))
+    }
+
+    /// A plugin can change the theme list, so a listed id can be a path too: it still names no file outside themes/.
+    @Test func aListedIDThatIsAPathGoesNowhere() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "")
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        // A plugin script runs in the Lua state that the config's read asks for the theme list.
+        try sandbox.write("plugin/list.lua", """
+            local list = locky.theme.list
+            locky.theme.list = function() local names = list(); names[#names + 1] = "../init"; return names end
+            """)
+        let model = await loaded(sandbox)
+        #expect(model.inspection.theme("../init") != nil)
         #expect(!model.canTrash("../init"))
         var removed = false
         #expect(throws: AppModel.TrashError.self) { try model.trash("../init", using: { _ in removed = true }) }

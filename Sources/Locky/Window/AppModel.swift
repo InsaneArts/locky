@@ -180,9 +180,11 @@ final class AppModel {
     }
 
     /// Whether `id` is the person's own theme, which Move to Trash may take: a theme that the last read of the config
-    /// lists, with a file in the config folder's themes/. A listed id is a file name, so it never leads out of themes/.
+    /// lists, with a file in the config folder's themes/. A plugin can add any id to that list, so the id must also be a
+    /// plain file name (no "/" and no leading "."): then it never leads out of themes/.
     func canTrash(_ id: String) -> Bool {
-        inspection.theme(id) != nil && FileManager.default.fileExists(atPath: ThemeFile.file(id, config: store.config).path)
+        !id.isEmpty && !id.contains("/") && !id.hasPrefix(".") && inspection.theme(id) != nil
+            && FileManager.default.fileExists(atPath: ThemeFile.file(id, config: store.config).path)
     }
 
     /// Why Move to Trash left a theme where it was, in words for its alert.
