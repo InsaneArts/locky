@@ -60,10 +60,12 @@ struct GaugeView: View {
             }
             if open {
                 bottom(diameter: diameter)
-                    .frame(width: diameter * 0.62)
-                    .offset(y: diameter * 0.33)
+                    .frame(width: diameter * 0.5)
+                    .offset(y: diameter * 0.31)
             }
         }
+        // The track takes the tint; the labels stay the text color.
+        .foregroundStyle(lockyStyle.color("fg"))
         .frame(width: diameter, height: diameter)
         .compositingGroup()
     }
