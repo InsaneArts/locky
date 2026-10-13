@@ -268,6 +268,39 @@ import Testing
         #expect(page.model.editingTheme == nil)
     }
 
+    /// Escape typed in the inspector's text field stays in the field: the selection under it stays.
+    @Test func escapeInATextFieldStaysInTheField() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        // The widget's X offset, once its inspector shows.
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("-30", in: page.window.contentView!)
+            return found != nil
+        })
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        // SwiftUI sees the field's focus on its next updates.
+        for _ in 0..<20 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        page.window.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: page.window.windowNumber,
+                                               context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
+                                               keyCode: 53)!)
+        try await Task.sleep(for: .milliseconds(200))
+        page.window.contentView?.layoutSubtreeIfNeeded()
+        #expect(page.preview.canvas?.selection == .widget(1))
+        #expect(page.model.editingTheme == "t")
+    }
+
+    private static func textField(_ value: String, in view: NSView) -> NSTextField? {
+        if let field = view as? NSTextField, field.isEditable, field.stringValue == value { return field }
+        for child in view.subviews { if let match = textField(value, in: child) { return match } }
+        return nil
+    }
+
     private func click(_ page: Page, at point: CGPoint) {
         page.overlay.mouseDown(with: event(.leftMouseDown, at: point, on: page))
         page.overlay.mouseUp(with: event(.leftMouseUp, at: point, on: page))

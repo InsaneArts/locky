@@ -20,6 +20,7 @@ struct ThemeEditorPage: View {
     @AppStorage("themeEditorGrid") private var grid = false
     @AppStorage("customizeInspector") private var inspectorShown = true
     @Environment(\.undoManager) private var undoManager
+    @FocusedValue(\.typing) private var typing
 
     /// The editor of this theme, once it is made: right after a change of theme, `editing` is still the last one's.
     private var current: ThemeEditing? { editing?.theme.id == info.id ? editing : nil }
@@ -45,8 +46,10 @@ struct ThemeEditorPage: View {
             }
             // A change in progress belongs to what was selected.
             .onChange(of: selection) { draft = nil }
-            // Escape in the inspector does what it does on the canvas: it clears the selection, then ends Customize.
+            // Escape in the inspector does what it does on the canvas: it clears the selection, then ends Customize. A text
+            // field that has the keyboard keeps it.
             .onExitCommand {
+                guard typing != true else { return }
                 if selection == nil { model.finishEditing() } else { selection = nil }
             }
             // File menu commands that need the editor: the More menu's, under its rules.
@@ -678,6 +681,7 @@ private struct TextOption: View {
             .textFieldStyle(.roundedBorder)
             .frame(width: 150)
             .focused($focused)
+            .focusedValue(\.typing, true)
             .onSubmit { if current != text { commit(current) } }
             .onChange(of: focused) { if !focused, current != text { commit(current) } }
             .onAppear { current = text }
@@ -704,6 +708,7 @@ private struct NumberField: View {
                 .multilineTextAlignment(.trailing)
                 .frame(width: 60)
                 .focused($focused)
+                .focusedValue(\.typing, true)
                 .onSubmit(save)
                 .onChange(of: focused) { if !focused { save() } }
             if let step {
@@ -983,6 +988,11 @@ private struct ColorWell: View {
         .onAppear { color = Color(hex: hex) ?? .black }
         .onChange(of: hex) { color = Color(hex: hex) ?? .black }
     }
+}
+
+private extension FocusedValues {
+    /// True while a text field in the inspector has the keyboard: Escape belongs to it, not to the page.
+    @Entry var typing: Bool?
 }
 
 extension Color {
