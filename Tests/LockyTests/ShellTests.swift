@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Foundation
 import Testing
 @testable import Locky
@@ -102,5 +103,16 @@ import Testing
         #expect(found.message == message)
         #expect(found.file?.path == file.map(real))
         #expect(found.line == line)
+    }
+
+    // MARK: Menus
+
+    @Test func aShortcutIsAMenuKeyEquivalent() {
+        let lockNow = Shortcut(keyCode: UInt16(kVK_ANSI_L), modifiers: [.control, .option, .command])
+        #expect(lockNow.menuKeyEquivalent?.key == "l")
+        #expect(lockNow.menuKeyEquivalent?.modifiers == [.control, .option, .command])
+        #expect(Shortcut(keyCode: UInt16(kVK_F5), modifiers: []).menuKeyEquivalent?.key == "\u{F708}")
+        // A menu cannot show Space.
+        #expect(Shortcut(keyCode: UInt16(kVK_Space), modifiers: [.command]).menuKeyEquivalent == nil)
     }
 }
