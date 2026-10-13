@@ -141,6 +141,22 @@ import Testing
         #expect(model.editingTheme == "matrix" && model.addingWidget)
     }
 
+    /// `Locky window widgets --theme glass`, then a lock before the config's read lands: the read shows Customize, and
+    /// Add Widget's sheet waits for the unlock.
+    @Test func addWidgetNeverComesUpDuringALock() async throws {
+        let sandbox = try Sandbox()
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        model.customize("glass")
+        model.addingWidget = true
+        model.locked = true
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.inspection.theme("glass") != nil && model.editingTheme == "glass" && !model.addingWidget)
+        model.locked = false
+        #expect(model.addingWidget)
+    }
+
     /// A theme in use that is gone, such as a file deleted in Finder, leaves the gallery and no endless spinner.
     @Test func aWaitingCustomizeOfAMissingThemeShowsTheGallery() async throws {
         let sandbox = try Sandbox()

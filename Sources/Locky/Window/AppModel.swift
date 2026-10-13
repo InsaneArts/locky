@@ -50,8 +50,14 @@ final class AppModel {
     var screenshots = false
     /// The theme open in Customize; nil shows the gallery.
     private(set) var editingTheme: String?
-    /// Add Widget's sheet: the Customize toolbar, Edit › Add Widget…, and `Locky window widgets` ask for it.
-    var addingWidget = false
+    /// Add Widget's sheet: the Customize toolbar, Edit › Add Widget…, and `Locky window widgets` ask for it. It reads false
+    /// for the length of a lock, so the sheet never comes up behind the lock screen; one asked for before the lock comes
+    /// back after it.
+    var addingWidget: Bool {
+        get { askedForAddWidget && !locked }
+        set { askedForAddWidget = newValue }
+    }
+    private var askedForAddWidget = false
     /// File › Import Theme… asks the gallery to show the file importer.
     var importing = false
     /// A Customize command from the main menu that needs the editor; the editor runs it and sets this back to nil.
