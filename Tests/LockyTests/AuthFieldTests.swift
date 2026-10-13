@@ -73,6 +73,15 @@ import Testing
         }
     }
 
+    /// A clock set back must not keep the count forever: the next lock saves the failure at now.
+    @MainActor @Test func aFutureFailureIsForgotten15MinutesAfterTheNextLock() {
+        withDefaults { defaults in
+            PasswordAttempts(count: 10, last: Date().addingTimeInterval(86_400)).save(defaults)
+            _ = AuthModel(defaults: defaults)
+            #expect(PasswordAttempts.load(defaults, now: Date().addingTimeInterval(16 * 60)) == PasswordAttempts())
+        }
+    }
+
     @MainActor @Test func theWaitCountsDownAndEnds() async {
         let model = AuthModel()
         for _ in 0..<4 { model.failed() }

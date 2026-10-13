@@ -62,6 +62,8 @@ final class AuthModel {
     init(defaults: UserDefaults? = nil) {
         self.defaults = defaults
         attempts = defaults.map { PasswordAttempts.load($0) } ?? PasswordAttempts()
+        // Saved as loaded: a last failure in the future becomes now, so the 15 minutes run from here.
+        if let defaults { attempts.save(defaults) }
         wait(until: attempts.nextTry)
     }
 
