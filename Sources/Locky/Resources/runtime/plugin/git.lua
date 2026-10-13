@@ -4,6 +4,12 @@
 -- Privacy mode hides commit messages.
 local ui = locky.ui
 
+-- git in `path`. A repository's own config could run a program (core.fsmonitor), and a plugin's theme may point
+-- this widget at a repository it ships: a bare one is refused, and no fsmonitor runs.
+local function git(path, ...)
+  return { "git", "-c", "safe.bareRepository=explicit", "-c", "core.fsmonitor=false", "-C", path, ... }
+end
+
 -- `git status --porcelain=v2 --branch` → branch, ahead, behind, changed files.
 local function status(text)
   local branch = text:match("# branch%.head (%S+)") or "?"
@@ -25,7 +31,7 @@ locky.widget.define("git", {
     self:every(self.opts.every, function(self)
       for i, folder in ipairs(self.opts.repos) do
         local path = locky.fs.expand(folder)
-        self:system({ "git", "-C", path, "status", "--porcelain=v2", "--branch" }, function(self, result)
+        self:system(git(path, "status", "--porcelain=v2", "--branch"), function(self, result)
           if result.code ~= 0 then
             self.state.repos[i] = { name = folder:match("([^/]+)/*$") or folder, error = true }
             self:refresh()
@@ -33,7 +39,7 @@ locky.widget.define("git", {
           end
           local repo = status(result.stdout)
           repo.name = path:match("([^/]+)/*$") or folder
-          self:system({ "git", "-C", path, "log", "-1", "--format=%s%x09%cr" }, function(self, log)
+          self:system(git(path, "log", "-1", "--format=%s%x09%cr"), function(self, log)
             repo.subject, repo.when = log.stdout:match("^([^\t]*)\t([^\n]*)")
             self.state.repos[i] = repo
             self:refresh()
