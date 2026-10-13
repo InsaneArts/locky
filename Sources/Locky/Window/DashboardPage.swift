@@ -4,6 +4,8 @@ import SwiftUI
 /// attention or is worth knowing, each opening its page.
 struct DashboardPage: View {
     @Bindable var model: AppModel
+    /// The theme that did not load on the last lock, until a file of it changes or Dismiss.
+    @State private var failure: ThemeFailure?
 
     private var settings: Settings { model.store.settings }
 
@@ -11,6 +13,7 @@ struct DashboardPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 hero
+                if let failure { failureNote(failure) }
                 // Screenshots never show someone's photo.
                 if !model.screenshots { IntruderPhotos(revision: model.revision) }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14, alignment: .top)], spacing: 14) {
@@ -25,6 +28,32 @@ struct DashboardPage: View {
             .padding(24)
             .pageWidth()
         }
+        .task(id: model.revision) {
+            failure = ThemeFailure.current(.standard, inspection: model.inspection, config: model.store.config)
+        }
+    }
+
+    private func failureNote(_ failure: ThemeFailure) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(failure.summary(model.inspection), systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text(failure.message)
+                .font(.callout.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+                .textSelection(.enabled)
+            HStack {
+                Button("Open Lua Config") { model.section = .config }
+                Button("Dismiss") {
+                    UserDefaults.standard.removeObject(forKey: ThemeFailure.key)
+                    self.failure = nil
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     // MARK: The theme

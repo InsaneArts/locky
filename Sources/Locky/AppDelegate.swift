@@ -145,6 +145,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Lock Now, a quick theme change, and the window: everything else is in the window.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if let failure = ThemeFailure.current(.standard, inspection: model.inspection, config: store.config) {
+            let note = NSMenuItem(title: failure.summary(model.inspection), action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            menu.addItem(note)
+            menu.addItem(.separator())
+        }
         menu.addItem(item("Lock Now", #selector(lockNow)))
         menu.addItem(.separator())
 

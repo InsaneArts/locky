@@ -76,9 +76,10 @@ the field stays the theme's.
 Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
 `Locky window [dashboard|themes|plugins|config|settings]`. While it is open, Locky shows in the Dock.
 
-- **Dashboard:** the theme a lock uses now, live, with Lock Now; the config's problems, plugins and
-  updates, auto-lock, unlock, and the lock screen's changes at a glance; and any photos taken after wrong
-  passwords.
+- **Dashboard:** the theme a lock uses now, live, with Lock Now; a theme that failed to load on the last lock
+  (also the first line of the menu bar menu) until its files or init.lua change or you dismiss it; the config's
+  problems, plugins and updates, auto-lock, unlock, and the lock screen's changes at a glance; and any photos
+  taken after wrong passwords.
 - **Themes:** every theme, and the selected one in the editor. Its live preview is a canvas: click a widget or
   the password field to select it, and drag it to move it. A widget lands pinned to the corner, edge, or center
   of the part of the screen it is in, so it keeps its place on other screens; the Grid button shows a 30-point
