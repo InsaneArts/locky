@@ -236,7 +236,7 @@ struct ThemeInspector: View {
                     WidgetInspector(model: model, editing: editing, index: index, selection: $selection, draft: $draft)
                         .id(index)
                 case .passwordField:
-                    PasswordFieldInspector(editing: editing)
+                    PasswordFieldInspector(model: model, editing: editing)
                 default:
                     overview
                 }
@@ -247,6 +247,7 @@ struct ThemeInspector: View {
 
     private var overview: some View {
         Form {
+            SaveProblem(model: model)
             Section("Background") {
                 BackgroundEditor(model: model, editing: editing, draft: $draft)
             }
@@ -314,6 +315,23 @@ private struct ResetHeader: View {
     }
 }
 
+/// While settings.json has an error, nothing the inspector changes can save: it says so first, with the way to fix it.
+private struct SaveProblem: View {
+    let model: AppModel
+
+    var body: some View {
+        if model.store.problem != nil {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    WarningLabel("settings.json has an error, so changes can't save.")
+                    Button("Open Settings") { model.openWindow(.settings) }
+                        .buttonStyle(.link)
+                }
+            }
+        }
+    }
+}
+
 /// One widget: where it sits, its card, its options, and Remove.
 private struct WidgetInspector: View {
     @Bindable var model: AppModel
@@ -338,6 +356,7 @@ private struct WidgetInspector: View {
         let families = info?.families ?? []
         let cards = editing.layout?.cardStyle != "none"
         Form {
+            SaveProblem(model: model)
             Section {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(EditorPlacement.title(placement.widget)).font(.headline)
@@ -446,11 +465,13 @@ private struct WidgetInspector: View {
 
 /// The password field: where it sits. The theme sets its look.
 private struct PasswordFieldInspector: View {
+    let model: AppModel
     let editing: ThemeEditing
 
     var body: some View {
         let place = editing.authPlace
         Form {
+            SaveProblem(model: model)
             Section {
                 Text("Password Field").font(.headline)
             }
