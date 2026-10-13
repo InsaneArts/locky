@@ -4,8 +4,6 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var session: LockSession?
-    /// The themes the Theme menu lists, worked out in the background (it runs init.lua).
-    private var themeNames: [String] = []
     /// settings.json: what the menu and the window change.
     /// A screenshot run (`--behind`) or one against the source tree (LOCKY_RESOURCES): a tool, not the user's
     /// Locky. It starts no auto-lock, shortcut, or update checks, and leaves the user's last good settings, the
@@ -162,14 +160,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         follow.state = pickedTheme == nil ? .on : .off
         themes.addItem(follow)
         themes.addItem(.separator())
-        for name in themeNames.isEmpty ? Self.builtInThemeNames() : themeNames {
+        // By name once the window's model has read the themes; until then (a moment after launch), by id.
+        let listed = model.inspection.loaded ? model.inspection.themes.map { ($0.id, $0.name) } : Self.builtInThemeNames().map { ($0, $0) }
+        for (id, name) in listed.sorted(by: { $0.1.localizedStandardCompare($1.1) == .orderedAscending }) {
             let entry = item(name, #selector(pickTheme(_:)))
-            entry.representedObject = name
-            entry.state = name == pickedTheme ? .on : .off
+            entry.representedObject = id
+            entry.state = id == pickedTheme ? .on : .off
             themes.addItem(entry)
         }
         menu.addItem(submenu("Theme", themes))
-        menu.addItem(item("Settings…", #selector(openWindow), key: ","))
+        menu.addItem(item("Preview Theme", #selector(previewTheme)))
+        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(.separator())
         menu.addItem(item("Quit Locky", #selector(NSApplication.terminate(_:)), key: "q"))
     }
@@ -179,18 +180,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RuntimePath.standard().findAll("themes", suffix: ".lua").map(\.name).sorted()
     }
 
-    /// Adds the themes of the packages init.lua adds (installed ones, and local { dir = ... } ones). Runs
-    /// init.lua, so it works in the background.
+    /// The themes for the Theme menu, with their names and the packages' themes: the window's model reads them in the
+    /// background (it runs init.lua).
     private func refreshThemeNames() {
-        Task.detached {
-            var path = RuntimePath.standard()
-            for spec in PackManager(path: path).specs().specs {
-                let folder = spec.dir.map { URL(fileURLWithPath: $0) } ?? path.packs.appending(path: spec.name)
-                if FileManager.default.fileExists(atPath: folder.path) { path.insertPackage(folder) }
-            }
-            let names = path.findAll("themes", suffix: ".lua").map(\.name).sorted()
-            await MainActor.run { [weak self] in self?.themeNames = names }
-        }
+        model.refresh()
     }
 
     @objc private func lockNow() {
@@ -215,9 +208,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         start(.preview, options: LockSession.Options(theme: theme ?? scheduledTheme(), settings: store.settings))
     }
 
-    /// The window at the page it showed last.
-    @objc private func openWindow() { showWindow(nil) }
     @objc private func openSettings() { showWindow(.settings) }
+    /// A preview of the theme a lock would use now.
+    @objc private func previewTheme() { preview(theme: nil) }
 
     @objc private func pickTheme(_ sender: NSMenuItem) {
         pickedTheme = sender.representedObject as? String
