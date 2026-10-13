@@ -12,7 +12,7 @@ return {
   font = { family = "Hiragino Mincho ProN" },
   background = {
     -- params: how many petals, the wind.
-    shader = "sakura", colors = { "bg", "dusk", "blossom", "petal", "moon", "ink" }, params = { 1, 1 }, resolution = 0.5, fps = 30,
+    shader = "sakura", colors = { "bg", "dusk", "blossom", "petal", "moon", "ink" }, params = { 1, 1 }, resolution = 0.5, fps = 24,
   },
   card = { style = "glass", radius = 16 },
   auth = {

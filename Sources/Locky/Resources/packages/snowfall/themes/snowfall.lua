@@ -11,7 +11,7 @@ return {
   font = { family = "Avenir Next", weight = "light" },
   background = {
     -- params: how much snow, the wind.
-    shader = "snowfall", colors = { "bg", "mist", "snow", "pine", "window" }, params = { 1, 1 }, resolution = 0.5, fps = 30,
+    shader = "snowfall", colors = { "bg", "mist", "snow", "pine", "window" }, params = { 1, 1 }, resolution = 0.5, fps = 24,
   },
   card = { style = "glass", radius = 18 },
   auth = {

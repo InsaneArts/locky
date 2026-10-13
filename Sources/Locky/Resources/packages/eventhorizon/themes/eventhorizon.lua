@@ -11,7 +11,7 @@ return {
   font = { family = "Avenir Next", weight = "ultralight" },
   background = {
     -- params: the hole's center (points from the top), the shadow's radius, the disk's speed.
-    shader = "eventhorizon", colors = { "bg", "hot", "warm", "cool" }, params = { 530, 104, 1 }, resolution = 0.5, fps = 30,
+    shader = "eventhorizon", colors = { "bg", "hot", "warm", "cool" }, params = { 530, 104, 1 }, resolution = 0.5, fps = 24,
   },
   card = { style = "glass", radius = 18 },
   auth = {

@@ -11,7 +11,7 @@ return {
   font = { design = "rounded", weight = "semibold" },
   background = {
     -- params: how fast it flows, how large the folds are, how much sheen.
-    shader = "liquid", colors = { "deep", "violet", "blue", "pink", "sheen" }, params = { 1, 1, 1 }, resolution = 0.5, fps = 30,
+    shader = "liquid", colors = { "deep", "violet", "blue", "pink", "sheen" }, params = { 1, 1, 1 }, resolution = 0.5, fps = 20,
   },
   card = { style = "glass", radius = 26 },
   auth = { style = "pill", anchor = "bottom", offset = { 0, -60 }, width = 260, avatar = true, name = true },

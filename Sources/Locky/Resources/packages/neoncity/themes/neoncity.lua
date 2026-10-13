@@ -11,7 +11,7 @@ return {
   font = { family = "Avenir Next Condensed", weight = "demibold" },
   background = {
     -- params: how fast the city drifts, how much rain.
-    shader = "neoncity", colors = { "bg", "haze", "windows", "pink", "cyan", "towers" }, params = { 1, 1 }, resolution = 0.5, fps = 30,
+    shader = "neoncity", colors = { "bg", "haze", "windows", "pink", "cyan", "towers" }, params = { 1, 1 }, resolution = 0.5, fps = 24,
   },
   card = { style = "solid", radius = 6, fill = "surface", border = "border" },
   auth = {
