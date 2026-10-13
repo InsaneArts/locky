@@ -47,6 +47,32 @@ import Testing
         #expect(WelcomeView.autoLockSummary(triggers) == line)
     }
 
+    /// Off then on brings back a stricter setup, not the default, and keeps auto_lock's other keys. On leaves a trigger
+    /// set elsewhere alone.
+    @MainActor @Test func theAutoLockSwitchRestoresWhatItTurnedOff() {
+        var settings = Settings(["auto_lock": .table(["idle_minutes": .int(15), "screen_saver": .bool(true), "system_sleep": .bool(true),
+                                                      "later": .string("kept")])])
+        var turnedOff: AutoLockSettings?
+        WelcomeView.setAutoLock(false, in: &settings, turnedOff: &turnedOff)
+        #expect(settings["auto_lock"] == .table(["later": .string("kept")]))
+        WelcomeView.setAutoLock(true, in: &settings, turnedOff: &turnedOff)
+        #expect(settings["auto_lock"] == .table(["idle_minutes": .int(15), "screen_saver": .bool(true), "system_sleep": .bool(true),
+                                                 "later": .string("kept")]))
+        var elsewhere = Settings(["auto_lock": .table(["system_sleep": .bool(true)])])
+        WelcomeView.setAutoLock(true, in: &elsewhere, turnedOff: &turnedOff)
+        #expect(elsewhere["auto_lock"] == .table(["system_sleep": .bool(true)]))
+    }
+
+    /// An edit elsewhere cleared auto_lock while the switch still showed on: off remembers nothing, so on stores the default.
+    @MainActor @Test func theAutoLockSwitchTurnsOnAfterAnEditElsewhereClearedIt() {
+        var settings = Settings()
+        var turnedOff: AutoLockSettings?
+        WelcomeView.setAutoLock(false, in: &settings, turnedOff: &turnedOff)
+        #expect(turnedOff == nil)
+        WelcomeView.setAutoLock(true, in: &settings, turnedOff: &turnedOff)
+        #expect(settings.autoLock == WelcomeView.defaultAutoLock)
+    }
+
     private let record = #"{"theme": "broken", "fallback": "default", "message": "themes/broken.lua:3: boom", "date": 1000}"#
 
     @Test func aThemeFailureReadsAsDataOrAsAString() throws {

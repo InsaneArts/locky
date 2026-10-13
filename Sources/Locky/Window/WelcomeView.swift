@@ -87,21 +87,26 @@ struct WelcomeView: View {
         .onAppear { biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) }
     }
 
-    /// On while any trigger is stored. Off keeps the triggers it clears in `turnedOff`; on restores those, else stores the
-    /// default. Both edit auto_lock in place, so its other keys stay.
+    /// On while any trigger is stored. A change goes to the file as it is now, through `setAutoLock(_:in:turnedOff:)`.
     private var autoLock: Binding<Bool> {
-        Binding(get: { model.store.settings.autoLock != AutoLockSettings() }, set: { on in
-            model.store.update { settings in
-                if on {
-                    // A trigger set elsewhere a moment ago stays as it is.
-                    guard settings.autoLock == AutoLockSettings() else { return }
-                    settings.setAutoLock(turnedOff ?? Self.defaultAutoLock)
-                } else {
-                    turnedOff = settings.autoLock
-                    settings.setAutoLock(AutoLockSettings())
-                }
-            }
-        })
+        Binding(get: { model.store.settings.autoLock != AutoLockSettings() },
+                set: { on in model.store.update { Self.setAutoLock(on, in: &$0, turnedOff: &turnedOff) } })
+    }
+
+    /// Turns "Lock automatically" on or off in `settings`. Off keeps the triggers it clears in `turnedOff`; on restores
+    /// those, else stores the default. Both edit auto_lock in place, so its other keys stay.
+    static func setAutoLock(_ on: Bool, in settings: inout Settings, turnedOff: inout AutoLockSettings?) {
+        if on {
+            // A trigger set elsewhere a moment ago stays as it is.
+            guard settings.autoLock == AutoLockSettings() else { return }
+            settings.setAutoLock(turnedOff ?? defaultAutoLock)
+        } else {
+            // Nothing stored, as after an edit elsewhere that no file event has reported yet: nothing to keep, so on
+            // still stores the default.
+            guard settings.autoLock != AutoLockSettings() else { return }
+            turnedOff = settings.autoLock
+            settings.setAutoLock(AutoLockSettings())
+        }
     }
 
     /// The triggers in the words Settings uses, as one sentence: "After 5 minutes of inactivity and when the Mac sleeps."
