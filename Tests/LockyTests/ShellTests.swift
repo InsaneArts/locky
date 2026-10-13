@@ -64,6 +64,80 @@ import Testing
         #expect(model.editingTheme == "matrix" && model.addingWidget)
     }
 
+    // MARK: Themes
+
+    /// A model of a sandbox whose config has been read.
+    private func loaded(_ sandbox: Sandbox) async -> AppModel {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        _ = await wait { model.inspection.loaded }
+        return model
+    }
+
+    /// Choosing init.lua's own theme is its own reset.
+    @Test func usingAThemeStoresItUnlessInitLuaGivesIt() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        let model = await loaded(sandbox)
+        #expect(model.activeTheme == "matrix")
+        model.use("glass")
+        #expect(model.store.settings["theme"] == .string("glass") && model.activeTheme == "glass")
+        model.use("matrix")
+        #expect(model.store.settings["theme"].isNil && model.activeTheme == "matrix")
+    }
+
+    @Test func underAScheduleTheSlotThatShowsNowChanges() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "glass"
+        schedule.night = "matrix"
+        model.store.update { $0.schedule = schedule }
+        let other = schedule.theme(at: .now, dark: false) == "glass" ? "matrix" : "glass"
+        model.use("poster")
+        let changed = try #require(model.store.settings.schedule)
+        #expect(changed.theme(at: .now, dark: false) == "poster" && Set([changed.day, changed.night]) == ["poster", other])
+        #expect(model.store.settings["theme"].isNil && model.activeTheme == "poster")
+        // A schedule with nothing for now leaves the choice to settings.json's theme.
+        model.store.update { $0.schedule = ThemeSchedule(mode: .appearance) }
+        model.use("poster")
+        #expect(model.store.settings["theme"] == .string("poster"))
+        #expect(model.store.settings.schedule?.light == nil && model.store.settings.schedule?.dark == nil)
+    }
+
+    @Test func onlyYourOwnThemeGoesToTheTrash() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        #expect(model.canTrash("mine") && !model.canTrash("default"))
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "mine"
+        schedule.night = "matrix"
+        model.store.update { settings in
+            settings["theme"] = .string("mine")
+            settings.schedule = schedule
+            settings.setThemeEdit("mine", "background", .table(["color": .string("#000000")]))
+        }
+        model.customize("mine")
+        try model.trash("mine", using: { try FileManager.default.removeItem(at: $0) })
+        #expect(!FileManager.default.fileExists(atPath: sandbox.config.appending(path: "themes/mine.lua").path))
+        let settings = model.store.settings
+        #expect(settings["theme"].isNil && settings.schedule?.day == nil && settings.schedule?.night == "matrix")
+        // Put Back in the Finder brings the theme back with its changes.
+        #expect(!settings["themes"]["mine"].isNil)
+        #expect(model.editingTheme == nil)
+    }
+
+    @Test func anInstalledThemeTakesAFreeID() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        let file = ThemeFile(base: "tokyonight", name: "Tokyo Night Copy", edits: [])
+        #expect(try await model.install(file) == "tokyo-night-copy")
+        #expect(try await model.install(file) == "tokyo-night-copy-2")
+        #expect(FileManager.default.fileExists(atPath: sandbox.config.appending(path: "themes/tokyo-night-copy-2.lua").path))
+    }
+
     /// Light content takes the dark press overlay, as the lock window's appearance does.
     @Test(arguments: [("#F1EFE8", true), ("#02040a", false), (nil, false)] as [(String?, Bool)])
     func aColorIsLightByTheLockWindowsRule(_ hex: String?, _ light: Bool) {

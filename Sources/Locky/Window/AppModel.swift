@@ -94,8 +94,6 @@ final class AppModel {
         self.store = store
     }
 
-    // MARK: Customize
-
     /// Opens Customize for `id`. Callers never animate it: Customize swaps at once from any input.
     func customize(_ id: String) { editingTheme = id }
 
@@ -116,11 +114,60 @@ final class AppModel {
         self.addingWidget = addingWidget
     }
 
-    /// The theme a lock uses now: the schedule's, else settings.json's, else init.lua's.
-    var activeTheme: String {
-        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        return store.settings.schedule?.theme(at: Date(), dark: dark) ?? inspection.config["theme"].string ?? store.settings["theme"].string ?? "default"
+    /// The theme a lock uses when no schedule picks one: settings.json's, else init.lua's, else Aurora.
+    var usualTheme: String { store.settings["theme"].string ?? inspection.base["theme"].string ?? "default" }
+    /// The theme a lock uses now. settings.json comes first, so a change shows on the frame it is made; the next read of
+    /// the config agrees, since settings.json wins over init.lua there too.
+    var activeTheme: String { store.settings.schedule?.theme(at: .now, dark: isDark) ?? usualTheme }
+
+    /// Makes `id` the theme a lock uses now. Under a schedule whose current slot names a theme, that slot changes.
+    /// Choosing init.lua's own theme stores no key, so the click is its own reset.
+    func use(_ id: String) {
+        let dark = isDark
+        store.update { settings in
+            if var schedule = settings.schedule, schedule.theme(at: .now, dark: dark) != nil {
+                schedule.setTheme(id, at: .now, dark: dark)
+                settings.schedule = schedule
+            } else {
+                settings.setLuaValue("theme", .string(id), base: inspection.base["theme"])
+            }
+        }
     }
+
+    /// Whether Export Theme… can write a file for `id`: only a theme built on one of Locky's own loads on another Mac.
+    func canExport(_ id: String) -> Bool {
+        ThemeFile.isBuiltIn(ThemeFile.made(from: id, edit: store.settings["themes"][id], name: id, config: store.config).base)
+    }
+
+    /// Writes `file` to the config's themes folder under a free id, reads the config again, and returns the id. Duplicate
+    /// and Import both use it.
+    func install(_ file: ThemeFile) async throws -> String {
+        let id = ThemeFile.id(for: file.name, taken: ThemeFile.takenIDs(inspection.themes, settings: store.settings, config: store.config))
+        try await file.install(as: id, config: store.config)
+        refresh()
+        return id
+    }
+
+    /// Whether `id` is the person's own theme: a file in the config folder's themes/, which Move to Trash may take.
+    func canTrash(_ id: String) -> Bool { FileManager.default.fileExists(atPath: ThemeFile.file(id, config: store.config).path) }
+
+    /// Moves the person's own theme to the Trash; the Trash is the undo. settings.json's theme, and a schedule slot, that
+    /// named it go back to the usual theme. Its changes in settings.json's themes stay, so Put Back restores them.
+    /// `remove` moves the file (tests pass one that deletes).
+    func trash(_ id: String, using remove: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) throws {
+        try remove(ThemeFile.file(id, config: store.config))
+        store.update { settings in
+            if settings["theme"].string == id { settings["theme"] = .nil }
+            if var schedule = settings.schedule {
+                schedule.forget(id)
+                settings.schedule = schedule
+            }
+        }
+        if editingTheme == id { finishEditing() }
+        refresh()
+    }
+
+    private var isDark: Bool { NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
 
     /// Reads the config again in the background. A burst of calls (a save, then the file events it causes)
     /// reads once, after the burst; a call while a read runs folds into the next.
