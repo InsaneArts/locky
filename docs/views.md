@@ -35,6 +35,11 @@ return ui.hstack {
 | `ui.spacer()` | Empty space that pushes its neighbors apart in a stack. |
 | `ui.divider(props)` | A thin line across a stack. |
 
+`ui.font(name, props)` returns props for one of Apple's text styles, merged with `props`:
+`ui.text("Tbilisi", ui.font("headline", { color = "muted" }))`. The styles are `large_title` (34), `title` (28),
+`title2` (22), `title3` (20), `headline` (17, semibold), `body` (17), `callout` (16), `subheadline` (15),
+`footnote` (13), `caption` (12), and `caption2` (11).
+
 ## Properties
 
 Any view takes any of these. Unknown names are ignored.

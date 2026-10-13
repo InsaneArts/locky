@@ -180,6 +180,27 @@ function ui.divider(props)
   return node
 end
 
+-- Apple's text styles, at the sizes widgets use on iPhone and on the Mac's desktop.
+local text_styles = {
+  large_title = { size = 34 }, title = { size = 28 }, title2 = { size = 22 }, title3 = { size = 20 },
+  headline = { size = 17, weight = "semibold" }, body = { size = 17 }, callout = { size = 16 },
+  subheadline = { size = 15 }, footnote = { size = 13 }, caption = { size = 12 }, caption2 = { size = 11 },
+}
+
+--- Props for one of Apple's text styles, merged with `props`: ui.text("Tbilisi", ui.font("headline")).
+--- Styles: large_title, title, title2, title3, headline, body, callout, subheadline, footnote, caption, caption2.
+function ui.font(name, props)
+  local base = text_styles[name]
+  if not base then
+    error(("unknown text style %q"):format(tostring(name)), 2)
+  end
+  local result = { size = base.size, weight = base.weight }
+  for k, v in pairs(props or {}) do
+    result[k] = v
+  end
+  return result
+end
+
 --- Maps a list to views: ui.each(items, function(item, index) return ui.text(item) end).
 function ui.each(list, fn)
   validate("list", list, "table")
