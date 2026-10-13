@@ -36,7 +36,9 @@ enum CLI {
             launch.arguments = arguments
             launch.mode = arguments.first == "preview" ? .preview : arguments.first == "lock" ? .lock : nil
             launch.theme = value("--theme", in: arguments)
-            if let size = value("--size", in: arguments)?.split(separator: "x").compactMap({ Double($0) }), size.count == 2 {
+            // Two positive numbers only. A request from any process brings its own size, and AppKit traps on NaN.
+            if let size = value("--size", in: arguments)?.split(separator: "x").compactMap({ Double($0) }), size.count == 2,
+               size.allSatisfy({ $0.isFinite && $0 > 0 }) {
                 launch.size = CGSize(width: size[0], height: size[1])
             }
             launch.behind = arguments.contains("--behind")
