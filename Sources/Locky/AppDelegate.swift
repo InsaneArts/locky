@@ -293,8 +293,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         var options = options
         if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)
-        // While locked no menu exists, so no key equivalent and no service can act. The lock's end puts both back. macOS 26
-        // ignores servicesMenu once it is set, nil included: taking the main menu away is what puts Services out of reach.
+        // While locked no menu item exists (a regular app gets an empty main menu from AppKit in place of nil), so no key
+        // equivalent and no service can act. The lock's end puts both back. macOS 26 ignores servicesMenu once it is set, nil
+        // included: taking the main menu away is what puts Services out of reach.
         let menus = (main: NSApp.mainMenu, services: NSApp.servicesMenu)
         if mode == .lock {
             // A menu that is open as the lock starts closes first: nothing in it may be chosen behind the lock.
