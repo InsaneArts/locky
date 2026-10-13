@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem!
     private var session: LockSession?
     /// settings.json: what the windows change.
@@ -247,6 +247,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Quit Locky", #selector(NSApplication.terminate(_:)), key: "q"))
     }
 
+    /// During a lock no window may open: the items that open one are dimmed, in the status menu and the main menu.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(openThemes(_:)), #selector(openSettings(_:)), #selector(openWelcome(_:)): session?.mode != .lock
+        default: true
+        }
+    }
+
     @objc func lockNow(_ sender: Any?) {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
@@ -285,10 +293,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var options = options
         if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)
+        // While locked no menu exists, so no key equivalent and no service can act. The lock's end puts both back. macOS 26
+        // ignores servicesMenu once it is set, nil included: taking the main menu away is what puts Services out of reach.
+        let menus = (main: NSApp.mainMenu, services: NSApp.servicesMenu)
+        if mode == .lock {
+            // A menu that is open as the lock starts closes first: nothing in it may be chosen behind the lock.
+            menus.main?.cancelTracking()
+            statusItem?.menu?.cancelTracking()
+            NSApp.mainMenu = nil
+            NSApp.servicesMenu = nil
+        }
         session.onEnd = { [weak self, weak session] in
             guard let self else { return }
             self.session = nil
-            if mode == .lock { model.locked = false }
+            if mode == .lock {
+                model.locked = false
+                NSApp.mainMenu = menus.main
+                NSApp.servicesMenu = menus.services
+            }
             model.refresh()
             if mode == .lock { autoLock.noteUnlock() }
             // Someone typed wrong passwords and the camera caught them: show the photos.
