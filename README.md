@@ -18,9 +18,9 @@ The menu bar icon has Lock Now, the theme picker, and Settings…, which opens L
 
 ## Themes
 
-![The ten built-in themes](docs/gallery.png)
+![The twenty-five built-in themes](docs/gallery.png)
 
-Ten themes ship with Locky. Each is a package in `Sources/Locky/Resources/packages/<id>/` (Aurora, the
+Twenty-five themes ship with Locky. Each is a package in `Sources/Locky/Resources/packages/<id>/` (Aurora, the
 default, lives in the core runtime) with its own widgets, shaders, and a README with its options.
 
 | Theme | id | Look |
@@ -35,6 +35,21 @@ default, lives in the core runtime) with its own widgets, shaders, and a README 
 | Mocha | `mocha` | Catppuccin Mocha with an i3lock-style ring around the clock. |
 | Dot Matrix | `dotmatrix` | A 5×7 dot-matrix clock on a ghost grid, with one red accent. |
 | Synthwave | `synthwave` | A neon sunset over a perspective grid, with a chrome clock. |
+| Tokyo Night | `tokyonight` | The hyprlock look: hours over minutes in two colors, status in the corners. |
+| Gruvbox | `gruvbox` | A conky sidebar of system stats beside a big clock, in Gruvbox colors. |
+| Observatory | `observatory` | Stars and the Milky Way over a dome; tonight's moon and the sun's path. |
+| Broadsheet | `broadsheet` | A newspaper front page: weather, the hour, the "markets" of your Mac, an almanac. |
+| Mission | `mission` | Flight control: mission elapsed time, clocks, telemetry, and progress rings. |
+| Receipt | `receipt` | A thermal receipt that itemizes your Mac, with a barcode. |
+| Pocket | `pocket` | A handheld LCD game: a pixel clock, hearts, a score, and the Game of Life. |
+| Bauhaus | `bauhaus` | A 1923 poster in primary shapes; a notch in the red circle sweeps the seconds. |
+| Memento | `memento` | Day 286 of 365: a dot for every day of the year, and a stoic quote. |
+| E-Ink | `eink` | A dithered e-paper dashboard: calendar, forecast, progress, battery. |
+| Classic | `classic` | The 1984 Mac desktop: a menu bar, desk accessories, and a dialog. |
+| Rainy | `rainy` | Rain sliding down a window over city lights; the time in words. |
+| Matrix | `matrix` | Digital rain, a glowing clock, and "Wake up, Neo…" typed in the corner. |
+| Blueprint | `blueprint` | An engineering drawing: a dimensioned clock, a title block, general notes. |
+| Notebook | `notebook` | A ruled notebook page: your todo.txt by hand, a sticky note, a coffee ring. |
 
 Pick one in the menu's Theme submenu, or in `init.lua` with `locky.setup({ theme = "station" })`.
 `Scripts/snapshot.sh <id> out.png [1728x1117]` renders any theme to a PNG.
