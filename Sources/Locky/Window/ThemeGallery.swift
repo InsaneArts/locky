@@ -8,6 +8,8 @@ struct ThemeGallery: View {
     /// The theme that did not load on the last lock, until a file of it changes or Dismiss.
     @State private var failure: ThemeFailure?
     @State private var scheduling = false
+    /// Why Import Theme… failed, for its alert.
+    @State private var problem: ImportProblem?
     /// Why Move to Trash left a theme where it was, for its alert.
     @State private var trashError: String?
     @State private var gridWidth: CGFloat = 0
@@ -54,6 +56,14 @@ struct ThemeGallery: View {
                 Button("Preview", systemImage: "play.rectangle") { model.preview(nil) }
                     .help("Show the theme in use full size")
             }
+        }
+        .fileImporter(isPresented: Binding(get: { model.importing }, set: { model.importing = $0 }), allowedContentTypes: [ThemeFile.type]) { result in
+            if case .success(let url) = result { importTheme(url) }
+        }
+        .alert(problem?.title ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }), presenting: problem) { _ in
+            Button("OK") {}
+        } message: { problem in
+            Text(problem.message)
         }
         .alert("Can't Move the Theme to the Trash", isPresented: Binding(get: { trashError != nil }, set: { if !$0 { trashError = nil } }),
                presenting: trashError) { _ in
@@ -206,6 +216,32 @@ struct ThemeGallery: View {
         UserDefaults.standard.removeObject(forKey: ThemeFailure.key)
         withAnimation(Motion.rows(reduceMotion)) { failure = nil }
     }
+
+    /// Imports a file Export Theme… wrote, and opens it in Customize. Every check runs, so nothing asks first; Move to
+    /// Trash removes a wrong one.
+    private func importTheme(_ url: URL) {
+        let config = model.store.config
+        let reading = url.startAccessingSecurityScopedResource()
+        defer { if reading { url.stopAccessingSecurityScopedResource() } }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= ThemeFile.maxSize, let text = try? String(contentsOf: url, encoding: .utf8) else {
+            problem = ThemeImport.notExported(config: config)
+            return
+        }
+        switch ThemeImport.check(text, inspection: model.inspection, config: config) {
+        case .failure(let failure):
+            problem = failure
+        case .success(let file):
+            Task {
+                do {
+                    let id = try await model.install(file)
+                    model.customize(id)
+                } catch {
+                    problem = ImportProblem(title: "Can't Import This Theme", message: (error as? LuaError)?.message ?? error.localizedDescription)
+                }
+            }
+        }
+    }
 }
 
 /// One theme in the grid: its picture and its name. The ring around the picture marks the theme in use.
@@ -347,5 +383,35 @@ private struct FailureBanner: View {
         }
         .padding(16)
         .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous))
+    }
+}
+
+/// An import that failed, in words for its alert. An Error, so a `Result` can carry it.
+struct ImportProblem: Error, Equatable {
+    let title: String
+    let message: String
+}
+
+/// Import Theme…'s checks on a file's text, after its size: only a file Export Theme… wrote, made from one of Locky's
+/// own themes, with only Locky's own widgets. A theme file sets widgets' options, and a plugin's widget could run one
+/// as a command. The install then tries the theme before it lands among the person's themes.
+enum ThemeImport {
+    static func check(_ text: String, inspection: Inspection, config: URL) -> Result<ThemeFile, ImportProblem> {
+        guard let file = ThemeFile.parse(text) else { return .failure(notExported(config: config)) }
+        guard ThemeFile.isBuiltIn(file.base) else {
+            return .failure(ImportProblem(title: "Can't Import This Theme", message: "It is made from “\(file.base)”, which is not one of Locky's themes."))
+        }
+        let foreign = file.foreignWidgets(inspection.widgets)
+        guard foreign.isEmpty else {
+            return .failure(ImportProblem(title: "Can't Import This Theme",
+                                          message: "It uses widgets from plugins: \(foreign.joined(separator: ", ")). Locky imports only themes that use its own widgets."))
+        }
+        return .success(file)
+    }
+
+    /// A file that is too big, cannot be read, or is not one Export Theme… wrote.
+    static func notExported(config: URL) -> ImportProblem {
+        ImportProblem(title: "Can't Import This File",
+                      message: "Choose a file made with Export Theme…. A theme written in Lua goes in \(LuaError.shortenPaths(config.path))/themes.")
     }
 }

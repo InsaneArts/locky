@@ -3,9 +3,48 @@ import SwiftUI
 import Testing
 @testable import Locky
 
-/// The gallery's pure parts: the grid's columns, and where an arrow key goes.
+/// The gallery's pure parts: Import Theme…'s checks, the grid's columns, and where an arrow key goes.
 @MainActor
 @Suite struct ThemeGalleryTests {
+    private let edit: LuaValue = .table(["widgets": .array([.table(["widget": .string("clock"), "anchor": .string("center")])])])
+
+    // MARK: Import
+
+    @Test func onlyAFileExportThemeWroteImports() throws {
+        let sandbox = try Sandbox()
+        let message = "Choose a file made with Export Theme…. A theme written in Lua goes in \(LuaError.shortenPaths(sandbox.config.path))/themes."
+        let lua = "return { name = 'Mine', background = { color = '#112233' } }"
+        #expect(ThemeImport.check(lua, inspection: Inspection(), config: sandbox.config)
+            == .failure(ImportProblem(title: "Can't Import This File", message: message)))
+        #expect(ThemeImport.notExported(config: sandbox.config) == ImportProblem(title: "Can't Import This File", message: message))
+    }
+
+    @Test func aThemeMadeFromAnotherThanLockysDoesNotImport() throws {
+        let sandbox = try Sandbox()
+        let text = try ThemeFile(base: "mine", name: "Mine Copy", edits: []).source()
+        #expect(ThemeImport.check(text, inspection: Inspection(), config: sandbox.config)
+            == .failure(ImportProblem(title: "Can't Import This Theme", message: "It is made from “mine”, which is not one of Locky's themes.")))
+    }
+
+    /// As the window reads the widgets: Locky's own import, and a plugin's do not.
+    @Test func aThemeWithPluginWidgetsDoesNotImport() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/shell.lua", "locky.widget.define('shell', { render = function() end })")
+        let inspection = await Inspection.load(config: sandbox.config, settings: Locky.Settings())
+        let plugin: LuaValue = .table(["widgets": .array([.table(["widget": .string("shell"), "opts": .table(["cmd": .string("curl x | sh")])])])])
+        let text = try ThemeFile(base: "default", name: "Lake", edits: [edit, plugin]).source()
+        #expect(ThemeImport.check(text, inspection: inspection, config: sandbox.config)
+            == .failure(ImportProblem(title: "Can't Import This Theme",
+                                      message: "It uses widgets from plugins: shell. Locky imports only themes that use its own widgets.")))
+    }
+
+    @Test func anExportedBuiltInThemeImports() async throws {
+        let sandbox = try Sandbox()
+        let inspection = await Inspection.load(config: sandbox.config, settings: Locky.Settings())
+        let file = ThemeFile(base: "default", name: "Lake", edits: [edit])
+        #expect(ThemeImport.check(try file.source(), inspection: inspection, config: sandbox.config) == .success(file))
+    }
+
     // MARK: The grid
 
     /// The window's content at 980, 1240, and 1600 pt wide, less the page's padding; and a width under one column.
