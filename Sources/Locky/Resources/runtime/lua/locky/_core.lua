@@ -1590,6 +1590,10 @@ return {
       local definition = widgets[placement.widget]
       exported.widgets[i].known = definition ~= nil
       local family = families[placement.family]
+      if placement.family and definition and definition.families and not tbl.contains(definition.families, placement.family) then
+        current_theme.problems[#current_theme.problems + 1] = ("theme.widgets[%d]: %s has no %s layout; it draws %s"):format(
+          i, placement.widget, placement.family, table.concat(definition.families, ", "))
+      end
       exported.widgets[i].size = placement.size or (family and { family[1], family[2] }) or (definition and definition.size)
       if placement.card == nil and placement.family then
         -- Desktop families sit on the theme's card; Lock Screen ones on the bare screen, the circle on a disc.

@@ -7,7 +7,7 @@ import Testing
     @Test func aFamilySetsTheSizeTheCardAndWhatTheWidgetDraws() async throws {
         let sandbox = try Sandbox()
         try sandbox.write("plugin/f.lua", """
-            locky.widget.define('f', { families = { 'circular', 'small' }, render = function(self)
+            locky.widget.define('f', { families = { 'circular', 'small', 'rectangular', 'inline' }, render = function(self)
               return locky.ui.text(self.family or 'none')
             end })
             """)
@@ -55,5 +55,17 @@ import Testing
         // A label on another view is that view's business, not a gauge's.
         let text = try Node(lua: try #require(try runtime.eval("return locky.ui.text('x', { label = false })").first))
         #expect(text.kind == .text("x") && text.label == nil)
+    }
+}
+
+extension FamilyTests {
+    @Test func aFamilyTheWidgetDoesNotDrawIsAProblem() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/f.lua", "locky.widget.define('f', { families = { 'small' }, render = function() return locky.ui.text('x') end })")
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'f', family = 'circular' }, { 'f', family = 'small' } } }")
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        let started = await runtime.start(theme: "t")
+        defer { runtime.stop() }
+        #expect(started.problems == ["theme.widgets[1]: f has no circular layout; it draws small"], "\(started.problems)")
     }
 }
