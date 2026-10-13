@@ -351,6 +351,88 @@ import Testing
         #expect(model.store.settings == changed)
     }
 
+    /// Theme t from `source`, in the editor, with Edit ▸ Undo steps made one at a time.
+    @MainActor
+    private struct Fixture {
+        let sandbox: Sandbox
+        let model: AppModel
+        let editing: ThemeEditing
+        let undo = UndoManager()
+
+        init(_ source: String) async throws {
+            sandbox = try Sandbox()
+            try sandbox.write("themes/t.lua", source)
+            try sandbox.write("plugin/w.lua", "locky.widget.define('w', { render = function() end })")
+            _ = NSApplication.shared
+            model = AppModel(store: SettingsStore(config: sandbox.config))
+            editing = ThemeEditing(theme: Inspection.ThemeInfo(id: "t", name: "t"), model: model)
+            await editing.load()
+            undo.groupsByEvent = false
+            editing.undoManager = undo
+        }
+
+        func step(_ change: () -> Void) {
+            undo.beginUndoGrouping()
+            change()
+            undo.endUndoGrouping()
+        }
+
+        var edit: LuaValue { model.store.settings["themes"]["t"] }
+    }
+
+    @Test func revertToOriginalTakesEveryChangeBackInOneStep() async throws {
+        let editor = try await Fixture("return { widgets = { { 'w', anchor = 'top' } } }")
+        let (editing, undo) = (editor.editing, editor.undo)
+        #expect(!editing.isChanged)
+        editor.step { editing.move(.widget(0), anchor: .topLeft, offset: CGPoint(x: 30, y: 30)) }
+        #expect(editing.isChanged)
+        editor.step { editing.setAuth(anchor: "top", x: 0, y: 60) }
+        let changed = editor.edit
+
+        editor.step { editing.revertToOriginal() }
+        #expect(!editing.isChanged && editor.edit.isNil)
+        #expect(undo.undoMenuItemTitle == "Undo Revert to Original")
+        undo.undo()
+        // One step: the move and the password field's place are both back.
+        #expect(editor.edit == changed)
+        #expect(undo.undoMenuItemTitle == "Undo Move Password Field")
+        undo.redo()
+        #expect(editor.edit.isNil)
+        undo.undo()
+        #expect(editor.edit == changed)
+    }
+
+    @Test func resetPutsAnItemBackWhereTheThemeHasIt() async throws {
+        let editor = try await Fixture("""
+        return { auth = { anchor = 'bottom', offset = { 0, -60 } }, widgets = { { 'w', anchor = 'top-right', offset = { -30, 30 } } } }
+        """)
+        let (editing, undo) = (editor.editing, editor.undo)
+        #expect(!editing.isMoved(.widget(0)) && !editing.isMoved(.passwordField))
+        editor.step { editing.move(.widget(0), anchor: .center, offset: CGPoint(x: 10, y: 20)) }
+        #expect(editing.isMoved(.widget(0)))
+        editor.step { editing.resetPlace(.widget(0)) }
+        let placement = try #require(editing.placements.first)
+        #expect(placement.anchor == "top-right" && placement.x == -30 && placement.y == 30)
+        #expect(!editing.isMoved(.widget(0)))
+        #expect(undo.undoMenuItemTitle == "Undo Reset Position")
+        undo.undo()
+        #expect(editing.isMoved(.widget(0)) && editing.placements.first?.anchor == "center")
+        undo.redo()
+
+        // A widget the window added has no place of the theme's to go back to.
+        var added = 0
+        editor.step { added = editing.add("w") }
+        #expect(editing.themePlace(editing.placements[added]) == nil && !editing.isMoved(.widget(added)))
+
+        editor.step { editing.setAuth(anchor: "top", x: 0, y: 90) }
+        #expect(editing.isMoved(.passwordField))
+        editor.step { editing.resetPlace(.passwordField) }
+        #expect(editor.edit["auth"].isNil && !editing.isMoved(.passwordField))
+        let place = editing.authPlace
+        #expect(place.anchor == "bottom" && place.x == 0 && place.y == -60)
+        #expect(undo.undoMenuItemTitle == "Undo Reset Position")
+    }
+
     /// Off and on again, a widget goes back to the theme's card, in the theme's style: the switch saves only a change.
     @Test func theCardSwitchKeepsTheThemesStyle() async throws {
         let sandbox = try Sandbox()

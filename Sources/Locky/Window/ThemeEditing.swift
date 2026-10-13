@@ -126,11 +126,14 @@ final class ThemeEditing {
 
     /// Where the password field sits: settings.json's place for it, or the theme's.
     var authPlace: (anchor: String, x: Double, y: Double) {
-        let edit = store.settings.themeEdit(theme.id, "auth")
-        let own = layout?.auth ?? .nil
-        return (edit["anchor"].string ?? own["anchor"].string ?? "bottom",
-                EditorPlacement.coordinate(edit["offset"][0].number ?? own["offset"][0].number),
-                EditorPlacement.coordinate(edit["offset"][1].number ?? own["offset"][1].number))
+        Self.place(store.settings.themeEdit(theme.id, "auth"), over: layout?.auth ?? .nil)
+    }
+
+    /// The password field's place from settings.json's `edit`, field by field over the theme's `own`.
+    private static func place(_ edit: LuaValue, over own: LuaValue) -> (anchor: String, x: Double, y: Double) {
+        (edit["anchor"].string ?? own["anchor"].string ?? "bottom",
+         EditorPlacement.coordinate(edit["offset"][0].number ?? own["offset"][0].number),
+         EditorPlacement.coordinate(edit["offset"][1].number ?? own["offset"][1].number))
     }
 
     var authChanged: Bool { !store.settings.themeEdit(theme.id, "auth").isNil }
@@ -143,6 +146,52 @@ final class ThemeEditing {
 
     func resetAuth() {
         record("Reset Password Field") { store.update { $0.setThemeEdit(theme.id, "auth", nil) } }
+    }
+
+    // MARK: Changes
+
+    /// Whether settings.json changes this theme at all: Revert to Original has something to take back.
+    var isChanged: Bool { !store.settings["themes"][theme.id].isNil }
+
+    /// Takes every change to this theme out of settings.json, as one step.
+    func revertToOriginal() {
+        record("Revert to Original") { ThemeUndo.restore(.nil, theme: theme.id, store: store) }
+    }
+
+    /// Where the theme itself puts a placement; nil for a widget the window added, which the theme has no place for.
+    func themePlace(_ placement: EditorPlacement) -> (anchor: String, x: Double, y: Double)? {
+        guard let base = placement.base, let widgets = layout?.widgets, widgets.indices.contains(base) else { return nil }
+        let own = EditorPlacement(original: widgets[base], ref: base + 1)
+        return (own.anchor, own.x, own.y)
+    }
+
+    /// Whether an item sits somewhere other than where the theme puts it.
+    func isMoved(_ item: EditorItem) -> Bool {
+        switch item {
+        case .widget(let index):
+            guard placements.indices.contains(index) else { return false }
+            let placement = placements[index]
+            guard let own = themePlace(placement) else { return false }
+            return (placement.anchor, placement.x, placement.y) != own
+        case .passwordField:
+            let own = Self.place(.nil, over: layout?.auth ?? .nil)
+            return authPlace != own
+        }
+    }
+
+    /// Puts an item back where the theme has it, as one step.
+    func resetPlace(_ item: EditorItem) {
+        switch item {
+        case .widget(let index):
+            guard placements.indices.contains(index), let own = themePlace(placements[index]) else { return }
+            var placement = placements[index]
+            placement.anchor = own.anchor
+            placement.x = own.x
+            placement.y = own.y
+            set(index, placement, action: "Reset Position")
+        case .passwordField:
+            record("Reset Position") { store.update { $0.setThemeEdit(theme.id, "auth", nil) } }
+        }
     }
 
     // MARK: Undo
