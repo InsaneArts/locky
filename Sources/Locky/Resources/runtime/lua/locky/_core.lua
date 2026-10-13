@@ -1309,6 +1309,12 @@ local function pack_spec(spec)
   if src and src:match("^[%w_.-]+/[%w_.-]+$") then
     src = "https://github.com/" .. src
   end
+  -- Encrypted sources only: anyone on the network can change what http:// and git:// send. A local folder is
+  -- { dir = ... }.
+  validate("spec.src", src, function(v)
+    return v == nil or v:match("^https://") or v:match("^ssh://") or v:match("^git@"),
+      "use \"user/repo\" for GitHub, or an https://, ssh://, or git@ address (not http:// or file://; for a local folder, use dir = ...)"
+  end)
   -- Copied with the core's own functions: a module init.lua required may have changed locky.tbl.
   local allow = {}
   for i, capability in ipairs(spec.allow or {}) do

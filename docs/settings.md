@@ -27,7 +27,7 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 | `theme` | A theme id, such as `"mocha"` | Themes › Use This Theme, or the menu |
 | `schedule` | `{ "mode": "time", "day": "glass", "night": "default", "day_starts": "07:00", "night_starts": "19:00" }`, or `{ "mode": "appearance", "light": "glass", "dark": "default" }` | Settings › Theme Schedule |
 | `themes` | `{ "<id>": { "background": {…}, "widgets": […], "auth": {…} } }`: see below | Themes › Background and Widgets |
-| `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, a git URL, or `{ "src": …, "version": …, "name": …, "allow": ["system", "files"] }` (`allow`: what the plugin may do; see [plugins.md](plugins.md#what-a-plugin-may-do)) | Plugins › Install |
+| `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, an `https://`, `ssh://`, or `git@` address, or `{ "src": …, "version": …, "name": …, "allow": ["system", "files"] }` (`allow`: what the plugin may do; see [plugins.md](plugins.md#what-a-plugin-may-do)) | Plugins › Install |
 | `message` | A line under the password field | Settings › Lock Screen |
 | `hour24` | `true` or `false`: a 24- or 12-hour clock in every theme | Settings › Lock Screen |
 | `privacy` | `true`: no agent titles or workspaces, no name, picture, or computer name | Settings › Lock Screen |

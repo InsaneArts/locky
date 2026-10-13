@@ -57,6 +57,9 @@ struct PackManager {
 
     let path: RuntimePath
     var git = "/usr/bin/git"
+    /// More `-c` settings for every git command. Tests map an https address to a local repository with
+    /// url.<path>.insteadOf, since locky.pack.add takes only https://, ssh://, and git@ sources.
+    var gitConfig: [String] = []
     /// Seconds a clone or fetch may take; local git commands get a few seconds.
     var networkTimeout: Double = 180
 
@@ -214,7 +217,7 @@ struct PackManager {
 
         // init.lua may have changed the source since the clone.
         var fetched = false
-        let origin = runGit(["-C", dir.path, "remote", "get-url", "origin"]).output
+        let origin = self.origin(dir)
         if origin != src {
             guard runGit(["-C", dir.path, "remote", "set-url", "origin", "--", src]).ok else {
                 return ("\(spec.name): cannot point it at \(src)", false)
@@ -261,7 +264,7 @@ struct PackManager {
         guard let locked else { return PackUpdate(name: spec.name, unlocked: true) }
         var result = PackUpdate(name: spec.name, current: locked.rev)
         // The clone still fetches from the old source; sync moves it to the new one.
-        guard runGit(["-C", dir.path, "remote", "get-url", "origin"]).output == src else {
+        guard origin(dir) == src else {
             result.error = "its source is now \(src); run `locky pack sync`"
             return result
         }
@@ -278,6 +281,11 @@ struct PackManager {
         }
         result.latest = latest.output
         return result
+    }
+
+    /// The source the clone fetches from, as its config says it, without url.<base>.insteadOf applied.
+    private func origin(_ dir: URL) -> String {
+        runGit(["-C", dir.path, "config", "--get", "remote.origin.url"]).output
     }
 
     /// Fetches tags and branches, drops branches deleted upstream, and follows a renamed default branch.
@@ -314,7 +322,10 @@ struct PackManager {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: git)
         // Give up on a connection that stalls, instead of waiting forever.
-        process.arguments = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=30", "-c", "core.askPass="] + arguments
+        // Never plain http or git://, not even through a redirect from https.
+        process.arguments = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=30", "-c", "core.askPass=",
+                             "-c", "protocol.http.allow=never", "-c", "protocol.git.allow=never"]
+            + gitConfig.flatMap { ["-c", $0] } + arguments
         var environment = ProcessInfo.processInfo.environment
         // Never wait for a password nobody will type, in a terminal or a helper.
         environment["GIT_TERMINAL_PROMPT"] = "0"

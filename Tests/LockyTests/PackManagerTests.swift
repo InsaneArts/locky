@@ -18,6 +18,16 @@ import Testing
         return String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The address the tests give the plugin's repository: locky.pack.add takes only https://, ssh://, and git@ sources,
+    /// and git maps this one to the local repository.
+    private let address = "https://locky.test/locky-hello"
+
+    private func manager(_ sandbox: Sandbox, _ repo: URL) -> PackManager {
+        var manager = PackManager(path: sandbox.path())
+        manager.gitConfig = ["url.\(repo.path).insteadOf=\(address)"]
+        return manager
+    }
+
     /// A git repository holding a tiny Locky plugin.
     private func makePlugin(in sandbox: Sandbox, greeting: String) throws -> URL {
         let repo = sandbox.root.appending(path: "upstream/locky-hello")
@@ -32,8 +42,8 @@ import Testing
     @Test func installsLocksUpdatesAndCleans() throws {
         let sandbox = try Sandbox()
         let repo = try makePlugin(in: sandbox, greeting: "hello")
-        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(repo.path)\", name = \"hello\" } })")
-        let manager = PackManager(path: sandbox.path())
+        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(address)\", name = \"hello\" } })")
+        let manager = manager(sandbox, repo)
 
         #expect(manager.run(.sync).text.contains("installed hello"))
         let first = try PackManager.readLockfile(sandbox.path().lockfile).plugins["hello"]?.rev
@@ -83,11 +93,11 @@ import Testing
     @Test func cleanRefusesWhenInitLuaFails() throws {
         let sandbox = try Sandbox()
         let repo = try makePlugin(in: sandbox, greeting: "hello")
-        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(repo.path)\", name = \"hello\" } })")
-        let manager = PackManager(path: sandbox.path())
+        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(address)\", name = \"hello\" } })")
+        let manager = manager(sandbox, repo)
         #expect(manager.run(.sync).ok)
         // A require of a package not installed yet stops init.lua before its pack.add line.
-        try sandbox.write("init.lua", "require('not_installed_yet').setup({})\nlocky.pack.add({ { src = \"\(repo.path)\", name = \"hello\" } })")
+        try sandbox.write("init.lua", "require('not_installed_yet').setup({})\nlocky.pack.add({ { src = \"\(address)\", name = \"hello\" } })")
         let report = manager.run(.clean)
         #expect(!report.ok)
         #expect(report.text.contains("Nothing removed"))
@@ -115,7 +125,7 @@ import Testing
         let repo = try makePlugin(in: sandbox, greeting: "hello")
         // A folder with the package's name that is not a clone: git must not act on any enclosing repository.
         try FileManager.default.createDirectory(at: sandbox.packs.appending(path: "hello"), withIntermediateDirectories: true)
-        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(repo.path)\", name = \"hello\" } })")
+        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(address)\", name = \"hello\" } })")
         let report = PackManager(path: sandbox.path()).run(.sync)
         #expect(!report.ok)
         #expect(report.text.contains("is not a git clone"))
@@ -172,8 +182,8 @@ import Testing
     /// Adds `repo` as the package "hello" at `version` and syncs it.
     private func synced(_ repo: URL, version: String? = nil, in sandbox: Sandbox) throws -> PackManager {
         let pin = version.map { ", version = \"\($0)\"" } ?? ""
-        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(repo.path)\", name = \"hello\"\(pin) } })")
-        let manager = PackManager(path: sandbox.path())
+        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(address)\", name = \"hello\"\(pin) } })")
+        let manager = manager(sandbox, repo)
         #expect(manager.run(.sync).ok)
         return manager
     }
@@ -281,14 +291,41 @@ import Testing
 
         #expect(manager.run(.check).text.contains("update available"))
         // A source changed in init.lua is reported, and the clone keeps fetching from the old one until sync.
-        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(repo.path)-moved\", name = \"hello\" } })")
+        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(address)-moved\", name = \"hello\" } })")
         let moved = manager.run(.check)
         #expect(!moved.ok)
-        #expect(moved.text == "hello: its source is now \(repo.path)-moved; run `locky pack sync`")
+        #expect(moved.text == "hello: its source is now \(address)-moved; run `locky pack sync`")
 
         #expect(try git(["rev-parse", "HEAD"], in: clone) == head)
         #expect(try git(["status", "--porcelain"], in: clone).isEmpty)
-        #expect(try git(["remote", "get-url", "origin"], in: clone) == repo.path)
+        #expect(try git(["remote", "get-url", "origin"], in: clone) == address)
         #expect(try Data(contentsOf: sandbox.path().lockfile) == lockfile)
+    }
+
+    @Test func onlyEncryptedSourcesAreAccepted() throws {
+        let sandbox = try Sandbox()
+        for src in ["http://example.com/x.git", "file:///tmp/x", "/tmp/x", "git://example.com/x"] {
+            try sandbox.write("init.lua", "locky.pack.add({ '\(src)' })")
+            let (specs, problems) = PackManager(path: sandbox.path()).specs()
+            #expect(specs.isEmpty, "\(src)")
+            #expect(problems.first?.contains("or an https://, ssh://, or git@ address (not http:// or file://") == true, "\(src): \(problems)")
+            #expect(PackSpec.problem(source: src) != nil, "\(src)")
+        }
+        for src in ["someone/x", "https://example.com/x.git", "ssh://git@example.com/x.git", "git@github.com:someone/x.git"] {
+            try sandbox.write("init.lua", "locky.pack.add({ '\(src)' })")
+            #expect(PackManager(path: sandbox.path()).specs().problems.isEmpty, "\(src)")
+            #expect(PackSpec.problem(source: src) == nil, "\(src)")
+        }
+        // A local folder stays a dir package.
+        try sandbox.write("init.lua", "locky.pack.add({ { dir = '/tmp/x' } })")
+        #expect(PackManager(path: sandbox.path()).specs().problems.isEmpty)
+    }
+
+    /// git itself refuses plain http, so not even a redirect from https reaches it.
+    @Test func gitRefusesPlainHttp() throws {
+        let sandbox = try Sandbox()
+        let result = PackManager(path: sandbox.path()).runGit(["ls-remote", "http://127.0.0.1:9/x.git"])
+        #expect(!result.ok)
+        #expect(result.error.contains("transport 'http' not allowed"), "\(result.error)")
     }
 }

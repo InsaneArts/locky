@@ -259,8 +259,8 @@ enum PackSpec {
         if value.hasPrefix("-") { return "A source cannot start with “-”." }
         if value.contains(where: \.isWhitespace) { return "A source has no spaces." }
         let shorthand = value.range(of: #"^[\w.-]+/[\w.-]+$"#, options: .regularExpression) != nil
-        let url = value.hasPrefix("https://") || value.hasPrefix("git@") || value.hasPrefix("ssh://") || value.hasPrefix("file://")
-        return shorthand || url ? nil : "Use “user/repo” for GitHub, or a git URL."
+        let url = value.hasPrefix("https://") || value.hasPrefix("git@") || value.hasPrefix("ssh://")
+        return shorthand || url ? nil : "Use “user/repo” for GitHub, or an https://, ssh://, or git@ address."
     }
 }
 

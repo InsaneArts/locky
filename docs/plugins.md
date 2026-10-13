@@ -159,6 +159,10 @@ locky.pack.add({
 require("weather").setup({ city = "Tbilisi" })
 ```
 
+A source is `"user/repo"` (GitHub), or an `https://`, `ssh://`, or `git@` address. Locky refuses `http://`,
+`git://`, and `file://`, even through a redirect: anyone on the network could change what they send. For a
+folder on your Mac, use `{ dir = ... }`.
+
 `locky pack update` moves every package to the newest commit of its version and rewrites
 `locky-pack-lock.json`; `locky pack clean` deletes packages `init.lua` no longer adds.
 `locky pack check` fetches and lists the packages `update` would move, and moves none.
