@@ -83,7 +83,8 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
     col += surface * c * 0.2 * (1.0 - smoothstep(0.0, 0.4, k));
 
     // The whale: a silhouette between you and the light, gliding from left to right with a slow stroke.
-    float phase = fract(t / period);
+    // It starts in view, so a lock shows it at once.
+    float phase = fract(t / period + 0.52);
     float span = 2600.0;
     float2 at = float2(-span * 0.5 + phase * span, 540.0 + 30.0 * sin(phase * 6.28));
     float size = 560.0;
