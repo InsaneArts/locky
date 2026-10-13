@@ -4,10 +4,11 @@
 #
 #   Scripts/snapshot.sh THEME OUT.png [WIDTHxHEIGHT]      # default 1440x900
 #
-# WAIT (seconds, default 4) is how long the theme gets to draw. Locky's config folder is an empty one with
-# privacy mode on unless LOCKY_CONFIG_DIR names one, so your own init.lua never changes the result and no name,
-# agent title, or (with LOCKY_WALLPAPER=none, the default) desktop picture ends up in the image. Needs Locky.app
-# built once (Scripts/package_app.sh); Lua, theme, and shader edits need no rebuild.
+# WAIT (seconds, default 4) is how long the theme gets to draw. APPEARANCE=light or APPEARANCE=dark runs Locky in
+# that appearance (it reads it as LOCKY_APPEARANCE); without it, the Mac's own. Locky's config folder is an empty
+# one with privacy mode on unless LOCKY_CONFIG_DIR names one, so your own init.lua never changes the result and no
+# name, agent title, or (with LOCKY_WALLPAPER=none, the default) desktop picture ends up in the image. Needs
+# Locky.app built once (Scripts/package_app.sh); Lua, theme, and shader edits need no rebuild.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 THEME=${1:?usage: snapshot.sh THEME OUT.png [WxH]}
@@ -26,7 +27,7 @@ else
   CONFIG=$LOCKY_CONFIG_DIR
 fi
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \
-  "$BIN" preview --theme "$THEME" --size "$SIZE" --behind >/dev/null 2>&1 &
+  LOCKY_APPEARANCE="${APPEARANCE:-}" "$BIN" preview --theme "$THEME" --size "$SIZE" --behind >/dev/null 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null || true' EXIT
 ID=$("$TOOL" "$PID") || { echo "No preview window appeared" >&2; exit 1; }

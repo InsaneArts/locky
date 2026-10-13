@@ -9,9 +9,11 @@
 # widgets captures the Add Widget sheet alone, opened over Customize for the theme in use (or THEME).
 #
 # SIZE (default 1240x780) is the Themes window's content size; the Settings and Welcome windows have their own
-# sizes. WAIT (seconds, default 4) is how long the window gets to load. Locky's config folder is an empty one with
-# privacy mode on unless LOCKY_CONFIG_DIR names one, and the desktop picture is none unless LOCKY_WALLPAPER
-# names one; photos after wrong passwords never show. Needs Locky.app built (Scripts/package_app.sh).
+# sizes. APPEARANCE=light or APPEARANCE=dark draws the window in that appearance (Locky reads it as
+# LOCKY_APPEARANCE); without it, the Mac's own. WAIT (seconds, default 4) is how long the window gets to load.
+# Locky's config folder is an empty one with privacy mode on unless LOCKY_CONFIG_DIR names one, and the desktop
+# picture is none unless LOCKY_WALLPAPER names one; photos after wrong passwords never show. Needs Locky.app built
+# (Scripts/package_app.sh).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SECTION=${1:?usage: window-shot.sh SECTION OUT.png [THEME]}
@@ -31,7 +33,7 @@ fi
 ARGS=(window "$SECTION" --behind --size "${SIZE:-1240x780}")
 [[ -n "${3:-}" ]] && ARGS+=(--theme "$3")
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \
-  "$BIN" "${ARGS[@]}" >/dev/null 2>&1 &
+  LOCKY_APPEARANCE="${APPEARANCE:-}" "$BIN" "${ARGS[@]}" >/dev/null 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null || true' EXIT
 # Any titled window: the Themes window ("Themes", or the theme's name in Customize), the Settings window (its
