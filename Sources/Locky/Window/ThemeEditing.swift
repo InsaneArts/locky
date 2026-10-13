@@ -94,8 +94,10 @@ final class ThemeEditing {
 
     /// Adds a widget at the center; returns its place in the list.
     @discardableResult
-    func add(_ widget: String) -> Int {
-        let list = placements + [EditorPlacement(widget: widget)]
+    func add(_ widget: String, family: String? = nil) -> Int {
+        var placement = EditorPlacement(widget: widget)
+        if let family { placement.rest["family"] = .string(family) }
+        let list = placements + [placement]
         record("Add \(EditorPlacement.title(widget))") { write(list) }
         return list.count - 1
     }

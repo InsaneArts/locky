@@ -658,11 +658,10 @@ private struct AnchorPicker: View {
 
 struct AddWidgetSheet: View {
     let model: AppModel
-    let add: (String) -> Void
+    let add: (_ widget: String, _ family: String?) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
     @State private var gallery = WidgetGallery()
-    @State private var hovered: String?
 
     private var shown: [Inspection.WidgetInfo] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
@@ -683,17 +682,12 @@ struct AddWidgetSheet: View {
                 LazyVStack(alignment: .leading, spacing: 18, pinnedViews: .sectionHeaders) {
                     ForEach(WidgetGroup.groups(shown)) { group in
                         Section {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 16) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 18)], spacing: 22) {
                                 ForEach(group.widgets) { widget in
-                                    Button {
-                                        add(widget.name)
+                                    WidgetCard(gallery: gallery, widget: widget) { family in
+                                        add(widget.name, family)
                                         dismiss()
-                                    } label: {
-                                        WidgetCard(gallery: gallery, widget: widget, highlighted: hovered == widget.name)
                                     }
-                                    .buttonStyle(.plain)
-                                    .onHover { hovered = $0 ? widget.name : (hovered == widget.name ? nil : hovered) }
-                                    .help("Add \(EditorPlacement.title(widget.name))")
                                 }
                             }
                             .padding(.horizontal, 16)
@@ -715,9 +709,9 @@ struct AddWidgetSheet: View {
             }
             .padding(12)
         }
-        .frame(width: 780, height: 640)
+        .frame(width: 940, height: 700)
         .task(id: model.revision) {
-            gallery.start(widgets: model.inspection.widgets.map(\.name), settings: model.store.settings, config: model.store.config, revision: model.revision)
+            gallery.start(widgets: model.inspection.widgets, settings: model.store.settings, config: model.store.config, revision: model.revision)
         }
         .onDisappear { gallery.stop() }
     }

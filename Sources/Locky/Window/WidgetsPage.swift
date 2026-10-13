@@ -23,10 +23,11 @@ struct WidgetsPage: View {
                 ForEach(WidgetGroup.groups(shown)) { group in
                     VStack(alignment: .leading, spacing: 12) {
                         Text(group.title).font(.title3.weight(.semibold))
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 18)], spacing: 20) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 22)], spacing: 26) {
                             ForEach(group.widgets) { widget in
-                                WidgetCard(gallery: gallery, widget: widget, showsSource: group.title != "Locky")
-                                    .onTapGesture { AddToTheme.menu(widget.name, model: model) }
+                                WidgetCard(gallery: gallery, widget: widget, showsSource: group.title != "Locky") { family in
+                                    AddToTheme.menu(widget.name, family: family, model: model)
+                                }
                                     .contextMenu {
                                         if let file = widget.file {
                                             Button("Open in Editor") { model.open(file) }
@@ -49,7 +50,7 @@ struct WidgetsPage: View {
         }
         .sheet(isPresented: $installing) { InstallSheet(model: model) }
         .task(id: model.revision) {
-            gallery.start(widgets: model.inspection.widgets.map(\.name), settings: model.store.settings, config: model.store.config, revision: model.revision)
+            gallery.start(widgets: model.inspection.widgets, settings: model.store.settings, config: model.store.config, revision: model.revision)
         }
         .onDisappear { gallery.stop() }
     }
@@ -58,15 +59,15 @@ struct WidgetsPage: View {
 /// A click on a widget card: a menu to add the widget to the active theme, or, under Add to, to another one.
 @MainActor
 enum AddToTheme {
-    static func menu(_ widget: String, model: AppModel) {
+    static func menu(_ widget: String, family: String? = nil, model: AppModel) {
         let themes = model.inspection.themes.filter { $0.error == nil }
         let menu = NSMenu()
         if let active = themes.first(where: { $0.id == model.activeTheme }) {
-            menu.addItem(ActionItem("Add to \(active.name)") { Task { await add(widget, to: active, model: model) } })
+            menu.addItem(ActionItem("Add to \(active.name)") { Task { await add(widget, family: family, to: active, model: model) } })
         }
         let others = NSMenu()
         for theme in themes where theme.id != model.activeTheme {
-            others.addItem(ActionItem(theme.name) { Task { await add(widget, to: theme, model: model) } })
+            others.addItem(ActionItem(theme.name) { Task { await add(widget, family: family, to: theme, model: model) } })
         }
         let item = NSMenuItem(title: "Add to", action: nil, keyEquivalent: "")
         item.submenu = others
@@ -78,11 +79,11 @@ enum AddToTheme {
     /// shows that theme on the Themes page. Returns the widget's place in the list, or nil when the theme's layout
     /// does not load.
     @discardableResult
-    static func add(_ widget: String, to theme: Inspection.ThemeInfo, model: AppModel) async -> Int? {
+    static func add(_ widget: String, family: String? = nil, to theme: Inspection.ThemeInfo, model: AppModel) async -> Int? {
         let editing = ThemeEditing(theme: theme, model: model)
         await editing.load()
         guard editing.layout != nil else { return nil }
-        let index = editing.add(widget)
+        let index = editing.add(widget, family: family)
         model.selectedTheme = theme.id
         model.section = .themes
         return index

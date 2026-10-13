@@ -18,18 +18,25 @@ import Testing
         #expect(groups.map { $0.widgets.map(\.name) } == [["clock"], ["mine"], ["weather.big"], ["matrix.whisper"], ["sakura.month"]])
     }
 
-    /// The gallery runs every widget in one runtime and hands each card its widget's live view.
+    /// The gallery runs every widget in one runtime, once in each of its families, and hands each card the live
+    /// view of the family it shows.
     @MainActor @Test func theGalleryDrawsEachWidget() async throws {
         let sandbox = try Sandbox()
+        try sandbox.write("plugin/fam.lua", """
+            locky.widget.define('fam', { families = { 'circular', 'small' }, render = function(self) return locky.ui.text(self.family) end })
+            """)
         let gallery = WidgetGallery()
-        gallery.start(widgets: ["date", "nerdclock", "no.such.widget"], settings: Settings(), config: sandbox.config, revision: 1)
+        let widgets = [Inspection.WidgetInfo(name: "date"), Inspection.WidgetInfo(name: "nerdclock"),
+                       Inspection.WidgetInfo(name: "fam", families: ["circular", "small"]), Inspection.WidgetInfo(name: "no.such.widget")]
+        gallery.start(widgets: widgets, settings: Settings(), config: sandbox.config, revision: 1)
         defer { gallery.stop() }
-        func drawn(_ name: String) -> Bool { if case .node = gallery.shown(name) { true } else { false } }
+        func node(_ name: String, _ family: String? = nil) -> Node? { if case .node(let node, _) = gallery.shown(name, family: family) { node } else { nil } }
         let deadline = Date().addingTimeInterval(5)
-        while !(drawn("date") && drawn("nerdclock")), Date() < deadline {
+        while [node("date"), node("nerdclock"), node("fam", "circular"), node("fam", "small")].contains(where: { $0 == nil }), Date() < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
-        #expect(drawn("date") && drawn("nerdclock"))
+        #expect(node("date") != nil && node("nerdclock") != nil)
+        #expect(node("fam", "circular")?.kind == .text("circular") && node("fam", "small")?.kind == .text("small"))
         if case .failed = gallery.shown("no.such.widget") {} else { Issue.record("an unknown widget should show as failed") }
     }
 

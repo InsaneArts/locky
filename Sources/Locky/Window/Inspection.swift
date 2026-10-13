@@ -28,6 +28,8 @@ struct Inspection: Sendable {
         var defaults: [String: LuaValue] = [:]
         /// The values its options take, for the editor's menus.
         var choices: [String: [String]] = [:]
+        /// Apple's families it draws, such as "circular" and "small"; none draws at its own size only.
+        var families: [String] = []
     }
 
     /// A package from locky.pack.add (init.lua) or settings.json's packs (the window).
@@ -98,7 +100,8 @@ struct Inspection: Sendable {
                     WidgetInfo(name: info["name"].string ?? "?", description: info["description"].string,
                                file: info["file"].string.map { URL(fileURLWithPath: $0) }, card: info["card"].bool ?? false,
                                opts: info["opts"].table ?? [:], defaults: info["defaults"].table ?? [:],
-                               choices: (info["choices"].table ?? [:]).compactMapValues { $0.array?.compactMap(\.string) })
+                               choices: (info["choices"].table ?? [:]).compactMapValues { $0.array?.compactMap(\.string) },
+                               families: info["families"].array?.compactMap(\.string) ?? [])
                 }
             }
             runtime.stop()
