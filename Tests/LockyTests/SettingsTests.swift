@@ -888,7 +888,7 @@ import Testing
     }
 }
 
-/// The Settings window's own rules: General's pop-ups and switches.
+/// The Settings window's own rules: General's pop-ups and switches, and Lua Config's Open in button.
 @Suite struct WindowSettingsTests {
     @Test func whenInactiveListsNeverAndTheUsualTimes() {
         let choices = SettingsPage.idleChoices(stored: nil)
@@ -952,5 +952,12 @@ import Testing
         runtime.stop()
         #expect(started.problems.contains { $0.contains("broken") }, "\(started.problems)")
         #expect(started.privacy)
+    }
+
+    @Test func openInNamesTheDefaultEditorByItsApp() {
+        let neovide = URL(fileURLWithPath: "/Applications/Neovide.app")
+        #expect(Editor(id: "default", name: "Default (Neovide)", kind: .app(bundleID: "com.neovide.neovide", url: neovide)).shortName == "Neovide")
+        #expect(Editor(id: "com.neovide.neovide", name: "Neovide", kind: .app(bundleID: "com.neovide.neovide", url: neovide)).shortName == "Neovide")
+        #expect(Editor(id: "nvim", name: "Neovim", kind: .command(executable: URL(fileURLWithPath: "/opt/homebrew/bin/nvim"))).shortName == "Neovim")
     }
 }
