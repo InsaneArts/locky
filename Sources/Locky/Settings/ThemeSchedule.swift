@@ -51,12 +51,43 @@ struct ThemeSchedule: Equatable, Sendable {
         case .appearance:
             return isDark ? dark : light
         case .time:
-            let parts = calendar.dateComponents([.hour, .minute], from: date)
-            let now = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-            // Day runs from day_starts up to night_starts, across midnight when night comes first.
-            let isDay = dayStarts <= nightStarts ? (dayStarts..<nightStarts).contains(now) : !(nightStarts..<dayStarts).contains(now)
-            return isDay ? day : night
+            return isDay(at: date, calendar: calendar) ? day : night
         }
+    }
+
+    /// Makes `theme` the one the slot that shows at `date` names: light or dark by `dark`, else day or night by the time.
+    mutating func setTheme(_ theme: String, at date: Date, dark isDark: Bool, calendar: Calendar = .current) {
+        switch mode {
+        case .appearance:
+            if isDark { dark = theme } else { light = theme }
+        case .time:
+            if isDay(at: date, calendar: calendar) { day = theme } else { night = theme }
+        }
+    }
+
+    /// Empties every slot that names `theme`: those slots show the usual theme.
+    mutating func forget(_ theme: String) {
+        let slots: [WritableKeyPath<ThemeSchedule, String?>] = [\.day, \.night, \.light, \.dark]
+        for slot in slots where self[keyPath: slot] == theme { self[keyPath: slot] = nil }
+    }
+
+    /// "Day: Aurora from 07:00 · Night: Matrix from 19:00", or "Light: Aurora · Dark: Matrix". A slot with no theme
+    /// reads "the usual theme".
+    func summary(_ inspection: Inspection) -> String {
+        let name = { (id: String?) in id.flatMap { inspection.theme($0)?.name ?? $0 } ?? "the usual theme" }
+        switch mode {
+        case .time:
+            return "Day: \(name(day)) from \(Self.clock(dayStarts)) · Night: \(name(night)) from \(Self.clock(nightStarts))"
+        case .appearance:
+            return "Light: \(name(light)) · Dark: \(name(dark))"
+        }
+    }
+
+    private func isDay(at date: Date, calendar: Calendar) -> Bool {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        let now = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        // Day runs from day_starts up to night_starts, across midnight when night comes first.
+        return dayStarts <= nightStarts ? (dayStarts..<nightStarts).contains(now) : !(nightStarts..<dayStarts).contains(now)
     }
 
     /// "07:30" → 450.

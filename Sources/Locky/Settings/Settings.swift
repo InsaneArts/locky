@@ -79,6 +79,9 @@ struct Settings: Equatable, Sendable {
         }
     }
 
+    /// Sets `key`, or removes it when `value` is what init.lua (or the default) already gives: the row is its own reset.
+    mutating func setLuaValue(_ key: String, _ value: LuaValue, base: LuaValue) { self[key] = value == base ? .nil : value }
+
     /// What Lua's apply_settings reads.
     var lua: LuaValue { .table(values.filter { Self.luaKeys.contains($0.key) }) }
 

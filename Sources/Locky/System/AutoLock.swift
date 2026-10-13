@@ -40,9 +40,28 @@ struct AutoLockSettings: Equatable, Sendable {
 }
 
 extension Settings {
+    /// The four triggers. Setting it rebuilds auto_lock from them and drops other keys: the windows write through
+    /// `setAutoLock` instead.
     var autoLock: AutoLockSettings {
         get { AutoLockSettings(self["auto_lock"]) }
         set { self["auto_lock"] = newValue.settingsValue }
+    }
+
+    /// Sets one auto_lock key in place (nil removes it). Every other key, unknown ones too, stays; an empty table removes
+    /// auto_lock.
+    mutating func setAutoLock(_ key: String, _ value: LuaValue?) {
+        var table = self["auto_lock"].table ?? [:]
+        table[key] = value
+        self["auto_lock"] = table.isEmpty ? .nil : .table(table)
+    }
+
+    /// Sets the four triggers in place through the function above: idle_minutes as a number or nil, the switches as true
+    /// or nil.
+    mutating func setAutoLock(_ triggers: AutoLockSettings) {
+        setAutoLock("idle_minutes", triggers.idleMinutes.map { Int(exactly: $0).map(LuaValue.int) ?? .double($0) })
+        setAutoLock("display_sleep", triggers.displaySleep ? .bool(true) : nil)
+        setAutoLock("system_sleep", triggers.systemSleep ? .bool(true) : nil)
+        setAutoLock("screen_saver", triggers.screenSaver ? .bool(true) : nil)
     }
 }
 
