@@ -149,6 +149,26 @@ struct Inspection: Sendable {
     }
 }
 
+extension Inspection {
+    /// Themes by the name people read, as every theme list shows them.
+    var themesByName: [ThemeInfo] { themes.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
+}
+
+extension Inspection.WidgetInfo {
+    /// Where the widget comes from, for people. nil for Locky's own (the runtime and the built-in packages),
+    /// "Lua Config" for the config folder's, the plugin's folder name, else the short path.
+    var source: String? {
+        guard let path = file?.path else { return nil }
+        if path.hasPrefix(RuntimePath.builtInRuntime.path) || path.hasPrefix(RuntimePath.resources.appending(path: "packages").path + "/") {
+            return nil
+        }
+        if path.hasPrefix(RuntimePath.defaultConfig.path) { return "Lua Config" }
+        let parts = path.split(separator: "/")
+        if let plugin = parts.lastIndex(of: "plugin"), plugin > 0 { return String(parts[plugin - 1]) }
+        return LuaError.shortenPaths(path)
+    }
+}
+
 /// A theme's own background and widget placements (widget, anchor, offset, size, align, card, display, and the
 /// options before settings.json's), its password field's place, and its card style.
 struct ThemeLayout: Sendable, Equatable {

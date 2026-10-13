@@ -79,6 +79,24 @@ import Testing
         #expect(plain["auto_lock"].isNil)
     }
 
+    // MARK: Inspection
+
+    @Test func themesListByTheirNames() {
+        var inspection = Inspection()
+        inspection.themes = [Inspection.ThemeInfo(id: "wordclock", name: "Word Clock"), Inspection.ThemeInfo(id: "default", name: "Aurora"),
+                             Inspection.ThemeInfo(id: "deepblue", name: "Deep Blue")]
+        #expect(inspection.themesByName.map(\.id) == ["default", "deepblue", "wordclock"])
+    }
+
+    /// Locky's own widgets name no source: only someone else's do.
+    @Test func aWidgetSaysWhereItComesFrom() {
+        func source(_ file: URL) -> String? { Inspection.WidgetInfo(name: "w", file: file).source }
+        #expect(source(RuntimePath.builtInRuntime.appending(path: "plugin/clock.lua")) == nil)
+        #expect(source(RuntimePath.resources.appending(path: "packages/sakura/plugin/sakura.lua")) == nil)
+        #expect(source(RuntimePath.defaultConfig.appending(path: "plugin/mine.lua")) == "Lua Config")
+        #expect(source(RuntimePath.defaultPacks.appending(path: "locky-weather/plugin/big.lua")) == "locky-weather")
+    }
+
     // MARK: Problems
 
     /// "$CONFIG" and "$PACKS" stand for a sandbox's folders, where the files are.
