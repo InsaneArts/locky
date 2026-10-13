@@ -5,17 +5,24 @@ import SwiftUI
 /// theme in use as a click does, and Return opens Customize for it.
 struct ThemeGallery: View {
     let model: AppModel
+    /// The theme that did not load on the last lock, until a file of it changes or Dismiss.
+    @State private var failure: ThemeFailure?
     @State private var scheduling = false
     /// Why Move to Trash left a theme where it was, for its alert.
     @State private var trashError: String?
     @State private var gridWidth: CGFloat = 0
     @FocusState private var gridFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.layoutDirection) private var layoutDirection
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
+                    if let failure {
+                        FailureBanner(failure: failure, model: model, dismiss: dismissFailure)
+                            .transition(.opacity)
+                    }
                     // Nothing saves settings.json while it has an error, so a click on a tile changes nothing.
                     if model.store.problem != nil {
                         HStack(spacing: 8) {
@@ -53,6 +60,12 @@ struct ThemeGallery: View {
             Button("OK") {}
         } message: { message in
             Text(message)
+        }
+        // The record stops counting once a file of its theme changes, so it is read again with the config. Not before the
+        // first read: the summary needs the themes' names, and the record its theme's package.
+        .task(id: model.revision) {
+            guard model.inspection.loaded else { return }
+            failure = ThemeFailure.current(.standard, inspection: model.inspection, config: model.store.config)
         }
     }
 
@@ -188,6 +201,11 @@ struct ThemeGallery: View {
             trashError = error.localizedDescription
         }
     }
+
+    private func dismissFailure() {
+        UserDefaults.standard.removeObject(forKey: ThemeFailure.key)
+        withAnimation(Motion.rows(reduceMotion)) { failure = nil }
+    }
 }
 
 /// One theme in the grid: its picture and its name. The ring around the picture marks the theme in use.
@@ -291,5 +309,43 @@ private struct ThemeTile: View {
                     }
                 }
         }
+    }
+}
+
+/// The last lock's theme that did not load, and the theme Locky showed instead. Open goes to the file and line the
+/// error names, as a Lua Config problem's Open does.
+private struct FailureBanner: View {
+    let failure: ThemeFailure
+    let model: AppModel
+    let dismiss: () -> Void
+    /// Why the editor did not open, if it did not.
+    @State private var openError: String?
+
+    var body: some View {
+        let place = ConfigProblem(failure.message, config: model.store.config)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(failure.summary(model.inspection))
+                    .font(.headline)
+                Text(failure.message)
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+                if let openError { WarningLabel(openError) }
+            }
+            Spacer()
+            if let file = place.file, let line = place.line {
+                Button("Open") { openError = model.open(file, line: line) }
+                    // The editors are found once, before the first Open.
+                    .task { await model.findEditors() }
+            }
+            Button("Dismiss", action: dismiss)
+        }
+        .padding(16)
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous))
     }
 }
