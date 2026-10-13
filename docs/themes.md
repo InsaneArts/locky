@@ -61,7 +61,7 @@ return {
 `bottom-left`, or `bottom-right`. `offset` moves the widget from there in points; y grows downwards, so a
 `bottom` widget uses a negative y. Without `size`, a widget is as big as its content. With `size`,
 `align` places the content inside it: `leading`, `trailing`, `top`, `bottom`, `top-leading`, `bottom-trailing`,
-and so on (default center). `card = true` uses the theme's card, or name a style. `display =
+and so on (default center). `card = true` uses the theme's card, or name a style; with a `size`, the card fills it. `display =
 "all"` repeats the widget on every display; by default widgets show on the main display only, and every
 display gets the background.
 

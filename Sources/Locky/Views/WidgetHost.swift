@@ -136,7 +136,9 @@ private struct WidgetView: View {
     @ViewBuilder private var chrome: some View {
         if let card, card.style != "none", model.error == nil, model.node != nil {
             let shape = RoundedRectangle(cornerRadius: card.radius * style.scale, style: .continuous)
+            // With a size, the card fills it and `align` places the content inside, so a dashboard's panels line up.
             let padded = content.padding(16 * style.scale)
+                .frame(maxWidth: placement.size == nil ? nil : .infinity, maxHeight: placement.size == nil ? nil : .infinity, alignment: alignment)
             switch card.style {
             case "solid":
                 padded.background(style.color(card.fill ?? "surface"), in: shape)
