@@ -133,6 +133,15 @@ import Testing
         #expect(Settings.load(config: sandbox.config).problem == nil)
     }
 
+    /// The parser's words say where the file breaks, so General's error row does too.
+    @Test func aBrokenFileSaysWhereItBreaks() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true, "#)
+        let problem = try #require(Settings.load(config: sandbox.config).problem)
+        #expect(problem.contains("is not valid JSON: "))
+        #expect(problem.contains("line 1"), "\(problem)")
+    }
+
     @Test func savingKeepsKeysThisVersionDoesNotKnow() throws {
         let sandbox = try Sandbox()
         try sandbox.write("settings.json", #"{ "from_the_future": { "a": [1, 2.5, "x"] }, "theme": "old" }"#)

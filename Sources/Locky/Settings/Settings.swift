@@ -41,7 +41,10 @@ struct Settings: Equatable, Sendable {
             guard let table = object as? [String: Any] else { return (Settings(), "\(name) must hold a JSON object") }
             return (Settings(LuaValue(json: table).table ?? [:]), nil)
         } catch {
-            return (Settings(), "\(name) is not valid JSON: \(error.localizedDescription)")
+            // The parser's own words say where the file breaks ("Unexpected end of file around line 1, column 19.");
+            // localizedDescription only says that it does.
+            let detail = (error as NSError).userInfo[NSDebugDescriptionErrorKey] as? String ?? error.localizedDescription
+            return (Settings(), "\(name) is not valid JSON: \(detail)")
         }
     }
 
