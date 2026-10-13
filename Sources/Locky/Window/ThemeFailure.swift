@@ -10,7 +10,9 @@ struct ThemeFailure: Codable, Equatable {
     var message: String
     /// Seconds since 1970.
     var date: Double
+}
 
+extension ThemeFailure {
     /// The record, as Data or as a string of JSON. Anything else is no record.
     static func read(_ defaults: UserDefaults) -> ThemeFailure? {
         guard let data = defaults.data(forKey: key) ?? defaults.string(forKey: key).map({ Data($0.utf8) }) else { return nil }
