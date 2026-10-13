@@ -15,7 +15,7 @@ struct Settings: Equatable, Sendable {
     static func url(config: URL) -> URL { config.appending(path: "settings.json") }
 
     /// The keys Lua reads (the rest are the app's). `packs` goes to Lua separately, before init.lua runs.
-    static let luaKeys: Set<String> = ["theme", "auto_unlock", "hour24", "privacy", "message", "themes"]
+    static let luaKeys: Set<String> = ["theme", "hour24", "privacy", "message", "themes"]
 
     /// A missing file reads as empty settings. A file that is not a JSON object reads as empty settings and a
     /// problem; the window then shows the problem and leaves the file alone until it is fixed.
