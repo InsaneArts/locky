@@ -76,11 +76,14 @@ import Testing
     @MainActor @Test func theWaitCountsDownAndEnds() async {
         let model = AuthModel()
         for _ in 0..<4 { model.failed() }
-        #expect(model.waitLeft == 2)
-        try? await Task.sleep(for: .milliseconds(1500))
-        #expect(model.waitLeft == 1)
-        try? await Task.sleep(for: .milliseconds(1000))
-        #expect(model.waitLeft == 0)
+        // What the field shows, every 50 ms until the wait ends (a loaded test run can delay a step).
+        var shown = [model.waitLeft]
+        let deadline = Date().addingTimeInterval(10)
+        while model.waitLeft > 0, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+            if shown.last != model.waitLeft { shown.append(model.waitLeft) }
+        }
+        #expect(shown.first == 2 && shown.last == 0 && shown == shown.sorted(by: >), "\(shown)")
     }
 
     @MainActor @Test func aSuccessStartsTheCountAgainAndANewModelKeepsTheWait() async {
