@@ -888,7 +888,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 }
 
-/// The last lock that showed another theme because the chosen one failed to load, for the Dashboard and the menu.
+/// The last lock that showed another theme because the chosen one failed to load, for the Themes window and the menu.
 /// UserDefaults keeps it under "lastThemeFailure" as JSON data: {"theme", "fallback", "message", "date"}, the date
 /// in seconds since 1970.
 /// The last lock's theme that did not load, and the theme Locky showed instead. The lock records it in
