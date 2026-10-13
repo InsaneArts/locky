@@ -108,5 +108,7 @@ done, working, idle, each `{ status, kind, title, workspace }`; `counts` per sta
 
 ## Themes and packages
 
-`locky.theme.extend(name, table_or_function)`, `locky.theme.list()`, `locky.theme.current`.
+`locky.theme.extend(name, table_or_function)`, `locky.theme.derive(base, { name, edits })` (the file Duplicate
+Theme and Export Theme write; see [themes.md](themes.md#make-and-share-themes-in-the-window)), `locky.theme.list()`,
+`locky.theme.current`.
 `locky.pack.add(specs)`. See [themes.md](themes.md) and [plugins.md](plugins.md#a-package).

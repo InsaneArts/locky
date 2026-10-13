@@ -13,6 +13,9 @@ struct ThemeEditor: View {
     @Binding var draft: Settings?
     /// The Add Widget sheet, which the page shows.
     @Binding var adding: Bool
+    /// The name Duplicate Theme asks for, while it asks.
+    @State private var copyName: String?
+    @State private var problem: String?
 
     private var theme: Inspection.ThemeInfo { editing.theme }
 
@@ -34,6 +37,18 @@ struct ThemeEditor: View {
                 if theme.id == active { Tag("In Use", color: .green) }
                 if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
                 Spacer(minLength: 0)
+                Menu {
+                    Button("Duplicate Theme…") { copyName = "\(theme.name) Copy" }
+                    Button("Export Theme…", action: export)
+                        .disabled(!ThemeFile.isBuiltIn(made(name: theme.name).base))
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(editing.layout == nil)
+                .help("Duplicate this theme with your changes, or export it to share")
             }
             if theme.id != active {
                 let name = model.inspection.theme(active)?.name ?? active
@@ -53,6 +68,56 @@ struct ThemeEditor: View {
             }
         }
         .padding(16)
+        .alert("Duplicate Theme", isPresented: Binding(get: { copyName != nil }, set: { if !$0 { copyName = nil } })) {
+            TextField("Name", text: Binding(get: { copyName ?? "" }, set: { copyName = $0 }))
+            Button("Duplicate") { duplicate(named: copyName ?? "") }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A theme of your own, with this theme's look and your changes to it, in your config folder's themes.")
+        }
+        .alert("Can't Save the Theme", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(problem ?? "")
+        }
+    }
+
+    /// This theme with the editor's changes, as a theme named `name`.
+    private func made(name: String) -> ThemeFile {
+        ThemeFile.made(from: theme.id, edit: model.store.settings["themes"][theme.id], name: name, config: model.store.config)
+    }
+
+    /// Writes the copy to the config's themes folder, and opens it in the editor.
+    private func duplicate(named name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard ThemeFile.isName(name) else {
+            problem = "A theme's name has 1 to 80 characters, on one line."
+            return
+        }
+        let id = ThemeFile.id(for: name, taken: ThemeFile.takenIDs(model.inspection.themes, config: model.store.config))
+        let file = made(name: name)
+        Task {
+            do {
+                try await file.install(as: id, config: model.store.config)
+                model.selectedTheme = id
+                model.refresh()
+            } catch {
+                problem = (error as? LuaError)?.message ?? error.localizedDescription
+            }
+        }
+    }
+
+    /// Saves the theme, with the editor's changes, as one file to share; Import Theme adds it on another Mac.
+    private func export() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(theme.id).lua"
+        panel.allowedContentTypes = [ThemeFile.type]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try made(name: theme.name).source().write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            problem = (error as? LuaError)?.message ?? error.localizedDescription
+        }
     }
 
     private var content: some View {

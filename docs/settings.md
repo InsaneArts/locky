@@ -87,8 +87,9 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
   clicked, the arrow keys move what is selected a point (a grid step with Shift), Delete removes a selected
   widget, and Escape clears the selection. The panel beside the canvas shows what is selected: its place, its
   card, and its options (a menu where the widget lists the values an option takes). With nothing selected, it
-  shows the background, the widget list, Add Widget, and Reset Layout. Edit › Undo (⌘Z) takes back each change,
-  and Redo (⇧⌘Z) makes it again.
+  shows the background, the widget list, Add Widget, and Reset Layout. The ⋯ menu has Duplicate Theme and Export
+  Theme, and Import Theme is below the list (see [themes.md](themes.md#make-and-share-themes-in-the-window)). Edit
+  › Undo (⌘Z) takes back each change, and Redo (⇧⌘Z) makes it again.
 - **Plugins:** install from git, update, remove, and see what each package provides.
 - **Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
 - **Settings:** everything in the table above.

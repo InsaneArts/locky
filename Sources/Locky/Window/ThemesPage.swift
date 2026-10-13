@@ -16,6 +16,9 @@ struct ThemesPage: View {
     @Environment(\.undoManager) private var undoManager
     @State private var search = ""
     @State private var adding = false
+    /// A theme file Import Theme read, until the import is confirmed.
+    @State private var importing: ThemeFile?
+    @State private var problem: (title: String, message: String)?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -88,8 +91,66 @@ struct ThemesPage: View {
                 .onChange(of: shown.count, initial: true) { proxy.scrollTo(model.selectedTheme, anchor: .center) }
                 .onChange(of: model.selectedTheme) { proxy.scrollTo(model.selectedTheme) }
             }
+            Divider()
+            Button("Import Theme…", systemImage: "square.and.arrow.down", action: chooseImport)
+                .buttonStyle(.borderless)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .help("Add a theme someone exported from Locky")
         }
         .frame(width: 190)
+        .alert(importing.map { "Import “\($0.name)”?" } ?? "", isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } })) {
+            Button("Import") { if let importing { install(importing) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let importing {
+                Text("""
+                It is made from \(model.inspection.theme(importing.base)?.name ?? importing.base), with its own changes. A theme \
+                is a Lua file, which could run code: Locky imports only themes made with Export Theme…, and writes the \
+                file again from the settings it holds, so no code from it runs.
+                """)
+            }
+        }
+        .alert(problem?.title ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(problem?.message ?? "")
+        }
+    }
+
+    /// Reads a theme file the user picks; the import waits for their yes.
+    private func chooseImport() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [ThemeFile.type]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= ThemeFile.maxSize, let text = try? String(contentsOf: url, encoding: .utf8), let file = ThemeFile.parse(text) else {
+            problem = ("Can't Import This File", """
+            Locky imports themes made with Export Theme…. A theme written in Lua goes in \
+            \(LuaError.shortenPaths(model.store.config.path))/themes/ instead; see docs/themes.md.
+            """)
+            return
+        }
+        guard ThemeFile.isBuiltIn(file.base) else {
+            problem = ("Can't Import This Theme", "It is made from “\(file.base)”, which is not one of Locky's themes.")
+            return
+        }
+        importing = file
+    }
+
+    /// Adds the theme to the config's themes folder, and opens it in the editor.
+    private func install(_ file: ThemeFile) {
+        let id = ThemeFile.id(for: file.name, taken: ThemeFile.takenIDs(model.inspection.themes, config: model.store.config))
+        Task {
+            do {
+                try await file.install(as: id, config: model.store.config)
+                model.selectedTheme = id
+                model.refresh()
+            } catch {
+                problem = ("Can't Import This Theme", (error as? LuaError)?.message ?? error.localizedDescription)
+            }
+        }
     }
 
     private func stage(_ info: Inspection.ThemeInfo) -> some View {

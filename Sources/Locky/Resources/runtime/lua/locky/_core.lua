@@ -1023,6 +1023,47 @@ local function settings_edit(name, theme, edit)
   return result
 end
 
+-- Themes being derived, so a theme that derives from itself fails instead of looping.
+local deriving = {}
+
+--- A theme made in the Locky window (Duplicate Theme, Import Theme): theme `base` with `def.edits` applied in
+--- order, each a change as settings.json's themes.<name> holds one, and `def.name` as its name. The changes' widget
+--- options become the theme's own, so init.lua's merge over them. See docs/themes.md.
+function locky.theme.derive(base, def)
+  validate("base", base, "string")
+  validate("def", def, "table")
+  validate("def.name", def.name, "string", true)
+  validate("def.edits", def.edits, "table", true)
+  if deriving[base] then
+    error(("theme %q derives from itself"):format(base), 2)
+  end
+  deriving[base] = true
+  local ok, theme = pcall(read_theme, base)
+  deriving[base] = nil
+  if not ok then
+    error(theme, 0)
+  end
+  for _, edit in ipairs(def.edits or {}) do
+    local change = settings_edit(base, theme, edit)
+    if change then
+      theme.background = change.background or theme.background
+      if change.widgets then
+        for _, placement in ipairs(change.widgets) do
+          placement.opts = tbl.deep_extend("force", placement.opts or {}, placement.settings_opts or {})
+          placement.settings_opts = nil
+        end
+        theme.widgets = change.widgets
+      end
+      if change.auth then
+        theme.auth = tbl.deep_extend("force", type(theme.auth) == "table" and theme.auth or {}, change.auth)
+      end
+    end
+  end
+  theme.description = ("Made from %s."):format(type(theme.name) == "string" and theme.name or base)
+  theme.name = def.name or theme.name
+  return theme
+end
+
 -- An error without a position inside Locky's core, which says nothing to the user.
 local function without_core_position(message)
   return (tostring(message):gsub("^locky/_core%.lua:%d+: ", ""))
