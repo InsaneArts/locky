@@ -81,3 +81,32 @@ import Testing
         #expect(try eval("return time.beat(0)") == [.string("@041")])
     }
 }
+
+@Suite struct CoreWidgetSmokeTests {
+    /// Every core widget starts and draws with its defaults, and with each of its styles, without an error.
+    @Test func everyCoreWidgetDrawsWithoutAnError() async throws {
+        let sandbox = try Sandbox()
+        let names = try FileManager.default.contentsOfDirectory(atPath: RuntimePath.builtInRuntime.appending(path: "plugin").path)
+            .filter { $0.hasSuffix(".lua") }.map { String($0.dropLast(4)) }.sorted()
+        // The theme runs after every plugin script, so it sees every widget.
+        try sandbox.write("themes/all.lua", """
+        local list = {}
+        for _, name in ipairs(locky.widget.list()) do
+          local def = locky.widget.get(name)
+          list[#list + 1] = { name }
+          for _, style in ipairs(def.choices and def.choices.style or {}) do
+            list[#list + 1] = { name, opts = { style = style } }
+          end
+        end
+        return { widgets = list }
+        """)
+        let recorder = Recorder()
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: recorder.delegate)
+        let started = await runtime.start(theme: "all")
+        defer { runtime.stop() }
+        #expect(started.problems.isEmpty, "\(started.problems)")
+        #expect(Set(started.theme.widgets.map(\.widget)).isSuperset(of: names))
+        try await Task.sleep(for: .seconds(2))
+        #expect(recorder.failures.isEmpty, "\(recorder.failures)")
+    }
+}
