@@ -159,12 +159,6 @@ private struct PluginRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(pack.name).font(.body.weight(.semibold))
-                    if !pack.installed { Tag("Not Installed", color: .orange) }
-                    if let update = model.available.first(where: { $0.name == pack.name }), let latest = update.latest {
-                        Tag("Update: \(latest.prefix(7))", color: .blue)
-                    }
-                    if pack.dir != nil { Tag("Local", color: .purple) }
-                    if pack.alsoInConfig { Tag("Also in init.lua", color: .secondary) }
                 }
                 Text(source).font(.callout.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Text(Provides.text(model: model, folder: pack.folder)).font(.callout).foregroundStyle(.secondary)

@@ -34,8 +34,6 @@ struct ThemeEditor: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(theme.name).font(.title3.weight(.semibold)).lineLimit(1)
-                if theme.id == active { Tag("In Use", color: .green) }
-                if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
                 Spacer(minLength: 0)
                 Menu {
                     Button("Duplicate Theme…") { copyName = "\(theme.name) Copy" }

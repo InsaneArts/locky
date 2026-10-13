@@ -295,23 +295,3 @@ enum ThemeThumbnails {
         return image
     }
 }
-
-/// A small colored label, such as "In Use".
-struct Tag: View {
-    let text: String
-    let color: Color
-
-    init(_ text: String, color: Color) {
-        self.text = text
-        self.color = color
-    }
-
-    var body: some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.14), in: Capsule())
-    }
-}
