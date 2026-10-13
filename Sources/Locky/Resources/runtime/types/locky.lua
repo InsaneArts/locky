@@ -214,7 +214,7 @@ function Widget:log(...) end
 ---@field widgets locky.Placement[]?
 
 ---@class locky.PackSpec
----@field src string? A git URL, or "user/repo" for GitHub.
+---@field src string? An https://, ssh://, or git@ address, or "user/repo" for GitHub.
 ---@field version string? A tag, branch, or commit.
 ---@field name string?
 ---@field dir string? A local folder instead of git.
