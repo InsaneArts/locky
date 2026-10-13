@@ -40,33 +40,67 @@ enum Auth {
 /// display change rebuild it) without losing it.
 @MainActor @Observable
 final class AuthModel {
-    var password = ""
+    var password = "" {
+        didSet { if !password.isEmpty { wrongShown = false } }
+    }
     /// Bumped to put the keyboard focus back in the field.
     var focusRequest = 0
     /// Wrong passwords in this lock, and whether a check runs. Here and not in the field, so a rebuilt field (a
     /// display added, the power changed) keeps them.
     var wrong = 0
     var checking = false
+    /// The last check was a wrong password, and nothing has been typed since: the field says "Wrong Password".
+    private(set) var wrongShown = false
+    /// One check has run for `slowAfter`: the lock names the way out, since the field stays disabled until it ends.
+    private(set) var slowCheck = false
+    /// Called when `slowCheck` turns true.
+    @ObservationIgnored var onSlowCheck: () -> Void = {}
     /// Whole seconds left in the wait before the next try (0: none). Waits outlast the lock: see PasswordAttempts.
     private(set) var waitLeft = 0
     /// The user the field shows; privacy mode can change it while the field stays.
     var user = Auth.User(name: "", login: "user", host: "mac", picture: nil)
     /// Where wrong passwords count across locks and relaunches. nil (the theme editor's preview) counts in memory.
     private let defaults: UserDefaults?
+    private let slowAfter: Duration
     private var attempts: PasswordAttempts
     private var waiting: Task<Void, Never>?
+    private var slowTimer: Task<Void, Never>?
 
-    init(defaults: UserDefaults? = nil) {
+    init(defaults: UserDefaults? = nil, slowAfter: Duration = .seconds(5)) {
         self.defaults = defaults
+        self.slowAfter = slowAfter
         attempts = defaults.map { PasswordAttempts.load($0) } ?? PasswordAttempts()
         // Saved as loaded: a last failure in the future becomes now, so the 15 minutes run from here.
         if let defaults { attempts.save(defaults) }
         wait(until: attempts.nextTry)
     }
 
+    /// Starts a password check, unless one runs or the wait after wrong passwords does. Here, so no view can skip
+    /// the wait. false: no check may start.
+    func beginCheck() -> Bool {
+        guard waitLeft == 0, !checking else { return false }
+        checking = true
+        slowTimer = Task { [weak self, slowAfter] in
+            try? await Task.sleep(for: slowAfter)
+            guard !Task.isCancelled, let self, checking else { return }
+            slowCheck = true
+            onSlowCheck()
+        }
+        return true
+    }
+
+    /// The check has its answer.
+    func endCheck() {
+        checking = false
+        slowTimer?.cancel()
+        slowTimer = nil
+        slowCheck = false
+    }
+
     /// A wrong password: counted here and across locks, and the next try waits as the policy says.
     func failed() {
         wrong += 1
+        wrongShown = true
         if let defaults { attempts = PasswordAttempts.load(defaults) }
         attempts.fail()
         if let defaults { attempts.save(defaults) }
@@ -256,10 +290,7 @@ struct AuthPanel: View {
         get { model.password }
         nonmutating set { model.password = newValue }
     }
-    private var checking: Bool {
-        get { model.checking }
-        nonmutating set { model.checking = newValue }
-    }
+    private var checking: Bool { model.checking }
     private var wrong: Int { model.wrong }
     private var user: Auth.User { model.user }
     /// "Try again in 8 s" while the wait after wrong passwords runs.
@@ -476,12 +507,11 @@ struct AuthPanel: View {
     }
 
     private func submit() {
-        guard !password.isEmpty, !checking, waitText == nil else { return }
-        checking = true
+        guard !password.isEmpty, model.beginCheck() else { return }
         Task {
             let ok = await Auth.verify(password)
             password = ""
-            checking = false
+            model.endCheck()
             if ok {
                 model.succeeded()
                 unlock()

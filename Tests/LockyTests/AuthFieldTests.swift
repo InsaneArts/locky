@@ -27,6 +27,53 @@ import Testing
     }
 }
 
+/// The model, not the view, decides when a check may start.
+@MainActor
+@Suite struct AuthModelTests {
+    @Test func wrongPasswordShowsUntilTheNextKey() {
+        let model = AuthModel()
+        #expect(!model.wrongShown)
+        model.failed()
+        #expect(model.wrongShown)
+        model.password = "a"
+        #expect(!model.wrongShown)
+    }
+
+    @Test func noCheckStartsDuringTheWaitOrAnotherCheck() async {
+        let model = AuthModel()
+        for _ in 0..<3 { model.failed() }
+        #expect(model.waitLeft > 0)
+        #expect(!model.beginCheck())
+        #expect(!model.checking)
+        // The third wrong password waits one second.
+        let deadline = Date().addingTimeInterval(5)
+        while model.waitLeft > 0, Date() < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+        #expect(model.beginCheck())
+        #expect(model.checking)
+        #expect(!model.beginCheck())
+        model.endCheck()
+        #expect(!model.checking)
+    }
+
+    @Test func aCheckThatRunsLongIsSlowUntilItEnds() async throws {
+        let model = AuthModel(slowAfter: .milliseconds(50))
+        var calls = 0
+        model.onSlowCheck = { calls += 1 }
+        // A check that ends in time is never slow.
+        #expect(model.beginCheck())
+        model.endCheck()
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(!model.slowCheck && calls == 0)
+
+        #expect(model.beginCheck())
+        let deadline = Date().addingTimeInterval(3)
+        while !model.slowCheck, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(model.slowCheck && calls == 1)
+        model.endCheck()
+        #expect(!model.slowCheck)
+    }
+}
+
 @Suite struct PasswordAttemptsTests {
     /// UserDefaults of their own, so no test touches the app's.
     private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
