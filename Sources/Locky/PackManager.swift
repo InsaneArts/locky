@@ -100,13 +100,14 @@ struct PackManager {
         try encoder.encode(lockfile).write(to: path.lockfile.resolvingSymlinksInPath(), options: .atomic)
     }
 
-    /// Runs `action`. One line per package; `ok` is false when anything failed.
-    func run(_ action: Action) -> Report {
+    /// Runs `action`. One line per package; `ok` is false when anything failed. For `clean`, `removing` limits what
+    /// it deletes to the packages the user confirmed.
+    func run(_ action: Action, removing: [String]? = nil) -> Report {
         let fm = FileManager.default
         try? fm.createDirectory(at: path.packs, withIntermediateDirectories: true)
         // One run at a time, whether it comes from the menu or the command line.
         guard let lock = FolderLock(path.packs.appending(path: ".locky-pack.lock")) else {
-            return Report(lines: ["Another package run is in progress. Try again when it finishes."], ok: false)
+            return Report(lines: ["Another plugin run is in progress. Try again when it finishes."], ok: false)
         }
         defer { lock.release() }
 
@@ -126,7 +127,7 @@ struct PackManager {
 
         switch action {
         case .list:
-            if specs.isEmpty { lines.append("No packages. Add some in init.lua with locky.pack.add({ \"user/repo\" }).") }
+            if specs.isEmpty { lines.append("No plugins. Add some in init.lua with locky.pack.add({ \"user/repo\" }).") }
             for spec in specs {
                 if let dir = spec.dir {
                     lines.append("\(spec.name)  local  \(dir)")
@@ -140,19 +141,15 @@ struct PackManager {
             // A config that stopped early names fewer packages than it means to: cleaning then would delete
             // packages it still wants.
             guard problems.isEmpty else {
-                lines.append("Nothing removed: init.lua has errors, so Locky cannot tell which packages it still wants.")
+                lines.append("Nothing removed: init.lua has errors, so Locky cannot tell which plugins it still wants.")
                 return Report(lines: lines, ok: false)
             }
-            let wanted = Set(specs.filter { $0.dir == nil }.map { $0.name.lowercased() })
-            let local = Set(specs.compactMap(\.dir).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path })
-            for (name, _) in lockfile.plugins.sorted(by: { $0.key < $1.key }) where !wanted.contains(name.lowercased()) {
-                // An edited lockfile must not point outside the pack folder.
-                guard Self.isPackageName(name) else {
-                    lines.append("skipped \"\(name)\" in the lockfile: not a package name")
-                    continue
-                }
+            // An edited lockfile must not point outside the pack folder.
+            for name in lockfile.plugins.keys.sorted() where !Self.isPackageName(name) {
+                lines.append("skipped \"\(name)\" in the lockfile: not a plugin name")
+            }
+            for name in unused(specs, lockfile: lockfile) where removing?.contains(name) ?? true {
                 let folder = path.packs.appending(path: name)
-                if local.contains(folder.resolvingSymlinksInPath().path) { continue }  // a { dir = ... } package
                 updated.plugins[name] = nil
                 guard fm.fileExists(atPath: folder.path) else { continue }
                 do {
@@ -172,7 +169,7 @@ struct PackManager {
                 lines.append(line)
                 if !success { ok = false }
             }
-            if specs.isEmpty { lines.append("No packages to install.") }
+            if specs.isEmpty { lines.append("No plugins to install.") }
         case .check:
             for (name, locked) in lockfile.plugins.sorted(by: { $0.key < $1.key }) where Self.isPackageName(name) {
                 let update = check(name, locked: locked)
@@ -181,7 +178,7 @@ struct PackManager {
                 lines += update.changes
                 if update.error != nil { ok = false }
             }
-            if checked.isEmpty { lines.append("No packages to check.") }
+            if checked.isEmpty { lines.append("No plugins to check.") }
         }
         if action != .list, updated != lockfile {
             do {
@@ -194,6 +191,17 @@ struct PackManager {
         return Report(lines: lines, ok: ok, updates: checked)
     }
 
+    /// What `clean` removes: the packages the lockfile lists that `specs` no longer add, other than a
+    /// { dir = ... } package kept in the pack folder.
+    func unused(_ specs: [Spec], lockfile: Lockfile) -> [String] {
+        let wanted = Set(specs.filter { $0.dir == nil }.map { $0.name.lowercased() })
+        let local = Set(specs.compactMap(\.dir).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path })
+        return lockfile.plugins.keys.sorted().filter { name in
+            Self.isPackageName(name) && !wanted.contains(name.lowercased())
+                && !local.contains(path.packs.appending(path: name).resolvingSymlinksInPath().path)
+        }
+    }
+
     /// `check`'s result for each package, for the window. A busy run and an unreadable lockfile appear only in
     /// run(.check)'s lines.
     func checkUpdates() -> [PackUpdate] {
@@ -204,7 +212,7 @@ struct PackManager {
     /// installs. Runs no Lua.
     func apply(_ updates: [PackUpdate]) -> Report {
         guard let lock = FolderLock(path.packs.appending(path: ".locky-pack.lock")) else {
-            return Report(lines: ["Another package run is in progress. Try again when it finishes."], ok: false)
+            return Report(lines: ["Another plugin run is in progress. Try again when it finishes."], ok: false)
         }
         defer { lock.release() }
         var lockfile: Lockfile
@@ -254,7 +262,7 @@ struct PackManager {
             let clone = runGit(["clone", "--quiet", "--filter=blob:none", "--", src, dir.path], timeout: networkTimeout)
             guard clone.ok else { return ("\(spec.name): clone failed: \(clone.error)", false) }
         } else if !isClone(dir) {
-            return ("\(spec.name): \(LuaError.shortenPaths(dir.path)) exists but is not a git clone Locky made; move it away or rename the package", false)
+            return ("\(spec.name): \(LuaError.shortenPaths(dir.path)) exists but is not a git clone Locky made; move it away or rename the plugin", false)
         }
 
         // init.lua may have changed the source since the clone.

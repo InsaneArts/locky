@@ -117,7 +117,26 @@ import Testing
         let report = PackManager(path: sandbox.path()).run(.clean)
         #expect(fm.fileExists(atPath: sandbox.packs.appending(path: "mine").path))
         #expect(fm.fileExists(atPath: sandbox.packs.appending(path: "devplug").path))
-        #expect(report.text.contains("not a package name"))
+        #expect(report.text.contains("not a plugin name"))
+    }
+
+    /// Remove Unused lists what it would delete and deletes only what the user confirmed.
+    @Test func cleanRemovesOnlyTheConfirmedPlugins() throws {
+        let sandbox = try Sandbox()
+        let zero = String(repeating: "0", count: 40)
+        try #"{"plugins":{"a":{"src":"x","rev":"\#(zero)"},"b":{"src":"x","rev":"\#(zero)"},"kept":{"src":"x","rev":"\#(zero)"}}}"#
+            .write(to: sandbox.path().lockfile, atomically: true, encoding: .utf8)
+        for name in ["a", "b", "kept"] {
+            try FileManager.default.createDirectory(at: sandbox.packs.appending(path: name), withIntermediateDirectories: true)
+        }
+        try sandbox.write("init.lua", "locky.pack.add({ { src = 'https://example.com/kept.git' } })")
+        let manager = PackManager(path: sandbox.path())
+        let specs = manager.specs().specs
+        #expect(manager.unused(specs, lockfile: try PackManager.readLockfile(sandbox.path().lockfile)) == ["a", "b"])
+        #expect(manager.run(.clean, removing: ["a"]).text == "removed a")
+        #expect(!FileManager.default.fileExists(atPath: sandbox.packs.appending(path: "a").path))
+        #expect(FileManager.default.fileExists(atPath: sandbox.packs.appending(path: "b").path))
+        #expect(try PackManager.readLockfile(sandbox.path().lockfile).plugins.keys.sorted() == ["b", "kept"])
     }
 
     @Test func gitNeverRunsOutsideAClone() throws {
@@ -285,7 +304,7 @@ import Testing
         try FileManager.default.removeItem(at: sandbox.path().lockfile)
         let report = manager.run(.check)
         #expect(report.ok)
-        #expect(report.text == "No packages to check.")
+        #expect(report.text == "No plugins to check.")
         #expect(report.updates.isEmpty)
     }
 

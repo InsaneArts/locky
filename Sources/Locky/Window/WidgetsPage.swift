@@ -42,7 +42,7 @@ struct WidgetsPage: View {
         .searchable(text: $search, placement: .toolbar, prompt: "Search Widgets")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Install Widgets…", systemImage: "plus") { installing = true }
+                Button("Install Plugin…", systemImage: "plus") { installing = true }
                     .disabled(model.packRunning != nil)
             }
         }

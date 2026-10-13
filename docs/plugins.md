@@ -167,7 +167,8 @@ folder on your Mac, use `{ dir = ... }`.
 and lists each moved package's new commits and diffstat; `locky pack clean` deletes packages `init.lua` no
 longer adds. `locky pack check` fetches the packages the lockfile pins and lists the ones `update` would move,
 with the same commits and diffstat, and moves none. It runs no Lua, so no plugin code runs: the Locky app runs
-it once a day in the background.
+it once a day in the background. The Plugins page's Update All… shows the same review before it installs
+anything, and installs exactly the commits it showed.
 
 Follow Neovim's conventions: `setup(opts)` only merges options (use `locky.tbl.deep_extend`), keep
 `plugin/<name>.lua` small, and give every option a default.

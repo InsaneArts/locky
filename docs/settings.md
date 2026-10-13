@@ -85,6 +85,8 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
   grid and snaps what you drag to it. The panel beside the canvas shows what is selected: its place, its card,
   and its options (a menu where the widget lists the values an option takes). With nothing selected, it shows
   the background, the widget list, Add Widget, and Reset Layout.
-- **Plugins:** install from git, update, remove, and see what each package provides.
+- **Plugins:** install from git; Update All… shows each update's commits and diffstat and installs exactly those
+  commits; Run programs and Change files allow a plugin added here to do that; More › Remove Unused… lists the
+  folders it deletes and asks first. Each plugin shows the themes and widgets it adds.
 - **Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
 - **Settings:** everything in the table above.

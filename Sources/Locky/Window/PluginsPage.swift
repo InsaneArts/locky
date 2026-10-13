@@ -7,11 +7,16 @@ struct PluginsPage: View {
     @Bindable var model: AppModel
     @State private var installing = false
     @State private var removing: Inspection.PackInfo?
+    /// The plugins Remove Unused would delete, while its confirmation shows.
+    @State private var unused: [String]?
+    @State private var reviewing = false
 
     private var packs: [Inspection.PackInfo] { model.inspection.packs }
 
     var body: some View {
         Form {
+            Text("A plugin adds themes and widgets.")
+                .foregroundStyle(.secondary)
             if let running = model.packRunning {
                 Section {
                     HStack(spacing: 10) {
@@ -36,7 +41,7 @@ struct PluginsPage: View {
             Section {
                 let added = packs.filter(\.fromSettings)
                 if added.isEmpty {
-                    Text("No plugins yet. Install one from a git repository: “user/repo” on GitHub, or any git URL.")
+                    Text("No plugins yet. Install one from a git repository: “user/repo” on GitHub, or an https or ssh address.")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(added) { pack in
@@ -59,7 +64,7 @@ struct PluginsPage: View {
             Section {
                 BuiltInRow(model: model, folder: RuntimePath.builtInRuntime, title: "Core")
                 ForEach(RuntimePath.builtInPackages, id: \.self) { folder in
-                    BuiltInRow(model: model, folder: folder, title: folder.lastPathComponent)
+                    BuiltInRow(model: model, folder: folder, title: Provides.themeNames(model: model, folder: folder) ?? folder.lastPathComponent)
                 }
             } header: {
                 Text("Built In")
@@ -68,17 +73,30 @@ struct PluginsPage: View {
         .formStyle(.grouped)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("Remove Unused", systemImage: "trash") { model.runPack(.clean) }
-                    .help("Delete installed plugins that neither init.lua nor this window adds")
                 Button("Check for Updates", systemImage: "arrow.clockwise") { model.checkForUpdates() }
                     .help(model.lastUpdateCheck.map { "Last checked \($0.formatted(.relative(presentation: .named)))" } ?? "Fetch every plugin and compare it with the pinned commit")
-                Button("Update All", systemImage: "arrow.down.circle") { model.runPack(.update) }
-                    .help("Fetch every plugin's newest version and pin it")
+                Button("Update All…", systemImage: "arrow.down.circle") { model.checkForUpdates { reviewing = true } }
+                    .help("See what each plugin's newest version changes, then install it")
                 Button("Install Plugin…", systemImage: "plus") { installing = true }
+                Menu("More", systemImage: "ellipsis.circle") {
+                    Button("Remove Unused…") { unused = unusedPlugins() }
+                        .help("Delete installed plugins that neither init.lua nor this window adds")
+                }
+                .menuIndicator(.hidden)
             }
         }
         .disabled(model.packRunning != nil)
         .sheet(isPresented: $installing) { InstallSheet(model: model) }
+        .sheet(isPresented: $reviewing) { UpdateSheet(model: model) }
+        .confirmationDialog(unused?.isEmpty == false ? "Remove unused plugins?" : "No unused plugins",
+                            isPresented: Binding(get: { unused != nil }, set: { if !$0 { unused = nil } }), presenting: unused) { names in
+            if !names.isEmpty {
+                Button("Remove", role: .destructive) { model.runPack(.clean, work: { $0.run(.clean, removing: names) }) }
+            }
+        } message: { names in
+            Text(names.isEmpty ? "Every installed plugin is in use."
+                 : "Locky deletes these folders in \(LuaError.shortenPaths(RuntimePath.defaultPacks.path)):\n" + names.joined(separator: "\n"))
+        }
         .confirmationDialog("Remove \(removing?.name ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                             presenting: removing) { pack in
             Button("Remove", role: .destructive) { remove(pack) }
@@ -91,13 +109,22 @@ struct PluginsPage: View {
         model.store.update { settings in
             settings.packs.removeAll { PackSpec.name(of: $0)?.lowercased() == pack.name.lowercased() }
         }
-        if !pack.alsoInConfig { model.runPack(.clean) }
+        if !pack.alsoInConfig { model.runPack(.clean, work: { $0.run(.clean, removing: [pack.name]) }) }
+    }
+
+    /// The installed plugins that neither init.lua nor this window adds: what Remove Unused deletes.
+    private func unusedPlugins() -> [String] {
+        let path = RuntimePath.standard(config: model.store.config)
+        let specs = packs.map { PackManager.Spec(name: $0.name, src: $0.src, dir: $0.dir?.path) }
+        let lockfile = (try? PackManager.readLockfile(path.lockfile)) ?? PackManager.Lockfile()
+        return PackManager(path: path).unused(specs, lockfile: lockfile)
+            .filter { FileManager.default.fileExists(atPath: path.packs.appending(path: $0).path) }
     }
 
     static func progress(_ action: PackManager.Action) -> String {
         switch action {
         case .sync: "Installing…"
-        case .update: "Updating every plugin…"
+        case .update: "Updating plugins…"
         case .clean: "Removing unused plugins…"
         case .check: "Checking for updates…"
         default: "Working…"
@@ -217,8 +244,16 @@ private struct BuiltInRow: View {
     }
 }
 
-/// "Themes: Mocha · Widgets: mocha.clock, mocha.bar": what a package folder provides.
+/// "Themes: Mocha · Widgets: mocha.clock, mocha.bar": what a plugin folder provides.
 enum Provides {
+    /// The display names of the themes in `folder`, such as "Mocha", or nil when it has none.
+    @MainActor
+    static func themeNames(model: AppModel, folder: URL) -> String? {
+        let root = folder.resolvingSymlinksInPath().path + "/"
+        let names = model.inspection.themes.filter { ($0.directory?.resolvingSymlinksInPath().path ?? "").appending("/").hasPrefix(root) }.map(\.name)
+        return names.isEmpty ? nil : names.joined(separator: ", ")
+    }
+
     @MainActor
     static func text(model: AppModel, folder: URL) -> String {
         let root = folder.resolvingSymlinksInPath().path + "/"
@@ -275,7 +310,7 @@ struct InstallSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Install a Plugin").font(.title3.weight(.semibold))
-            Text("Locky clones it with git into ~/.local/share/locky/pack and pins the commit in locky-pack-lock.json, next to init.lua.")
+            Text("A plugin adds themes and widgets. Locky clones it with git into ~/.local/share/locky/pack and pins the commit in locky-pack-lock.json, next to init.lua.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Form {
@@ -286,9 +321,10 @@ struct InstallSheet: View {
             if !source.isEmpty, let problem {
                 Label(problem, systemImage: "exclamationmark.circle").foregroundStyle(.orange).font(.callout)
             }
-            Label("A plugin runs Lua code on your lock screen. Install plugins from people you trust.", systemImage: "hand.raised")
+            Label("A plugin runs as you and can read your files. It runs programs or changes files only if you allow it on this page. Install plugins from people you trust.", systemImage: "hand.raised")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -312,5 +348,56 @@ struct InstallSheet: View {
         }
         model.runPack(.sync)
         dismiss()
+    }
+}
+
+/// What Update All installs, before it does: each plugin's new commits and diffstat, from the check that just ran.
+/// Update installs exactly those commits.
+struct UpdateSheet: View {
+    let model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    /// Kept from when the sheet opened: a check that runs meanwhile must not change what Update installs.
+    @State private var updates: [PackUpdate] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(updates.isEmpty ? "Every Plugin Is Up to Date" : "Update Plugins").font(.title3.weight(.semibold))
+            if !updates.isEmpty {
+                Text("Read what changes before you install it. A plugin runs as you.")
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(updates, id: \.name) { update in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(update.name)  \(update.current?.prefix(7) ?? "") → \(update.latest?.prefix(7) ?? "")")
+                                    .font(.body.weight(.semibold))
+                                Text(update.changes.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n"))
+                                    .font(.system(.callout, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .frame(minHeight: 120, maxHeight: 360)
+            }
+            HStack {
+                Spacer()
+                if updates.isEmpty {
+                    Button("OK") { dismiss() }.keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                    Button("Update") {
+                        model.applyUpdates(updates)
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
+        .onAppear { updates = model.available }
     }
 }
