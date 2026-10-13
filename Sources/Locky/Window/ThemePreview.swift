@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// A theme's lock screen, live: laid out at 1440×900 like a real screen and scaled down to fit. A change to the
-/// theme itself (the editor's) shows in place. Any other change builds the new screen out of sight and fades it in
-/// over the old one, so the preview never goes blank. It stops while its window is hidden, so a forgotten window
-/// costs nothing.
+/// A theme's lock screen, live: laid out at 1440×900 like a real screen and scaled down to fit. Until the live screen
+/// is ready, the theme's thumbnail (or its background color) stands in for it. A change to the theme itself (the
+/// editor's) shows in place. Another theme shows its own thumbnail at once; any other change builds the new screen
+/// out of sight and fades it in over the old one, so the preview never goes blank. It stops while its window is
+/// hidden, so a forgotten window costs nothing.
 struct ThemePreview: NSViewRepresentable {
     var theme: String
     /// The app's copy of settings.json, which the preview applies as a lock would.
@@ -41,6 +42,7 @@ struct ThemePreview: NSViewRepresentable {
         view.alwaysLive = alwaysLive
         view.config = config
         view.canvas = canvas
+        view.info = info
         view.show(ThemePreviewView.Key(theme: theme, settings: settings, sources: sources))
     }
 
@@ -83,7 +85,11 @@ final class ThemePreviewView: NSView {
             overlay.needsDisplay = true
         }
     }
-    /// Rounds the corners, in screen points.
+    /// The shown theme's info, for the placeholder.
+    var info: Inspection.ThemeInfo?
+    /// The theme whose placeholder the stage shows; nil for black.
+    private var placeholder: Inspection.ThemeInfo?
+    /// Rounds the corners, in screen points. Its own layer shows the placeholder, under the screens.
     private let clip = NSView()
     /// Holds each session's screen at the layout size; its frame is the scaled-down size.
     private let stage = NSView()
@@ -112,6 +118,7 @@ final class ThemePreviewView: NSView {
         clip.layer?.cornerRadius = 10
         clip.layer?.cornerCurve = .continuous
         clip.layer?.masksToBounds = true
+        clip.layer?.contentsGravity = .resizeAspectFill
         stage.wantsLayer = true
         clip.addSubview(stage)
         addSubview(clip)
@@ -124,7 +131,18 @@ final class ThemePreviewView: NSView {
 
     func show(_ key: Key) {
         wanted = key
+        showPlaceholder(for: key.theme)
         advance()
+    }
+
+    /// What the stage shows under the screens, so it is never black while a theme's screen loads: the theme's
+    /// thumbnail, else its background color, else black.
+    private func showPlaceholder(for theme: String) {
+        let info = info?.id == theme ? info : nil
+        guard info != placeholder else { return }
+        placeholder = info
+        clip.layer?.contents = info.flatMap(ThemeThumbnails.image(for:))
+        clip.layer?.backgroundColor = (info.flatMap { NSColor(hex: $0.palette["bg"] ?? "") } ?? .black).cgColor
     }
 
     func stop() {
@@ -152,6 +170,14 @@ final class ThemePreviewView: NSView {
     /// Moves toward the wanted key: starts a session, reloads the current one in place, or replaces it.
     private func advance() {
         guard let wanted, visible else { return }
+        // Another theme ends this one's screen at once: the new theme's placeholder shows until its own screen is
+        // ready, so a name never sits over another theme's picture.
+        if let current, current.key.theme != wanted.theme {
+            current.session.end("replaced")
+            current.container.removeFromSuperview()
+            self.current = nil
+            overlay.needsDisplay = true
+        }
         if let incoming {
             // One that is loading shows the theme's changes once it is in front.
             if incoming.key.needsRestart(for: wanted) { begin(wanted) }
@@ -207,14 +233,16 @@ final class ThemePreviewView: NSView {
         session.begin()
     }
 
-    /// Fades a ready session in over the current one, which ends once it is covered.
+    /// Fades a ready session in over the current one, or over the placeholder, and the old one ends once it is
+    /// covered. Opacity only, so it stays with Reduce Motion.
     private func promote(_ session: LockSession) {
         guard let incoming, incoming.session === session else { return }
         let old = current
         current = incoming
         self.incoming = nil
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.3
+            context.duration = 0.2
+            context.timingFunction = Motion.easeOut
             incoming.container.animator().alphaValue = 1
         }, completionHandler: {
             MainActor.assumeIsolated {

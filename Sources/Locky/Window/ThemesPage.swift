@@ -66,7 +66,7 @@ struct ThemesPage: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ThemePreview(theme: info.id, settings: draft ?? model.store.settings, sources: model.inspection.sources,
-                             config: model.store.config, alwaysLive: model.screenshots, canvas: canvas(for: info))
+                             config: model.store.config, alwaysLive: model.screenshots, canvas: canvas(for: info), info: info)
                     .aspectRatio(1.6, contentMode: .fit)
                     .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
