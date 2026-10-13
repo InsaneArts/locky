@@ -11,9 +11,10 @@ struct PackManager {
         /// Clones missing packages and moves each one to its locked commit.
         case sync
         /// Fetches and moves each package to the newest commit of its version (a tag, branch, or commit),
-        /// or of the default branch; then rewrites the lockfile.
+        /// or of the default branch; then rewrites the lockfile. Each one that moved lists its commits and diffstat.
         case update
-        /// Fetches each package and says which ones `update` would move. Changes no checkout and no lockfile.
+        /// Fetches each package the lockfile pins and says which ones `update` would move, with their commits and
+        /// diffstat. Changes no checkout and no lockfile, and runs no Lua: it is safe in the background.
         case check
         /// Deletes packages Locky installed that init.lua no longer adds.
         case clean
@@ -109,7 +110,8 @@ struct PackManager {
         }
         defer { lock.release() }
 
-        let (specs, problems) = specs()
+        // check reads the lockfile only: it must not run init.lua or plugin code.
+        let (specs, problems) = action == .check ? ([], []) : specs()
         var lines = problems.map { "init.lua: \($0)" }
         var ok = problems.isEmpty
         let lockfile: Lockfile
@@ -172,11 +174,11 @@ struct PackManager {
             }
             if specs.isEmpty { lines.append("No packages to install.") }
         case .check:
-            for spec in specs where spec.dir == nil {
-                guard let src = spec.src else { continue }
-                let update = check(spec, src: src, locked: lockfile.plugins[spec.name])
+            for (name, locked) in lockfile.plugins.sorted(by: { $0.key < $1.key }) where Self.isPackageName(name) {
+                let update = check(name, locked: locked)
                 checked.append(update)
                 lines.append(update.line)
+                lines += update.changes
                 if update.error != nil { ok = false }
             }
             if checked.isEmpty { lines.append("No packages to check.") }
@@ -192,10 +194,50 @@ struct PackManager {
         return Report(lines: lines, ok: ok, updates: checked)
     }
 
-    /// `check`'s result for each package, for the window. A busy run, an unreadable lockfile, and init.lua errors
-    /// appear only in run(.check)'s lines.
+    /// `check`'s result for each package, for the window. A busy run and an unreadable lockfile appear only in
+    /// run(.check)'s lines.
     func checkUpdates() -> [PackUpdate] {
         run(.check).updates
+    }
+
+    /// Moves each package to the commit `check` found for it, and no other: what the user reviewed is what
+    /// installs. Runs no Lua.
+    func apply(_ updates: [PackUpdate]) -> Report {
+        guard let lock = FolderLock(path.packs.appending(path: ".locky-pack.lock")) else {
+            return Report(lines: ["Another package run is in progress. Try again when it finishes."], ok: false)
+        }
+        defer { lock.release() }
+        var lockfile: Lockfile
+        do {
+            lockfile = try Self.readLockfile(path.lockfile)
+        } catch {
+            return Report(lines: ["cannot read \(LuaError.shortenPaths(path.lockfile.path)): \(error.localizedDescription). Fix or delete it; nothing was changed."], ok: false)
+        }
+        var lines: [String] = [], ok = true
+        for update in updates {
+            let dir = path.packs.appending(path: update.name)
+            guard Self.isPackageName(update.name), let latest = update.latest, Self.isRevision(latest), isClone(dir),
+                  let entry = lockfile.plugins[update.name], entry.rev == update.current else {
+                lines.append("\(update.name): changed since the check; check again")
+                ok = false
+                continue
+            }
+            let checkout = runGit(["-C", dir.path, "checkout", "--quiet", "--detach", "--end-of-options", latest])
+            guard checkout.ok else {
+                lines.append("\(update.name): cannot check out \(latest.prefix(7)): \(checkout.error)")
+                ok = false
+                continue
+            }
+            lockfile.plugins[update.name]?.rev = latest
+            lines.append("updated \(update.name) \(entry.rev.prefix(7)) → \(latest.prefix(7))")
+        }
+        do {
+            try writeLockfile(lockfile)
+        } catch {
+            ok = false
+            lines.append("cannot write \(LuaError.shortenPaths(path.lockfile.path)): \(error.localizedDescription)")
+        }
+        return Report(lines: lines, ok: ok)
     }
 
     /// A real git clone: a folder (not a symlink) with its own .git.
@@ -251,21 +293,21 @@ struct PackManager {
         let rev = runGit(["-C", dir.path, "rev-parse", "HEAD"]).output
         lockfile.plugins[spec.name] = Lockfile.Entry(src: src, rev: rev, version: spec.version)
         if fresh { return ("installed \(spec.name) at \(rev.prefix(7))", true) }
-        if before != rev { return ("updated \(spec.name) \(before.prefix(7)) → \(rev.prefix(7))", true) }
+        if before != rev {
+            return ((["updated \(spec.name) \(before.prefix(7)) → \(rev.prefix(7))"] + changes(in: dir, from: before, to: rev)).joined(separator: "\n"), true)
+        }
         return ("\(spec.name) is up to date (\(rev.prefix(7)))", true)
     }
 
-    /// Fetches an installed package and finds the commit `update` would move it to, without moving it.
-    private func check(_ spec: Spec, src: String, locked: Lockfile.Entry?) -> PackUpdate {
-        let dir = path.packs.appending(path: spec.name)
-        guard isClone(dir) else { return PackUpdate(name: spec.name) }
-        // Installed, but the lockfile has no commit for it (dotfiles without the lockfile): there is nothing to
-        // compare with until sync pins one.
-        guard let locked else { return PackUpdate(name: spec.name, unlocked: true) }
-        var result = PackUpdate(name: spec.name, current: locked.rev)
-        // The clone still fetches from the old source; sync moves it to the new one.
-        guard origin(dir) == src else {
-            result.error = "its source is now \(src); run `locky pack sync`"
+    /// Fetches a package the lockfile pins and finds the commit `update` would move it to, with the commits and the
+    /// diffstat between, without moving it.
+    private func check(_ name: String, locked: Lockfile.Entry) -> PackUpdate {
+        let dir = path.packs.appending(path: name)
+        guard isClone(dir) else { return PackUpdate(name: name) }
+        var result = PackUpdate(name: name, current: locked.rev)
+        // The clone still fetches from another source; sync moves it to the locked one.
+        guard origin(dir) == locked.src else {
+            result.error = "its source is now \(locked.src); run `locky pack sync`"
             return result
         }
         guard fetch(dir) else {
@@ -273,14 +315,25 @@ struct PackManager {
             return result
         }
         // As update resolves it: a branch follows origin; a tag or a commit is used as it is.
-        let target = spec.version.map { hasCommit("origin/\($0)", in: dir) ? "origin/\($0)" : $0 } ?? "origin/HEAD"
+        let target = locked.version.map { hasCommit("origin/\($0)", in: dir) ? "origin/\($0)" : $0 } ?? "origin/HEAD"
         let latest = runGit(["-C", dir.path, "rev-parse", "--verify", "--quiet", "--end-of-options", "\(target)^{commit}"])
         guard latest.ok else {
-            result.error = "cannot find \(spec.version ?? "the default branch") upstream"
+            result.error = "cannot find \(locked.version ?? "the default branch") upstream"
             return result
         }
         result.latest = latest.output
+        if latest.output != locked.rev { result.changes = changes(in: dir, from: locked.rev, to: latest.output) }
         return result
+    }
+
+    /// The commits from `old` to `new`, one line each, and the diffstat, indented. A commit message may hold
+    /// terminal escapes: control characters are dropped.
+    private func changes(in dir: URL, from old: String, to new: String) -> [String] {
+        guard Self.isRevision(old), Self.isRevision(new) else { return [] }
+        let log = runGit(["-C", dir.path, "log", "--oneline", "--no-decorate", "--end-of-options", "\(old)..\(new)"]).output
+        let stat = runGit(["-C", dir.path, "diff", "--stat", "--end-of-options", old, new], timeout: networkTimeout).output
+        let clean = { (line: Substring) in "  " + String(String.UnicodeScalarView(line.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) })) }
+        return (log.split(separator: "\n") + stat.split(separator: "\n")).map(clean)
     }
 
     /// The source the clone fetches from, as its config says it, without url.<base>.insteadOf applied.
@@ -377,14 +430,12 @@ struct PackUpdate: Equatable {
     var latest: String?
     /// Why the check failed.
     var error: String?
-    /// Installed, but the lockfile has no commit for it.
-    var unlocked = false
+    /// For an update: its commits, one line each, then its diffstat, indented.
+    var changes: [String] = []
 
-    /// "name: up to date", "name: update available abc1234 → def5678", "name: not installed", "name: not locked; …",
-    /// or the error.
+    /// "name: up to date", "name: update available abc1234 → def5678", "name: not installed", or the error.
     var line: String {
         if let error { return "\(name): \(error)" }
-        if unlocked { return "\(name): not locked; run `locky pack sync`" }
         guard let current, let latest else { return "\(name): not installed" }
         return current == latest ? "\(name): up to date" : "\(name): update available \(current.prefix(7)) → \(latest.prefix(7))"
     }

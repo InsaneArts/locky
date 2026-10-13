@@ -39,7 +39,7 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 | `battery_saver` | `true`: on battery or in Low Power Mode, nothing moves | Settings › Power |
 | `display_off` | Seconds on the lock screen without input before the displays turn off | Settings › Power |
 | `intruder_photo` | Take a camera photo at this many wrong passwords in one lock | Settings › Security |
-| `update_check` | `false` stops the daily plugin update check (default `true`) | Settings › Plugins |
+| `update_check` | `false` stops the daily plugin update check, which fetches and compares commits and runs no plugin code (default `true`) | Settings › Plugins |
 | `editor`, `terminal` | What "Open in" uses: an app's bundle id, a command (`"nvim"`), or `"default"`; a terminal's bundle id | Config › Open in |
 
 ## Theme changes

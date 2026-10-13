@@ -188,6 +188,15 @@ import Testing
         return manager
     }
 
+    /// What check found, without the commits and diffstat.
+    private func found(_ manager: PackManager) -> [PackUpdate] {
+        manager.checkUpdates().map { update in
+            var update = update
+            update.changes = []
+            return update
+        }
+    }
+
     /// Commits a new greeting upstream on `branch` and returns the commit.
     private func commit(_ greeting: String, on branch: String = "main", in repo: URL) throws -> String {
         try git(["checkout", "--quiet", branch], in: repo)
@@ -216,8 +225,8 @@ import Testing
         let new = try commit("hi", in: repo)
         let report = manager.run(.check)
         #expect(report.ok)
-        #expect(report.text == "hello: update available \(old.prefix(7)) → \(new.prefix(7))")
-        #expect(manager.checkUpdates() == [PackUpdate(name: "hello", current: old, latest: new)])
+        #expect(report.lines.first == "hello: update available \(old.prefix(7)) → \(new.prefix(7))")
+        #expect(found(manager) == [PackUpdate(name: "hello", current: old, latest: new)])
     }
 
     @Test func aPinnedCommitIsNeverAnUpdate() throws {
@@ -238,7 +247,7 @@ import Testing
         _ = try commit("main only", in: repo)
         #expect(manager.run(.check).text == "hello: up to date")
         let new = try commit("dev only", on: "dev", in: repo)
-        #expect(manager.checkUpdates() == [PackUpdate(name: "hello", current: old, latest: new)])
+        #expect(found(manager) == [PackUpdate(name: "hello", current: old, latest: new)])
     }
 
     @Test func aTagMeansItsCommit() throws {
@@ -252,7 +261,7 @@ import Testing
         let old = try git(["rev-parse", "HEAD"], in: repo)
         let new = try commit("hi", in: repo)
         try git(tag, in: repo)
-        #expect(manager.checkUpdates() == [PackUpdate(name: "hello", current: old, latest: new)])
+        #expect(found(manager) == [PackUpdate(name: "hello", current: old, latest: new)])
     }
 
     @Test func aMissingCloneIsNotInstalledAndStaysMissing() throws {
@@ -268,16 +277,16 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: clone.path))
     }
 
-    /// Dotfiles without the lockfile: the clone is there, but nothing pins it. That is not "not installed".
-    @Test func aCloneWithoutALockEntryIsNotLocked() throws {
+    /// check reads the lockfile: without one, there is nothing to check, whatever init.lua adds.
+    @Test func withoutALockfileThereIsNothingToCheck() throws {
         let sandbox = try Sandbox()
         let repo = try makePlugin(in: sandbox, greeting: "hello")
         let manager = try synced(repo, in: sandbox)
         try FileManager.default.removeItem(at: sandbox.path().lockfile)
         let report = manager.run(.check)
         #expect(report.ok)
-        #expect(report.text == "hello: not locked; run `locky pack sync`")
-        #expect(report.updates == [PackUpdate(name: "hello", unlocked: true)])
+        #expect(report.text == "No packages to check.")
+        #expect(report.updates.isEmpty)
     }
 
     @Test func checkMovesNoCheckoutAndNoLockfile() throws {
@@ -290,16 +299,57 @@ import Testing
         let lockfile = try Data(contentsOf: sandbox.path().lockfile)
 
         #expect(manager.run(.check).text.contains("update available"))
-        // A source changed in init.lua is reported, and the clone keeps fetching from the old one until sync.
-        try sandbox.write("init.lua", "locky.pack.add({ { src = \"\(address)-moved\", name = \"hello\" } })")
-        let moved = manager.run(.check)
-        #expect(!moved.ok)
-        #expect(moved.text == "hello: its source is now \(address)-moved; run `locky pack sync`")
-
         #expect(try git(["rev-parse", "HEAD"], in: clone) == head)
         #expect(try git(["status", "--porcelain"], in: clone).isEmpty)
         #expect(try git(["remote", "get-url", "origin"], in: clone) == address)
         #expect(try Data(contentsOf: sandbox.path().lockfile) == lockfile)
+    }
+
+    /// The daily check runs in the background: it must not run init.lua or any plugin's code.
+    @Test func checkRunsNoLua() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        let marker = sandbox.root.appending(path: "ran")
+        try sandbox.write("init.lua", "io.open('\(marker.path)', 'w'):close() error('init.lua ran')")
+        try "io.open('\(marker.path)', 'w'):close()".write(to: sandbox.packs.appending(path: "hello/plugin.lua"), atomically: true, encoding: .utf8)
+        let report = manager.run(.check)
+        #expect(report.ok)
+        #expect(report.text == "hello: up to date")
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    /// What an update brings, before it applies: each commit and the diffstat.
+    @Test func checkAndUpdateListTheCommits() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        let new = try commit("hi\u{1b}[31m", in: repo)
+        let report = manager.run(.check)
+        let update = try #require(report.updates.first)
+        #expect(update.changes.count == 3, "\(update.changes)")
+        #expect(update.changes.first == "  \(new.prefix(7)) hi[31m")
+        #expect(update.changes.last?.contains("1 file changed, 1 insertion(+), 1 deletion(-)") == true)
+        #expect(report.lines == [update.line] + update.changes)
+        // locky pack update prints the same lines as it moves.
+        #expect(manager.run(.update).lines == ["updated hello \(update.current!.prefix(7)) → \(new.prefix(7))\n" + update.changes.joined(separator: "\n")])
+    }
+
+    /// Update in the window installs the commit the user reviewed, even if upstream moved on since.
+    @Test func applyMovesToTheReviewedCommit() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        let reviewed = try commit("hi", in: repo)
+        let updates = manager.checkUpdates()
+        _ = try commit("later", in: repo)
+        _ = manager.run(.check)
+        let report = manager.apply(updates)
+        #expect(report.ok, "\(report.lines)")
+        #expect(try git(["rev-parse", "HEAD"], in: sandbox.packs.appending(path: "hello")) == reviewed)
+        #expect(try PackManager.readLockfile(sandbox.path().lockfile).plugins["hello"]?.rev == reviewed)
+        // A review that no longer matches the lockfile applies nothing.
+        #expect(!manager.apply(updates).ok)
     }
 
     @Test func onlyEncryptedSourcesAreAccepted() throws {

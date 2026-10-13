@@ -163,9 +163,11 @@ A source is `"user/repo"` (GitHub), or an `https://`, `ssh://`, or `git@` addres
 `git://`, and `file://`, even through a redirect: anyone on the network could change what they send. For a
 folder on your Mac, use `{ dir = ... }`.
 
-`locky pack update` moves every package to the newest commit of its version and rewrites
-`locky-pack-lock.json`; `locky pack clean` deletes packages `init.lua` no longer adds.
-`locky pack check` fetches and lists the packages `update` would move, and moves none.
+`locky pack update` moves every package to the newest commit of its version, rewrites `locky-pack-lock.json`,
+and lists each moved package's new commits and diffstat; `locky pack clean` deletes packages `init.lua` no
+longer adds. `locky pack check` fetches the packages the lockfile pins and lists the ones `update` would move,
+with the same commits and diffstat, and moves none. It runs no Lua, so no plugin code runs: the Locky app runs
+it once a day in the background.
 
 Follow Neovim's conventions: `setup(opts)` only merges options (use `locky.tbl.deep_extend`), keep
 `plugin/<name>.lua` small, and give every option a default.
