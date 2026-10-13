@@ -75,6 +75,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                      behind: launch.behind, settings: store.settings))
         }
         if let section = launch.window {
+            // Only a launch is a screenshot run: its previews keep running behind other windows.
+            model.screenshots = launch.behind
             open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: launch.behind, size: launch.size)
         } else if launch.mode == nil, WelcomeView.opensAtLaunch(.standard, isTool: tool) {
             showWindow(.welcome)
@@ -137,15 +139,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             start(.lock, options: LockSession.Options(theme: launch.theme ?? scheduledTheme(), settings: store.settings))
         case .preview?: preview(theme: launch.theme)
         default:
-            open(launch.window ?? .themes, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: launch.behind, size: launch.size)
+            // In front: a screenshot run takes no requests, so a request that says --behind is not from Locky.
+            open(launch.window ?? .themes, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: false, size: launch.size)
         }
     }
 
     /// `Locky window`: a window or a Settings pane. For the Themes window, Customize for `theme`, or for the theme in use
     /// with Add Widget open (`widgets`); else the gallery.
     private func open(_ section: AppModel.Section, theme: String?, widgets: Bool, behind: Bool, size: CGSize?) {
-        // Only a launch is behind: a tool run takes no requests.
-        if behind { model.screenshots = true }
         showWindow(section, behind: behind, size: size)
         guard section == .themes else { return }
         if let theme {
