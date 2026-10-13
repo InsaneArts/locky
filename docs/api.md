@@ -44,7 +44,7 @@ Everything a widget starts stops when the screen unlocks or the widget fails.
 | `locky.cancel(timer)` | Stops a timer. |
 | `locky.now()` | Seconds since 1970 with fractions, for motion finer than `os.time`'s whole seconds. |
 | `locky.on(event, fn)` | `"lock"` (the screen locked), `"unlock"` (about to close), `"auth_failed"` (a wrong password), `"auth_shown"` and `"auth_hidden"` (the password field appeared or went away, in themes with `auth.reveal = "activity"`). No event carries any part of a password. |
-| `locky.system(cmd, opts, on_exit)` | Runs a program without a shell and without waiting, like `vim.system`. `cmd` is a list: `{ "pmset", "-g", "batt" }`. `opts`: `cwd`, `env` (table), `stdin` (string), `timeout` (seconds, default 10). `on_exit(result)`: `code`, `signal`, `stdout`, `stderr`, `timed_out`. A missing program gives code 127. Homebrew's folders are on `PATH`. Returns a process. |
+| `locky.system(cmd, opts, on_exit)` | Runs a program without a shell and without waiting, like `vim.system`. `cmd` is a list: `{ "pmset", "-g", "batt" }`. `opts`: `cwd`, `env` (table), `stdin` (string), `timeout` (seconds, default 10). `on_exit(result)`: `code`, `signal`, `stdout`, `stderr`, `timed_out`. A missing program gives code 127. Homebrew's folders are on `PATH`. Returns a process. An installed plugin needs the `"system"` grant ([plugins.md](plugins.md#what-a-plugin-may-do)). |
 | `locky.kill(process)` | Stops a process. |
 
 ## System

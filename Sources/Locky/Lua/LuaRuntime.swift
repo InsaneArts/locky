@@ -335,7 +335,8 @@ final class LuaRuntime: @unchecked Sendable {
     /// Runs Lua source in this state and returns its results. On the queue.
     func evaluate(_ source: String, budget: Double) throws -> [LuaValue] {
         guard let vm else { throw LuaError("Lua is not running") }
-        let chunk = try vm.load(source, chunkName: "=eval")
+        // "@": the host's own code, as trusted as a file of the user's.
+        let chunk = try vm.load(source, chunkName: "@eval")
         defer { vm.release(chunk) }
         return try vm.call(chunk, budget: budget)
     }
@@ -503,6 +504,9 @@ final class LuaRuntime: @unchecked Sendable {
                 let found = path.findAll(try call.string(1, "folder"), suffix: try call.string(2, "suffix"))
                 return [.array(found.map { .table(["name": .string($0.name), "path": .string($0.url.path)]) })]
             },
+            "plugin_of": { [unowned self] call in
+                [Self.plugin(of: try call.string(1, "path"), packs: path.packs).map(LuaValue.string) ?? .nil]
+            },
             "pack_add": { [unowned self] call in
                 let name = try call.string(1, "name")
                 let dir = try call.optionalString(2, "dir")
@@ -653,6 +657,28 @@ final class LuaRuntime: @unchecked Sendable {
 
     static func expand(_ path: String) -> URL {
         URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+    }
+
+    /// The folder name of the third-party plugin in `packs` that holds `file`, or nil. Both are compared as real
+    /// paths: "..", "~", and symlinks cannot move a file in or out.
+    static func plugin(of file: String, packs: URL) -> String? {
+        // The real path of the nearest folder that exists, and the rest as it is.
+        func real(_ path: String) -> String {
+            var url = URL(fileURLWithPath: path).standardizedFileURL, rest = ""
+            while url.path != "/" {
+                if let resolved = realpath(url.path, nil) {
+                    defer { free(resolved) }
+                    return String(cString: resolved) + rest
+                }
+                rest = "/" + url.lastPathComponent + rest
+                url = url.deletingLastPathComponent()
+            }
+            return rest.isEmpty ? "/" : rest
+        }
+        let root = real(packs.path) + "/"
+        let path = real(expand(file).path)
+        guard path.hasPrefix(root) else { return nil }
+        return path.dropFirst(root.count).split(separator: "/").first.map(String.init)
     }
 
     // MARK: Timers

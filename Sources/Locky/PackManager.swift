@@ -25,6 +25,16 @@ struct PackManager {
         var src: String?
         var version: String?
         var dir: String?
+        /// What the user lets it do beyond reading: "system" (run programs) and "files" (change files).
+        var allow: [String] = []
+
+        /// "may run programs, may not change files"; a local folder is the user's own code, which needs no grant.
+        var grants: String {
+            if dir != nil { return "your own folder, no limits" }
+            return [("system", "run programs"), ("files", "change files")]
+                .map { (allow.contains($0.0) ? "may " : "may not ") + $0.1 }
+                .joined(separator: ", ")
+        }
     }
 
     struct Lockfile: Codable, Equatable {
@@ -61,7 +71,8 @@ struct PackManager {
             }
             let problems = runtime.problemsSoFar
             let list = (try? runtime.call("pack_specs", budget: LuaRuntime.Budget.callback).first?.array) ?? []
-            let specs = list.map { Spec(name: $0["name"].string ?? "?", src: $0["src"].string, version: $0["version"].string, dir: $0["dir"].string) }
+            let specs = list.map { Spec(name: $0["name"].string ?? "?", src: $0["src"].string, version: $0["version"].string, dir: $0["dir"].string,
+                                     allow: $0["allow"].array?.compactMap(\.string) ?? []) }
             return (specs, problems)
         }
     }

@@ -140,6 +140,15 @@ private struct PluginRow: View {
                 }
                 Text(source).font(.callout.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Text(Provides.text(model: model, folder: pack.folder)).font(.callout).foregroundStyle(.secondary)
+                if pack.dir == nil {
+                    HStack(spacing: 14) {
+                        grant("system", "Run programs")
+                        grant("files", "Change files")
+                    }
+                    .controlSize(.small)
+                    .disabled(!removable)
+                    .help(removable ? "What this plugin may do besides reading your files" : "Set allow = { ... } in its locky.pack.add entry in init.lua")
+                }
             }
             Spacer(minLength: 0)
             if !pack.installed, pack.dir == nil {
@@ -163,6 +172,18 @@ private struct PluginRow: View {
             .fixedSize()
         }
         .padding(.vertical, 3)
+    }
+
+    /// A checkbox for one capability, written to the plugin's settings.json entry.
+    private func grant(_ capability: String, _ title: String) -> some View {
+        Toggle(title, isOn: Binding(get: { pack.allow.contains(capability) }, set: { allowed in
+            model.store.update { settings in
+                settings.packs = settings.packs.map { spec in
+                    PackSpec.name(of: spec)?.lowercased() == pack.name.lowercased() ? PackSpec.allowing(capability, allowed, in: spec) : spec
+                }
+            }
+        }))
+        .toggleStyle(.checkbox)
     }
 
     private var source: String {
@@ -219,6 +240,16 @@ enum PackSpec {
         if let dir = spec["dir"].string { return dir.split(separator: "/").last.map(String.init) }
         guard let source = spec.string ?? spec["src"].string, let last = source.split(separator: "/").last.map(String.init) else { return nil }
         return last.hasSuffix(".git") ? String(last.dropLast(4)) : last
+    }
+
+    /// `spec` with `capability` ("system" or "files") allowed or not. A "user/repo" spec becomes { src = ... }.
+    static func allowing(_ capability: String, _ allowed: Bool, in spec: LuaValue) -> LuaValue {
+        var table = spec.string.map { ["src": LuaValue.string($0)] } ?? spec.table ?? [:]
+        var allow = table["allow"]?.array?.compactMap(\.string) ?? []
+        allow.removeAll { $0 == capability }
+        if allowed { allow.append(capability) }
+        table["allow"] = allow.isEmpty ? nil : .array(allow.map(LuaValue.string))
+        return .table(table)
     }
 
     /// Why `text` is not a source locky.pack.add takes, or nil when it is.
