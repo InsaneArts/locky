@@ -3,8 +3,9 @@
 A lock screen for macOS that you build like a Neovim config: themes and widgets are Lua plugins, drawn
 natively with SwiftUI and Metal.
 
-> Prototype. While the screen is locked, the system lock is off; Locky unlocks with Touch ID or your login
-> password. ⌃⌥⌘Q switches to the macOS lock screen.
+> Locky unlocks only with Touch ID or your login password. While it shows, the macOS lock screen is off; if
+> Locky crashes, hangs, or is killed, a guard process turns the macOS lock screen on, and ⌃⌥⌘Q switches to it.
+> [security.md](docs/security.md) says what Locky guarantees and what it does not.
 
 ## Build
 
@@ -97,6 +98,7 @@ locky window [SECTION]            the Locky window, at a page
 - [themes.md](docs/themes.md): themes, backgrounds, and shaders
 - [api.md](docs/api.md): the `locky` API
 - [settings.md](docs/settings.md): settings.json, which the window writes, and how it layers over init.lua
+- [security.md](docs/security.md): what the lock guarantees, what it does not, and how to report a vulnerability
 
 ## Layout
 
@@ -106,7 +108,9 @@ Sources/Locky/Lua/            the runtime: LuaVM, LuaRuntime, the runtime path, 
 Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the password field
 Sources/Locky/Window/         the Locky window: dashboard, theme editor, plugins, config, settings
 Sources/Locky/Settings/       settings.json, its store, and the theme schedule
-Sources/Locky/System/         the shortcut, auto-lock, login item, power, camera, and editors
+Sources/Locky/System/         the shortcut, auto-lock, login item, power, camera, editors, and the guard's Locky side
+Sources/GuardCore/            the guard's watch and the macOS lock screen call, shared by Locky and locky-guard
+Sources/LockyGuard/           locky-guard, which locks the Mac if Locky dies or hangs during a lock
 Sources/Locky/Resources/
   runtime/                    lua/locky (core, ui), plugin/ (core widgets), themes/, shaders/, types/
   packages/                   the built-in theme packages, one folder each
