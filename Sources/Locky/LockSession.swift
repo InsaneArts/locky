@@ -145,6 +145,9 @@ final class LockSession: NSObject, NSWindowDelegate {
             touchIDPicture = true
         }
 
+        // A check that hangs leaves the field disabled: the message then names ⌃⌥⌘Q, and grows.
+        authModel.onSlowCheck = { [weak self] in self?.screens.first?.needsLayout = true }
+
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
         openWindows()
         if let first = screens.first {
@@ -513,6 +516,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Counts a wrong password; at settings.json's intruder_photo, takes one photo with the camera. The camera
     /// never asks for permission here: Settings asks when the photo is turned on.
     private func wrongPassword() {
+        // From the third, the message names ⌃⌥⌘Q, and grows.
+        screens.first?.needsLayout = true
         guard mode == .lock, intruder.wrongPassword() else { return }
         capturing = Task { [weak self] in
             do {
@@ -607,8 +612,11 @@ final class LockSession: NSObject, NSWindowDelegate {
                 }
             }
             if main {
-                screen.message = started.message.map { NSHostingController(rootView: LockMessage(text: $0, auth: theme.auth, style: style)) }
-                if mode == .lock, emergencyExit { screen.banner = NSHostingView(rootView: SafetyBanner()) }
+                // A lock with ⌃⌥⌘Q always has the view: the line naming it may join the message.
+                let exit = mode == .lock && emergencyExit
+                screen.message = started.message != nil || exit
+                    ? NSHostingController(rootView: LockMessage(text: started.message, model: authModel, exit: exit, auth: theme.auth, style: style))
+                    : nil
                 if mode != .lock, !started.problems.isEmpty {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
                 }
@@ -1125,19 +1133,6 @@ final class LockScreenView: NSView {
         // A field near an edge (Poster's is at the bottom left) must not push a long message off the screen.
         let kept = Layout.keep(CGRect(x: x, y: y, width: size.width, height: size.height), inside: bounds, margin: 16 * scale)
         return CGRect(x: kept.minX, y: y, width: size.width, height: size.height).integral
-    }
-}
-
-/// Says the way out that never lets anyone in.
-struct SafetyBanner: View {
-    var body: some View {
-        Text("⌃⌥⌘Q switches to the macOS lock screen")
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.white.opacity(0.6))
-            .padding(.horizontal, 12)
-            .frame(height: 28)
-            .background(.black.opacity(0.35), in: Capsule())
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

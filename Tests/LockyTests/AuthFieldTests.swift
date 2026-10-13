@@ -269,6 +269,53 @@ import Testing
     }
 }
 
+/// The lock names ⌃⌥⌘Q under the field once someone looks stuck, and only then.
+@MainActor
+@Suite struct WayOutTests {
+    /// The message's height before and after `change`, laid out as the lock does it: the session asks for a layout,
+    /// and AppKit lays the screen out on its next pass. The window sits far off the screen.
+    private func messageHeight(exit: Bool, _ change: (AuthModel) async throws -> Void) async throws -> (before: CGFloat, after: CGFloat) {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 1440, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.orderOut(nil) }
+        let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        window.contentView = screen
+        window.orderBack(nil)
+        screen.auth = (NSView(), Theme.Auth())
+        screen.authSize = CGSize(width: 240, height: 64)
+        let model = AuthModel(slowAfter: .milliseconds(50))
+        screen.message = NSHostingController(rootView: LockMessage(text: nil, model: model, exit: exit, auth: Theme.Auth(), style: LockyStyle()))
+        screen.layoutSubtreeIfNeeded()
+        let before = screen.message?.view.frame.height ?? -1
+        try await change(model)
+        screen.needsLayout = true
+        try await Task.sleep(for: .milliseconds(100))
+        return (before, screen.message?.view.frame.height ?? -1)
+    }
+
+    @Test func theThirdWrongPasswordNamesTheWayOut() async throws {
+        let twice = try await messageHeight(exit: true) { model in for _ in 0..<2 { model.failed() } }
+        #expect(twice.before == 0 && twice.after == 0)
+        let thrice = try await messageHeight(exit: true) { model in for _ in 0..<3 { model.failed() } }
+        #expect(thrice.before == 0 && thrice.after > 0)
+    }
+
+    @Test func aCheckThatHangsNamesTheWayOut() async throws {
+        let hung = try await messageHeight(exit: true) { model in
+            _ = model.beginCheck()
+            let deadline = Date().addingTimeInterval(3)
+            while !model.slowCheck, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        }
+        #expect(hung.before == 0 && hung.after > 0)
+    }
+
+    @Test func withoutTheExitNothingIsNamed() async throws {
+        let off = try await messageHeight(exit: false) { model in for _ in 0..<3 { model.failed() } }
+        #expect(off.after == 0)
+    }
+}
+
 @Suite struct SafeLayoutTests {
     private let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
     private let size = CGSize(width: 240, height: 64)
