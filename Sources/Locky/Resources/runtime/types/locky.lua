@@ -308,7 +308,8 @@ locky.date = {}
 ---@param template string
 ---@param time number?
 ---@return string
-function locky.date.format(template, time) end
+---@param zone string? A time zone such as "Asia/Tokyo"; the Mac's when nil.
+function locky.date.format(template, time, zone) end
 ---@return { identifier: string, language: string, hour24: boolean, first_weekday: integer, weekdays: string[], weekdays_short: string[], weekdays_abbreviated: string[], months: string[], months_short: string[] }
 function locky.date.locale() end
 

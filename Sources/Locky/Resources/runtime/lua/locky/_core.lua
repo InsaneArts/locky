@@ -541,13 +541,14 @@ locky.date = {
   --- Formats a time (seconds since 1970, default now): "time" and "date" give the system's own short time
   --- and long date; a pattern such as "EEEE d MMMM" or "HH:mm" is used as it is (names in the user's
   --- language); "skeleton:EEEEdMMMM" orders and punctuates those fields the user's way.
-  format = function(template, time)
+  format = function(template, time, zone)
     validate("template", template, "string")
     validate("time", time, "number", true)
+    validate("zone", zone, "string", true)
     if template == "time" and type(locky.config.hour24) == "boolean" then
       template = locky.config.hour24 and "HH:mm" or "h:mm"
     end
-    return native.date_format(template, time or os.time())
+    return native.date_format(template, time or os.time(), zone)
   end,
   --- The user's language, weekdays, months, first weekday, and hour24 (locky.config.hour24 when it is set).
   locale = function()

@@ -638,7 +638,12 @@ final class LuaRuntime: @unchecked Sendable {
             "date_format": { call in
                 let template = try call.string(1, "template")
                 let time = try call.number(2, "time")
-                return [.string(SystemInfo.format(Date(timeIntervalSince1970: time), template))]
+                var zone: TimeZone?
+                if let name = try call.optionalString(3, "zone") {
+                    guard let found = TimeZone(identifier: name) else { throw LuaError("unknown time zone \"\(name)\"; use a name such as \"Europe/Paris\"") }
+                    zone = found
+                }
+                return [.string(SystemInfo.format(Date(timeIntervalSince1970: time), template, zone: zone))]
             },
             "locale": { _ in [SystemInfo.locale()] },
         ]

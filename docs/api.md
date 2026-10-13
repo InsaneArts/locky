@@ -64,7 +64,7 @@ Everything a widget starts stops when the screen unlocks or the widget fails.
 | `locky.sys.screen()` | The main display: `width`, `height` (points), `scale` (what Locky multiplies theme sizes by), and `layout_width`, `layout_height`: the size in theme units, so a widget can span or measure the screen. |
 | `locky.sys.wallpaper()` | The main display's desktop picture as an image file path, or nil. For a dynamic wallpaper this is its thumbnail. |
 | `locky.sys.wallpaper_colors()` | Its dominant colors, most common first, as `"#rrggbb"` (up to 5; empty without a wallpaper). A theme can build its palette from them, like Material You. |
-| `locky.date.format(template, time)` | A date: `"time"` (24- or 12-hour as `locky.config.hour24` forces, when set), `"date"`, a pattern used as it is (`"EEEE d MMMM"`, `"HH:mm"`), or `"skeleton:EEEEdMMMM"` (ordered the user's way). Names come in the user's language. `time` defaults to now. |
+| `locky.date.format(template, time, zone)` | A date: `"time"` (24- or 12-hour as `locky.config.hour24` forces, when set), `"date"`, a pattern used as it is (`"EEEE d MMMM"`, `"HH:mm"`), or `"skeleton:EEEEdMMMM"` (ordered the user's way). Names come in the user's language. `time` defaults to now; `zone` (such as `"Asia/Tokyo"`) shows it in another time zone, and the pattern `"ZZZZZ"` gives that zone's offset (`+09:00`). |
 | `locky.date.locale()` | `identifier`, `language`, `hour24` (`locky.config.hour24` when set), `first_weekday` (1 is Sunday), `weekdays`, `weekdays_short`, `weekdays_abbreviated`, `months`, `months_short`. |
 
 ## Files and data
