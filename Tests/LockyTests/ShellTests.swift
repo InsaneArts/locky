@@ -138,6 +138,31 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: sandbox.config.appending(path: "themes/tokyo-night-copy-2.lua").path))
     }
 
+    /// The theme commands the main menu sends, as the Themes window answers them.
+    @Test func theMenuCommandsFollowCustomize() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        let controller = LockyWindowController(model: model, onClose: {})
+        func item(_ action: Selector) -> NSMenuItem { NSMenuItem(title: "", action: action, keyEquivalent: "") }
+        func enabled(_ action: Selector) -> Bool { controller.validateMenuItem(item(action)) }
+        typealias Commands = LockyWindowController
+        // The gallery: Import and Customize, nothing that needs a theme in Customize.
+        #expect(enabled(#selector(Commands.importTheme(_:))) && enabled(#selector(Commands.customizeTheme(_:))))
+        #expect(!enabled(#selector(Commands.useTheme(_:))) && !enabled(#selector(Commands.addWidget(_:))) && !enabled(#selector(Commands.trashTheme(_:))))
+        model.customize("mine")
+        #expect(!enabled(#selector(Commands.customizeTheme(_:))))
+        #expect(enabled(#selector(Commands.useTheme(_:))) && enabled(#selector(Commands.trashTheme(_:))) && enabled(#selector(Commands.duplicateTheme(_:))))
+        // A theme written in Lua cannot be exported, and nothing has changed it yet.
+        #expect(!enabled(#selector(Commands.exportTheme(_:))) && !enabled(#selector(Commands.revertTheme(_:))))
+        model.use("mine")
+        #expect(!enabled(#selector(Commands.useTheme(_:))))
+        model.customize("default")
+        #expect(enabled(#selector(Commands.exportTheme(_:))) && !enabled(#selector(Commands.trashTheme(_:))))
+        let inspector = item(#selector(Commands.toggleInspector(_:)))
+        #expect(controller.validateMenuItem(inspector) && inspector.title == "Hide Inspector")
+    }
+
     /// Light content takes the dark press overlay, as the lock window's appearance does.
     @Test(arguments: [("#F1EFE8", true), ("#02040a", false), (nil, false)] as [(String?, Bool)])
     func aColorIsLightByTheLockWindowsRule(_ hex: String?, _ light: Bool) {
