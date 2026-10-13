@@ -796,13 +796,13 @@ final class LockScreenView: NSView {
     }
     var authSize: CGSize = .zero { didSet { needsLayout = true } }
     private(set) var authVisible = true
-    /// Where a hidden password field will appear: "Press any key to unlock".
+    /// Where a hidden password field will appear: "Press any key to unlock". Under the field, which takes the clicks.
     var glanceHint: NSView? {
         didSet {
             oldValue?.removeFromSuperview()
             if let glanceHint {
                 glanceHint.alphaValue = authVisible ? 0 : 1
-                addSubview(glanceHint)
+                if let field = auth?.view { addSubview(glanceHint, positioned: .below, relativeTo: field) } else { addSubview(glanceHint) }
             }
             needsLayout = true
         }

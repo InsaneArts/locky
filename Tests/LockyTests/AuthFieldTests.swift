@@ -190,6 +190,9 @@ import Testing
         #expect(abs(hint.frame.midX - field.frame.midX) <= 1 && abs(hint.frame.midY - field.frame.midY) <= 1)
         screen.setAuthVisible(true, dim: 0, animated: false)
         #expect(hint.alphaValue == 0)
+        // The hint lies under the field, so a click where it was reaches the field.
+        let hit = screen.hitTest(hint.convert(CGPoint(x: hint.bounds.midX, y: hint.bounds.midY), to: screen.superview))
+        #expect(hit?.isDescendant(of: field) == true, "the click reaches \(String(describing: hit))")
     }
 
     @Test func aFieldThatAlwaysShowsHasNoHint() async throws {
