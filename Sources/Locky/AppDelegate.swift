@@ -137,8 +137,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Opening Locky again (from Finder, Spotlight, or the Dock) opens its window.
+    /// Opening Locky again (from Finder, Spotlight, or the Dock) opens its window, except during a lock: the
+    /// window would take the keyboard from the lock.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard session?.mode != .lock else {
+            LogFile.shared.write(level: "warn", message: "ignored a reopen during a lock", source: "locky")
+            return false
+        }
         showWindow(nil)
         return false
     }
