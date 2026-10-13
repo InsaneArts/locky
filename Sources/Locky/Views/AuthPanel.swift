@@ -653,6 +653,21 @@ struct GlanceHint: View {
     }
 }
 
+/// The theme's bg behind the password stack, its message, and the glance hint: 70% over its inner half, gone at the
+/// edge. Where the scene matches its palette it does not show; over one that does not (bright snow under light
+/// text), it pulls the scene toward the bg that `Contrast.readable` measures the text against. A fade from the
+/// center leaves too little behind text near the stack's ends: Snowfall's status line read 3.5:1 at 70%.
+struct LegibilityScrim: View {
+    let color: Color
+
+    var body: some View {
+        EllipticalGradient(stops: [.init(color: color.opacity(0.7), location: 0.5), .init(color: color.opacity(0), location: 1)],
+                           center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 enum StyleWeights {
     static func weight(_ name: String) -> Font.Weight { LockyStyle.weights[name] ?? .regular }
 }

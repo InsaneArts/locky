@@ -384,3 +384,36 @@ import Testing
         #expect(screen.glanceHint == nil)
     }
 }
+
+@MainActor
+@Suite struct LegibilityScrimTests {
+    /// In every mode, the theme editor's preview too: right above the background, under the widgets, around the field
+    /// and the message.
+    @Test func theScrimLiesUnderTheWidgetsAroundTheFieldAndTheMessage() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { background = { color = '#101010' }, widgets = { { 'w', anchor = 'bottom' } } }")
+        try sandbox.write("plugin/w.lua", "locky.widget.define('w', { render = function(self) return locky.ui.text('w') end })")
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        options.settings = Settings(["message": .string("If found, call 555-0100")])
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        defer { session.end("test") }
+        let screen = try #require(container.subviews.first as? LockScreenView)
+        // Laid out as a window would: nothing else lays out a screen outside one.
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            screen.layoutSubtreeIfNeeded()
+            if screen.scrim != nil, screen.message != nil, screen.authSize.width > 0, !screen.widgets.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let scrim = try #require(screen.scrim), background = try #require(screen.background), widget = try #require(screen.widgets.first)
+        let field = try #require(screen.auth?.view.frame), message = try #require(screen.message?.view.frame)
+        let order = screen.subviews
+        #expect(order.firstIndex(of: scrim) == order.firstIndex(of: background).map { $0 + 1 })
+        #expect((order.firstIndex(of: scrim) ?? 99) < (order.firstIndex(of: widget) ?? -1))
+        #expect(!message.isEmpty && scrim.frame == field.union(message).insetBy(dx: -48, dy: -48).integral)
+        #expect(scrim.hitTest(CGPoint(x: scrim.frame.midX, y: scrim.frame.midY)) == nil)
+    }
+}

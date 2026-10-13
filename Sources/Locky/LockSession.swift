@@ -612,6 +612,10 @@ final class LockSession: NSObject, NSWindowDelegate {
                 }
             }
             if main {
+                // In every mode, so a preview shows what a lock shows.
+                let scrim = ScrimHost(rootView: LegibilityScrim(color: style.color("bg")))
+                scrim.setAccessibilityElement(false)
+                screen.scrim = scrim
                 // A lock with ⌃⌥⌘Q always has the view: the line naming it may join the message.
                 let exit = mode == .lock && emergencyExit
                 screen.message = started.message != nil || exit
@@ -900,6 +904,17 @@ final class LockScreenView: NSView {
     private var incomingBackground: NSView?
     /// The background the screen shows, or is about to: the one a change applies to.
     var latestBackground: NSView? { incomingBackground ?? background }
+    /// The legibility scrim behind the password field, its message, and the glance hint: right above the background,
+    /// so it dims neither the widgets nor the overlay above them.
+    var scrim: NSView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let scrim {
+                if let background { addSubview(scrim, positioned: .above, relativeTo: background) } else { addSubview(scrim, positioned: .below, relativeTo: nil) }
+            }
+            needsLayout = true
+        }
+    }
     /// Widgets fade in once they know their size. Off, they show at once: the theme editor's preview fades in
     /// whole.
     var fadesIn = true
@@ -1116,6 +1131,15 @@ final class LockScreenView: NSView {
         if let message {
             message.view.frame = messageFrame(size: message.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale)), scale: scale)
         }
+        if let scrim {
+            // Around the field and its message, with room to fade out. None while the field measures itself.
+            if let field = auth?.view.frame, authSize.width > 0 {
+                let text = message?.view.frame ?? .zero
+                scrim.frame = (text.isEmpty ? field : field.union(text)).insetBy(dx: -48 * scale, dy: -48 * scale).integral
+            } else {
+                scrim.frame = .zero
+            }
+        }
         banner?.frame = CGRect(x: 16, y: 16, width: min(bounds.width - 32, 640), height: 200)
         onLayout?()
     }
@@ -1134,6 +1158,11 @@ final class LockScreenView: NSView {
         let kept = Layout.keep(CGRect(x: x, y: y, width: size.width, height: size.height), inside: bounds, margin: 16 * scale)
         return CGRect(x: kept.minX, y: y, width: size.width, height: size.height).integral
     }
+}
+
+/// The legibility scrim's view. A decoration, like the overlay: it takes no clicks.
+final class ScrimHost: NSHostingView<LegibilityScrim> {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// Preview only: what went wrong in init.lua, plugins, or the theme.
