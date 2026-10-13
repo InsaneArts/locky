@@ -46,6 +46,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var started: LuaRuntime.Started?
     private var windows: [NSWindow] = []
     private var screens: [LockScreenView] = []
+    /// Shows the scene once it is ready. buildScreens starts it again, so a rebuild never runs two.
+    private var revealTask: Task<Void, Never>?
     private var hosts: [Int: [WidgetHost]] = [:]
     /// Each widget's latest view and failure, for widgets made later: a rebuilt display, or hosts that did
     /// not exist yet when a widget failed in its init.
@@ -180,7 +182,6 @@ final class LockSession: NSObject, NSWindowDelegate {
             let started = await runtime.start(theme: options.theme)
             guard !ended else { return }
             apply(started)
-            if mode == .embedded { await announceReady() }
         }
     }
 
@@ -191,15 +192,21 @@ final class LockSession: NSObject, NSWindowDelegate {
         hosts[id]?.forEach(update)
     }
 
-    /// Calls onReady once the theme shows whole, or after two seconds; from then on, widgets the editor adds
-    /// fade in.
-    private func announceReady() async {
-        let deadline = Date().addingTimeInterval(2)
-        while !ended, !isReady, Date() < deadline {
+    /// Shows the scene of every screen once the theme is whole, or after `limit`: one fade for a lock or a preview, at
+    /// once in the theme editor's preview, which onReady then tells.
+    private func revealWhenReady(within limit: Duration) async {
+        let deadline = ContinuousClock.now + limit
+        while !Task.isCancelled, !ended, !isReady, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(30))
         }
-        guard !ended else { return }
-        screens.first?.fadesIn = true
+        guard !Task.isCancelled, !ended else { return }
+        let animated = mode != .embedded
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = animated ? 0.25 : 0
+            context.timingFunction = Motion.easeOut
+            screens.forEach { $0.reveal(animated: animated) }
+        }, completionHandler: nil)
+        guard mode == .embedded else { return }
         let ready = onReady
         onReady = nil
         ready?()
@@ -220,6 +227,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         runtime?.stop()
         touchID?.stop()
         touchIDFallback?.cancel()
+        revealTask?.cancel()
         keyboardCheck?.cancel()
         if let keyTap {
             CGEvent.tapEnable(tap: keyTap.port, enable: false)
@@ -405,7 +413,14 @@ final class LockSession: NSObject, NSWindowDelegate {
     private static let kioskOptions: NSApplication.PresentationOptions = [.hideDock, .hideMenuBar, .disableProcessSwitching,
                                                                          .disableForceQuit, .disableSessionTermination, .disableHideApplication]
 
+    /// A palette's bg, opaque: what shows under the scene until it fades in.
+    private static func backdrop(_ palette: [String: String]) -> NSColor {
+        palette["bg"].flatMap { NSColor(hex: $0) }?.withAlphaComponent(1) ?? .black
+    }
+
     private func openWindows() {
+        // From the first frame, the last theme's bg: the scene fades in over it.
+        let backdrop = Self.backdrop(Self.lastLook?.palette ?? Theme.fallback.palette)
         switch mode {
         case .preview:
             let window = PreviewWindow(contentRect: CGRect(origin: .zero, size: options.previewSize), styleMask: [.titled, .closable, .resizable],
@@ -415,8 +430,9 @@ final class LockSession: NSObject, NSWindowDelegate {
             window.title = "Locky Preview"
             window.isReleasedWhenClosed = false
             window.delegate = self
-            window.backgroundColor = .black
+            window.backgroundColor = backdrop
             let screen = LockScreenView()
+            screen.layer?.backgroundColor = backdrop.cgColor
             window.contentView = screen
             if options.behind {
                 window.setContentSize(options.previewSize)
@@ -435,6 +451,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         case .embedded:
             guard let container = options.container else { return }
             let screen = LockScreenView(frame: CGRect(origin: .zero, size: options.previewSize))
+            screen.layer?.backgroundColor = backdrop.cgColor
             // The preview fades the whole screen in once it is ready.
             screen.fadesIn = false
             screen.onLayout = { [weak self] in self?.onLayout?() }
@@ -454,12 +471,13 @@ final class LockSession: NSObject, NSWindowDelegate {
                 window.allowsKey = index == 0
                 window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
                 window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-                window.backgroundColor = .black
+                window.backgroundColor = backdrop
                 window.hasShadow = false
                 window.isReleasedWhenClosed = false
                 // Mouse moves show a hidden password field and keep the displays on, also after a rebuild.
                 window.acceptsMouseMovedEvents = true
                 let view = LockScreenView()
+                view.layer?.backgroundColor = backdrop.cgColor
                 window.contentView = view
                 window.setFrame(screen.frame, display: true)
                 window.orderFrontRegardless()
@@ -580,6 +598,10 @@ final class LockSession: NSObject, NSWindowDelegate {
         } ?? false
         windows.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) }
         if mode == .embedded { screens.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) } }
+        // Under the theme's field until the scene shows: its own bg, as the next lock's first frame has it.
+        let backdrop = Self.backdrop(theme.palette)
+        windows.forEach { $0.backgroundColor = backdrop }
+        screens.forEach { $0.layer?.backgroundColor = backdrop.cgColor }
 
         if let first = screens.first {
             let style = LockyStyle(palette: theme.palette, font: theme.font, scale: Layout.scale(for: first.bounds.size))
@@ -625,8 +647,11 @@ final class LockSession: NSObject, NSWindowDelegate {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
                 }
             }
-            screen.reveal()
         }
+        // The scene waits until the theme is whole, or not long: a rebuild starts the wait again.
+        revealTask?.cancel()
+        let limit: Duration = mode == .embedded ? .seconds(2) : .milliseconds(500)
+        revealTask = Task { [weak self] in await self?.revealWhenReady(within: limit) }
     }
 
     // MARK: The theme editor
@@ -896,7 +921,11 @@ final class LockScreenView: NSView {
             oldValue?.removeFromSuperview()
             // The password field's dim goes onto the new background at the next layout.
             dimLayer.removeFromSuperlayer()
-            if let background { addSubview(background, positioned: .below, relativeTo: nil) }
+            if let background {
+                // Part of the scene, which shows when revealed.
+                if !revealed { background.alphaValue = 0 }
+                addSubview(background, positioned: .below, relativeTo: nil)
+            }
             needsLayout = true
         }
     }
@@ -927,6 +956,7 @@ final class LockScreenView: NSView {
             oldValue?.removeFromSuperview()
             // Above everything there is so far; the password field and banners come later and go on top.
             if let overlay {
+                if !revealed { overlay.alphaValue = 0 }
                 if let above = auth?.view ?? banner { addSubview(overlay, positioned: .below, relativeTo: above) } else { addSubview(overlay) }
             }
             needsLayout = true
@@ -1080,11 +1110,24 @@ final class LockScreenView: NSView {
         }
     }
 
-    /// Lets the themed content fade in, each widget once it knows its size.
-    func reveal() {
+    /// Shows the scene: the background, the overlay, and each widget that knows its size. Animated, it fades them in the
+    /// caller's animation group, which the session runs over every screen at once. A widget that measures later shows
+    /// alone.
+    func reveal(animated: Bool) {
+        // Widgets at their places before they show.
+        layoutSubtreeIfNeeded()
         revealed = true
-        needsLayout = true
+        var scene = [background, overlay].compactMap { $0 }
+        for widget in widgets where Self.measured(widget) && !shown.contains(ObjectIdentifier(widget)) {
+            shown.insert(ObjectIdentifier(widget))
+            scene.append(widget)
+        }
+        for view in scene {
+            if animated { view.animator().alphaValue = 1 } else { view.alphaValue = 1 }
+        }
     }
+
+    private static func measured(_ widget: WidgetHost) -> Bool { widget.placement.size != nil || widget.model.contentSize.width > 0 }
 
     override func layout() {
         super.layout()
@@ -1101,12 +1144,13 @@ final class LockScreenView: NSView {
         let scale = Layout.scale(for: bounds.size)
         for widget in widgets {
             widget.frame = widget.frame(in: bounds, scale: scale)
-            let measured = widget.placement.size != nil || widget.model.contentSize.width > 0
-            if revealed, measured, !shown.contains(ObjectIdentifier(widget)) {
+            // Measured after the scene showed: alone, as the scene came in.
+            if revealed, Self.measured(widget), !shown.contains(ObjectIdentifier(widget)) {
                 shown.insert(ObjectIdentifier(widget))
                 if fadesIn {
                     NSAnimationContext.runAnimationGroup { context in
-                        context.duration = 0.35
+                        context.duration = 0.25
+                        context.timingFunction = Motion.easeOut
                         widget.animator().alphaValue = 1
                     }
                 } else {

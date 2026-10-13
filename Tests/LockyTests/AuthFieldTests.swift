@@ -385,6 +385,55 @@ import Testing
     }
 }
 
+/// The lock's first frame is the last theme's bg with the password field; the scene comes in whole once it is ready.
+@MainActor
+@Suite struct SceneRevealTests {
+    private func widget(size: CGSize?) -> WidgetHost {
+        let placement = Theme.Placement(widget: "w", anchor: .center, offset: .zero, size: size, align: nil, card: nil, allDisplays: false, known: true)
+        return WidgetHost(placement: placement, theme: .fallback, style: LockyStyle(), showsErrors: true)
+    }
+
+    @Test func theSceneWaitsAndThenShowsWhole() {
+        let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        screen.fadesIn = false
+        let background = NSView(), overlay = NSView()
+        let sized = widget(size: CGSize(width: 100, height: 40)), unmeasured = widget(size: nil)
+        screen.background = background
+        screen.overlay = overlay
+        screen.add(sized)
+        screen.add(unmeasured)
+        screen.layoutSubtreeIfNeeded()
+        #expect([background, overlay, sized, unmeasured].allSatisfy { $0.alphaValue == 0 })
+        screen.reveal(animated: false)
+        #expect(background.alphaValue == 1 && overlay.alphaValue == 1 && sized.alphaValue == 1)
+        #expect(unmeasured.alphaValue == 0)
+        // Measured later, it shows alone.
+        unmeasured.model.contentSize = CGSize(width: 50, height: 20)
+        screen.needsLayout = true
+        screen.layoutSubtreeIfNeeded()
+        #expect(unmeasured.alphaValue == 1)
+    }
+
+    /// Under the scene, once the theme arrives: its own bg, opaque.
+    @Test func theScreenTakesTheThemesBg() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { palette = { bg = '#F1EFE8' }, background = { color = '#101010' } }")
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        defer { session.end("test") }
+        let screen = try #require(container.subviews.first as? LockScreenView)
+        let deadline = Date().addingTimeInterval(3)
+        while screen.background == nil, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        let color = try #require(screen.layer?.backgroundColor.flatMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) })
+        let expected = try #require(NSColor(hex: "#F1EFE8")?.usingColorSpace(.sRGB))
+        #expect(abs(color.redComponent - expected.redComponent) < 0.01 && abs(color.blueComponent - expected.blueComponent) < 0.01)
+        #expect(color.alphaComponent == 1)
+    }
+}
+
 @MainActor
 @Suite struct LegibilityScrimTests {
     /// In every mode, the theme editor's preview too: right above the background, under the widgets, around the field
