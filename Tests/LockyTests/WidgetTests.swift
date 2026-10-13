@@ -20,6 +20,18 @@ import Testing
         #expect(throws: (any Error).self) { try runtime.eval("return locky.date.format('HH:mm', 0, 'Mars/Olympus')") }
     }
 
+    /// Known 2024 phases: new moon 11 January 11:57 UTC, full moon 25 January 17:54 UTC.
+    @Test func theMoonMatchesKnownPhases() throws {
+        let runtime = runtime(try Sandbox())
+        defer { runtime.stop() }
+        let new = try runtime.eval("local m = require('locky.sky').moon(1704974220) return m.name, m.illumination")
+        #expect(new[0] == .string("New Moon") && (new[1].int ?? 99) <= 1)
+        let full = try runtime.eval("local m = require('locky.sky').moon(1706205240) return m.name, m.illumination, m.days_to_full")
+        #expect(full[0] == .string("Full Moon") && (full[1].int ?? 0) >= 99 && full[2] == .int(0))
+        let quarter = try runtime.eval("return require('locky.sky').moon(1704974220 + 7.4 * 86400).name")
+        #expect(quarter == [.string("First Quarter")])
+    }
+
     @Test func wttrRepliesParse() throws {
         let runtime = runtime(try Sandbox())
         defer { runtime.stop() }
