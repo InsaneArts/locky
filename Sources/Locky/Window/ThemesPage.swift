@@ -91,7 +91,7 @@ struct ThemesPage: View {
                         .toggleStyle(.button)
                         .help("Show a grid, and snap what you drag to its lines")
                     Text(selection == nil ? "Click a widget to change it, and drag it to move it."
-                         : "Drag it to move it. Click outside it to see the whole theme.")
+                         : "Drag it, or press the arrow keys, to move it. Delete removes a widget.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
@@ -126,7 +126,13 @@ struct ThemesPage: View {
     private func canvas(for info: Inspection.ThemeInfo) -> ThemePreview.Canvas? {
         guard let editing, editing.theme.id == info.id, editing.layout != nil else { return nil }
         return ThemePreview.Canvas(selection: selection, grid: grid, name: { editing.name(of: $0) }, select: { selection = $0 },
-                                   move: { editing.move($0, anchor: $1, offset: $2) })
+                                   move: { editing.move($0, anchor: $1, offset: $2) },
+                                   nudge: { editing.nudge($0, by: $1, byGrid: $2) },
+                                   remove: { index in
+                                       draft = nil
+                                       selection = nil
+                                       editing.remove(index)
+                                   })
     }
 }
 

@@ -156,6 +156,23 @@ final class ThemeEditing {
         }
     }
 
+    /// An arrow key moved an item a step across and down (-1, 0, or 1 each), from the anchor it keeps.
+    func nudge(_ item: EditorItem, by delta: (x: Int, y: Int), byGrid: Bool) {
+        switch item {
+        case .widget(let index):
+            guard placements.indices.contains(index) else { return }
+            var placement = placements[index]
+            let offset = Placing.nudge(CGPoint(x: placement.x, y: placement.y), x: delta.x, y: delta.y, byGrid: byGrid)
+            placement.x = offset.x
+            placement.y = offset.y
+            set(index, placement, action: "Move \(EditorPlacement.title(placement.widget))")
+        case .passwordField:
+            let place = authPlace
+            let offset = Placing.nudge(CGPoint(x: place.x, y: place.y), x: delta.x, y: delta.y, byGrid: byGrid)
+            setAuth(anchor: place.anchor, x: offset.x, y: offset.y)
+        }
+    }
+
     /// The name on a selected item.
     func name(of item: EditorItem) -> String {
         switch item {

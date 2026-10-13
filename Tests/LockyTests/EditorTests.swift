@@ -32,6 +32,14 @@ import Testing
         let snapped = anchor.frame(size: frame.size, offset: offset, in: screen)
         #expect(snapped.midX == 720 && snapped.minY == 120)
     }
+
+    @Test func anArrowKeyMovesAPointOrAGridStep() {
+        let offset = CGPoint(x: -40, y: 25)
+        #expect(Placing.nudge(offset, x: 1, y: 0, byGrid: false) == CGPoint(x: -39, y: 25))
+        #expect(Placing.nudge(offset, x: 0, y: -1, byGrid: false) == CGPoint(x: -40, y: 24))
+        #expect(Placing.nudge(offset, x: -1, y: 0, byGrid: true) == CGPoint(x: -70, y: 25))
+        #expect(Placing.nudge(offset, x: 0, y: 1, byGrid: true) == CGPoint(x: -40, y: 55))
+    }
 }
 
 /// The Themes page with a real preview, driven with mouse events sent straight to the canvas: nothing moves the
@@ -198,6 +206,43 @@ import Testing
         #expect(await wait(page.window) { frame(of: .widget(0), page) == box })
         undo.redo()
         #expect(saved(page).themeEdit("t", "widgets")[0]["anchor"] == .string("top-left"))
+    }
+
+    private func press(_ key: Int, shift: Bool = false, _ page: Page) {
+        let text = String(Character(UnicodeScalar(UInt16(key))!))
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: shift ? .shift : [], timestamp: 0,
+                                     windowNumber: page.window.windowNumber, context: nil, characters: text,
+                                     charactersIgnoringModifiers: text, isARepeat: false, keyCode: 0)!
+        page.overlay.keyDown(with: event)
+        // The end of the event, which ends its undo step.
+        RunLoop.main.run(until: Date())
+    }
+
+    @Test func theKeyboardMovesRemovesAndDeselects() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        page.overlay.mouseDown(with: event(.leftMouseDown, at: CGPoint(x: box.midX, y: box.midY), on: page))
+        page.overlay.mouseUp(with: event(.leftMouseUp, at: CGPoint(x: box.midX, y: box.midY), on: page))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+        // From the top-right corner's -30, 30: a point left, then a grid step down.
+        press(NSLeftArrowFunctionKey, page)
+        #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets")[1]["offset"] == .array([.int(-31), .int(30)]) })
+        press(NSDownArrowFunctionKey, shift: true, page)
+        #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets")[1]["offset"] == .array([.int(-31), .int(60)]) })
+        #expect(saved(page).themeEdit("t", "widgets")[1]["anchor"] == .string("top-right"))
+        page.window.undoManager?.undo()
+        #expect(saved(page).themeEdit("t", "widgets")[1]["offset"] == .array([.int(-31), .int(30)]))
+
+        press(0x7F, page)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        #expect(saved(page).themeEdit("t", "widgets").array?.count == 1)
+        #expect(page.window.undoManager?.undoActionName == "Remove Box")
+
+        page.overlay.mouseDown(with: event(.leftMouseDown, at: CGPoint(x: 720, y: 450), on: page))
+        page.overlay.mouseUp(with: event(.leftMouseUp, at: CGPoint(x: 720, y: 450), on: page))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(0) })
+        press(0x1B, page)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
     }
 
     @Test func thePasswordFieldMovesToo() async throws {

@@ -147,7 +147,11 @@ private struct WidgetInspector: View {
     @State private var saving: Task<Void, Never>?
 
     var body: some View {
-        let placement = editing.placements[index]
+        // An undo can take the widget away before the panel goes.
+        if editing.placements.indices.contains(index) { form(editing.placements[index]) }
+    }
+
+    @ViewBuilder private func form(_ placement: EditorPlacement) -> some View {
         let info = editing.info(placement)
         let inherited = editing.inherited(placement)
         let keys = OptionRow.keys(inherited: inherited, overrides: placement.opts, choices: info?.choices ?? [:])

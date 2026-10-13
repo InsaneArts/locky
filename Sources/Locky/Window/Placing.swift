@@ -35,4 +35,11 @@ enum Placing {
         let step = snap ? grid : 1
         return (anchor, CGPoint(x: (offset.x / step).rounded() * step, y: (offset.y / step).rounded() * step))
     }
+
+    /// The offset after an arrow key moves an item `x` and `y` steps (each -1, 0, or 1): steps of a point, or of
+    /// the grid with Shift.
+    static func nudge(_ offset: CGPoint, x: Int, y: Int, byGrid: Bool) -> CGPoint {
+        let step = byGrid ? grid : 1
+        return CGPoint(x: offset.x + CGFloat(x) * step, y: offset.y + CGFloat(y) * step)
+    }
 }
