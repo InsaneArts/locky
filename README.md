@@ -74,6 +74,7 @@ locky window [SECTION]            the Locky window, at a page
 
 - [plugins.md](docs/plugins.md): the plugin system, widgets, packages, health, and the safety rules
 - [views.md](docs/views.md): every view and property widgets can draw
+- [widgets.md](docs/widgets.md): the core widgets and their options
 - [themes.md](docs/themes.md): themes, backgrounds, and shaders
 - [api.md](docs/api.md): the `locky` API
 - [settings.md](docs/settings.md): settings.json, which the window writes, and how it layers over init.lua
