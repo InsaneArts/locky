@@ -196,9 +196,11 @@ final class AppModel {
         try remove(ThemeFile.file(id, config: store.config))
         store.update { settings in
             if settings["theme"].string == id { settings["theme"] = .nil }
-            if var schedule = settings.schedule {
-                schedule.forget(id)
-                settings.schedule = schedule
+            // The typed schedule writes the whole table again, so it is written only when a slot named the theme.
+            if let schedule = settings.schedule {
+                var forgotten = schedule
+                forgotten.forget(id)
+                if forgotten != schedule { settings.schedule = forgotten }
             }
         }
         if editingTheme == id { finishEditing() }

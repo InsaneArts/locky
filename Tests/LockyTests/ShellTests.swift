@@ -167,6 +167,17 @@ import Testing
         #expect(model.editingTheme == nil)
     }
 
+    /// A schedule that never named the theme stays as written, with a newer Locky's keys and no times added.
+    @Test func aScheduleWithoutTheThemeStaysAsWritten() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        let schedule = LuaValue.table(["mode": .string("time"), "day": .string("glass"), "later": .string("kept")])
+        model.store.update { $0["schedule"] = schedule }
+        try model.trash("mine", using: { try FileManager.default.removeItem(at: $0) })
+        #expect(model.store.settings["schedule"] == schedule)
+    }
+
     /// While settings.json has an error nothing saves it, so the theme stays: settings.json would still name it.
     @Test func aThemeStaysWhileSettingsJSONHasAnError() async throws {
         let sandbox = try Sandbox()
