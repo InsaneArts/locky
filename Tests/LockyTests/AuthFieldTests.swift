@@ -101,3 +101,39 @@ import Testing
         }
     }
 }
+
+@Suite struct ContrastTests {
+    private let black = Contrast.RGB(r: 0, g: 0, b: 0), white = Contrast.RGB(r: 1, g: 1, b: 1)
+
+    @Test func theRatioFollowsWCAG() {
+        #expect(abs(Contrast.ratio(black, white) - 21) < 0.001)
+        #expect(Contrast.ratio(white, white) == 1)
+        // #777777 on white is the classic near miss: 4.48:1.
+        let gray = Contrast.over("#777777", black)!
+        #expect(abs(Contrast.ratio(gray, white) - 4.48) < 0.01)
+    }
+
+    @Test func alphaMixesWithWhatIsBelow() {
+        let half = Contrast.over("#ffffff80", black)!
+        #expect(abs(half.r - 128.0 / 255) < 0.001 && half.r == half.g && half.g == half.b)
+    }
+
+    @Test func readableTextStaysAsItIs() {
+        #expect(Contrast.readable("#ffffffb3", fg: "#ffffff", on: ["#1c3a66", "#ffffff1f"]) == "#ffffffb3")
+    }
+
+    @Test func faintTextLiftsTowardFgUntilItReads() throws {
+        // Tokyo Night: muted on its surface over bg.
+        let layers = ["#1a1b26", "#24283bcc"]
+        let lifted = try #require(Contrast.readable("#565f89", fg: "#c0caf5", on: layers))
+        #expect(lifted != "#565f89")
+        let backdrop = Contrast.over(layers[1], Contrast.over(layers[0], black)!)!
+        let ratio = Contrast.ratio(Contrast.over(lifted, backdrop)!, backdrop)
+        #expect(ratio >= 4.5 && ratio < 5.2, "lifted only as far as needed: \(ratio)")
+    }
+
+    @Test func fgIsTheMostItLifts() {
+        #expect(Contrast.readable("#333333", fg: "#444444", on: ["#000000"]) == "#444444")
+        #expect(Contrast.readable("muted", fg: "#ffffff", on: ["#000000"]) == nil)
+    }
+}

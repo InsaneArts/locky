@@ -300,7 +300,7 @@ struct AuthPanel: View {
             } else if auth.hint || model.needsClick || waitText != nil {
                 Text(model.needsClick ? "Click to unlock" : waitText ?? (checking ? "Verifying…" : wrong > 0 && password.isEmpty ? "Wrong password" : ""))
                     .font(font(12, "medium"))
-                    .foregroundStyle(wrong > 0 && password.isEmpty && waitText == nil ? style.color("danger") : style.color("muted"))
+                    .foregroundStyle(wrong > 0 && password.isEmpty && waitText == nil ? style.color("danger") : quiet(onField: true))
                     .offset(y: diameter * 0.36)
             }
         }
@@ -372,6 +372,26 @@ struct AuthPanel: View {
         return style.font(size: size, weight: auth.font.weight ?? weight, design: auth.font.design, family: auth.font.family, mono: false, italic: false)
     }
 
+    /// The palette's muted color, lifted toward fg where it would not reach 4.5:1: on the field's surface (or the
+    /// ring's fill), or on the screen's bg for text outside the field and for styles without a surface.
+    private func quiet(onField: Bool) -> Color {
+        guard let muted = style.palette["muted"], let fg = style.palette["fg"], let bg = style.palette["bg"] else { return style.color("muted") }
+        var layers = [bg]
+        if onField, let surface = fieldSurface, let color = style.palette[surface] ?? (surface.hasPrefix("#") ? surface : nil) {
+            layers.append(color)
+        }
+        return Contrast.readable(muted, fg: fg, on: layers).flatMap { Color(hex: $0) } ?? style.color("muted")
+    }
+
+    /// The palette role (or color) the field's text sits on; nil where it sits on the screen.
+    private var fieldSurface: String? {
+        switch auth.style {
+        case "underline", "terminal", "minimal": nil
+        case "ring": auth.ringFill
+        default: "surface"
+        }
+    }
+
     private var glowColor: Color { auth.glow == nil ? .clear : style.color(auth.style == "terminal" ? "accent" : "fg") }
 
     private var avatar: some View {
@@ -390,7 +410,7 @@ struct AuthPanel: View {
         let text = model.needsClick ? "Click to unlock" : waitText ?? placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
         return ZStack(alignment: alignment) {
             if password.isEmpty, !text.isEmpty {
-                Text(text).font(font(14, "regular")).foregroundStyle(style.color("muted")).allowsHitTesting(false)
+                Text(text).font(font(14, "regular")).foregroundStyle(quiet(onField: true)).allowsHitTesting(false)
             }
             SecureField("", text: $model.password)
                 .textFieldStyle(.plain)
@@ -447,7 +467,7 @@ struct AuthPanel: View {
             : touchID == nil || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
         return Text(wrong > 0 ? "Wrong password" : text)
             .font(font(12, "medium"))
-            .foregroundStyle(wrong > 0 ? style.color("danger") : style.color("muted"))
+            .foregroundStyle(wrong > 0 ? style.color("danger") : quiet(onField: false))
             .opacity(auth.style == "minimal" && !password.isEmpty ? 0 : 1)
     }
 
@@ -467,6 +487,52 @@ struct AuthPanel: View {
                 focused = true
             }
         }
+    }
+}
+
+/// WCAG 2 contrast from the palette's colors, for the field's quiet text: the placeholder and the hint must
+/// reach 4.5:1 on what is behind them.
+enum Contrast {
+    struct RGB: Equatable {
+        var r, g, b: Double
+    }
+
+    /// `hex`, with its alpha, painted over the opaque `below`.
+    static func over(_ hex: String, _ below: RGB) -> RGB? {
+        guard let color = NSColor(hex: hex) else { return nil }
+        let a = color.alphaComponent
+        return RGB(r: color.redComponent * a + below.r * (1 - a), g: color.greenComponent * a + below.g * (1 - a),
+                   b: color.blueComponent * a + below.b * (1 - a))
+    }
+
+    static func luminance(_ color: RGB) -> Double {
+        func linear(_ value: Double) -> Double { value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
+    }
+
+    static func ratio(_ a: RGB, _ b: RGB) -> Double {
+        let (x, y) = (luminance(a), luminance(b))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    /// The color to draw `text` in over `layers` (painted first to last on black): `text` itself when it reaches
+    /// 4.5:1, otherwise the first mix toward `fg` that does, or `fg`'s own color. nil when a color is not "#rrggbb[aa]".
+    static func readable(_ text: String, fg: String, on layers: [String]) -> String? {
+        var backdrop = RGB(r: 0, g: 0, b: 0)
+        for layer in layers {
+            guard let next = over(layer, backdrop) else { return nil }
+            backdrop = next
+        }
+        guard let start = over(text, backdrop), let end = over(fg, backdrop) else { return nil }
+        if ratio(start, backdrop) >= 4.5 { return text }
+        for step in 1...20 {
+            let t = Double(step) / 20
+            let mix = RGB(r: start.r + (end.r - start.r) * t, g: start.g + (end.g - start.g) * t, b: start.b + (end.b - start.b) * t)
+            if ratio(mix, backdrop) >= 4.5 || step == 20 {
+                return String(format: "#%02x%02x%02x", Int((mix.r * 255).rounded()), Int((mix.g * 255).rounded()), Int((mix.b * 255).rounded()))
+            }
+        }
+        return nil
     }
 }
 
