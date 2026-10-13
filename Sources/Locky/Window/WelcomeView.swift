@@ -1,33 +1,17 @@
+import LocalAuthentication
 import SwiftUI
 
-/// The first launch's three steps: pick a theme, try it, and turn on what locks by itself. Skip or Finish
-/// closes the window; the menu's Welcome… opens it again.
+/// The first launch's one screen: the lock screen in use, a real lock to try, the two switches that make Locky lock by
+/// itself, and where Locky lives. Each switch saves at once. Done and the close button close the window; Help › Welcome
+/// to Locky opens it again.
 struct WelcomeView: View {
-    @Bindable var model: AppModel
+    let model: AppModel
     let close: () -> Void
-    @State private var step = Step.theme
-    @State private var login = LoginItem.status
-    @State private var loginError: String?
-
-    enum Step: Int, CaseIterable {
-        case theme, tryIt, protect
-
-        var title: String {
-            switch self {
-            case .theme: "Pick a Theme"
-            case .tryIt: "Try It"
-            case .protect: "Make It Protect You"
-            }
-        }
-
-        var subtitle: String {
-            switch self {
-            case .theme: "This is what your Mac shows while it is locked. You can change it any time on the Themes page."
-            case .tryIt: "See the theme full size, or lock the screen for real."
-            case .protect: "Locky locks only when you ask, unless you choose when it locks by itself."
-            }
-        }
-    }
+    /// The triggers the switch turned off, which turning it on again restores. The window is kept between visits, and so
+    /// is this.
+    @State private var turnedOff: AutoLockSettings?
+    /// Whether this Mac can use Touch ID, read once: an LAContext on every body pass is waste.
+    @State private var biometrics = false
 
     /// Set once the Welcome has opened by itself.
     static let shownKey = "welcomeShown"
@@ -40,137 +24,104 @@ struct WelcomeView: View {
         return true
     }
 
-    private var store: SettingsStore { model.store }
+    /// What turning on "Lock automatically" stores when it has nothing of its own to restore.
+    static let defaultAutoLock = AutoLockSettings(idleMinutes: 5, systemSleep: true)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Step \(step.rawValue + 1) of \(Step.allCases.count)").font(.callout).foregroundStyle(.secondary)
-                Text(step.title).font(.largeTitle.weight(.semibold))
-                Text(step.subtitle).foregroundStyle(.secondary)
-            }
-            switch step {
-            // Until the window has read the themes, a moment after it opens.
-            case .theme where !model.inspection.loaded: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .theme: themes
-            case .tryIt: tryIt
-            case .protect: protect
-            }
-            HStack {
-                Button("Skip") { close() }
-                Spacer()
-                if step != .theme {
-                    Button("Back") { step = Step(rawValue: step.rawValue - 1) ?? .theme }
-                }
-                Button(step == .protect ? "Finish" : "Continue") {
-                    if let next = Step(rawValue: step.rawValue + 1) { step = next } else { close() }
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-            }
-            .controlSize(.large)
-        }
-        .padding(24)
-        .frame(maxHeight: .infinity, alignment: .top)
-    }
-
-    // MARK: Steps
-
-    private var themes: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 14)], spacing: 14) {
-                ForEach(model.inspection.themes.filter { $0.error == nil }) { info in
-                    let selected = info.id == model.activeTheme
-                    Button { store.update { $0["theme"] = .string(info.id) } } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ZStack {
-                                Color.secondary.opacity(0.15)
-                                if let image = ThemeThumbnails.image(for: info) { Image(nsImage: image).resizable().scaledToFill() }
-                            }
-                            .aspectRatio(1.6, contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: selected ? 3 : 1)
-                            }
-                            Text(info.name).font(.callout.weight(selected ? .semibold : .regular)).lineLimit(1)
-                        }
-                        .contentShape(Rectangle())
+        let theme = model.activeTheme
+        let info = model.inspection.theme(theme)
+        let stored = model.store.settings.autoLock
+        VStack(spacing: 0) {
+            Text("Welcome to Locky")
+                .font(.largeTitle.bold())
+                .accessibilityAddTraits(.isHeader)
+                .padding(.top, 12)
+            ThemePreview(theme: theme, settings: model.store.settings, sources: model.inspection.sources, config: model.store.config,
+                         alwaysLive: model.screenshots, info: info)
+                .frame(width: 480, height: 300)
+                .previewFrame()
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isImage)
+                .accessibilityLabel("Lock screen preview")
+                .accessibilityValue(info?.name ?? theme)
+                .padding(.top, 16)
+            Button { model.lockNow() } label: { Label("Lock Now", systemImage: "lock.fill") }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .padding(.top, 16)
+            // The lock screen's own rule, so the line says what the next lock offers.
+            Text(Self.unlockLine(touchID: biometrics && model.store.settings["touch_id"].bool != false))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+            Form {
+                Section {
+                    Toggle(isOn: autoLock) {
+                        Text("Lock automatically")
+                        // While it is off: what turning it on stores.
+                        Text(Self.autoLockSummary(stored != AutoLockSettings() ? stored : turnedOff ?? Self.defaultAutoLock))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    OpenAtLoginToggle(model: model, subtitle: "Locky locks by itself only while it's open.")
                 }
             }
-            .padding(2)
-        }
-    }
-
-    private var tryIt: some View {
-        let id = model.activeTheme
-        return VStack(alignment: .leading, spacing: 14) {
-            ThemePreview(theme: id, settings: store.settings, sources: model.inspection.sources, config: store.config,
-                         alwaysLive: model.screenshots)
-                .aspectRatio(1.6, contentMode: .fit)
-                .frame(maxWidth: 480)
-                .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
-            HStack(spacing: 10) {
-                Button("Preview") { model.preview(nil) }
-                Button { model.lockNow() } label: { Label("Lock Now to Test", systemImage: "lock.fill") }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            .scrollContentBackground(.hidden)
+            .frame(width: 520)
+            HStack {
+                // The symbol is the menu bar icon's.
+                Text("Find Locky in the menu bar \(Image(systemName: "lock.fill"))")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Find Locky in the menu bar")
+                Spacer()
+                Button("Done") { close() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut(.defaultAction)
             }
-            .controlSize(.large)
-            .fixedSize()
-            Text("Touch ID or your Mac's login password unlocks it.").foregroundStyle(.secondary)
+            .padding(.horizontal, 40)
+            .padding(.bottom, 20)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(width: 560)
+        .onAppear { biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) }
     }
 
-    private var protect: some View {
-        let auto = store.settings.autoLock
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("Lock automatically").font(.headline)
-            autoLockToggle("When the Mac is idle for \(Int(auto.idleMinutes ?? 5)) min", auto.idleMinutes != nil) { $0.idleMinutes = $1 ? 5 : nil }
-            autoLockToggle("When the display sleeps", auto.displaySleep) { $0.displaySleep = $1 }
-            autoLockToggle("Before the Mac sleeps, as when you close the lid", auto.systemSleep) { $0.systemSleep = $1 }
-            autoLockToggle("When the screen saver starts", auto.screenSaver) { $0.screenSaver = $1 }
-            Text("Start").font(.headline).padding(.top, 8)
-            row("Open Locky at login, so it can lock by itself", isOn: Binding(get: { login == .enabled || login == .requiresApproval }, set: { on in
-                do {
-                    try LoginItem.set(on)
-                    loginError = nil
-                } catch {
-                    loginError = error.localizedDescription
-                }
-                login = LoginItem.status
-            }))
-            .disabled({ if case .unavailable = login { return true } else { return false } }())
-            if let loginError {
-                Label(loginError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            } else if case .unavailable(let message) = login {
-                Label(message, systemImage: "info.circle").foregroundStyle(.secondary)
-            } else if login == .requiresApproval {
-                HStack {
-                    Label("Allow Locky in System Settings › Login Items", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Button("Open Login Items") { LoginItem.openSystemSettings() }
+    /// On while any trigger is stored. Off keeps the triggers it clears in `turnedOff`; on restores those, else stores the
+    /// default. Both edit auto_lock in place, so its other keys stay.
+    private var autoLock: Binding<Bool> {
+        Binding(get: { model.store.settings.autoLock != AutoLockSettings() }, set: { on in
+            model.store.update { settings in
+                if on {
+                    // A trigger set elsewhere a moment ago stays as it is.
+                    guard settings.autoLock == AutoLockSettings() else { return }
+                    settings.setAutoLock(turnedOff ?? Self.defaultAutoLock)
+                } else {
+                    turnedOff = settings.autoLock
+                    settings.setAutoLock(AutoLockSettings())
                 }
             }
-            Text("Settings has these, the Lock Now shortcut, and more.").foregroundStyle(.secondary).padding(.top, 8)
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-        // Back from System Settings, where Login Items may have changed.
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in login = LoginItem.status }
+        })
     }
 
-    private func autoLockToggle(_ title: String, _ on: Bool, _ set: @escaping (inout AutoLockSettings, Bool) -> Void) -> some View {
-        row(title, isOn: Binding(get: { on }, set: { value in store.update { set(&$0.autoLock, value) } }))
+    /// The triggers in the words Settings uses, as one sentence: "After 5 minutes of inactivity and when the Mac sleeps."
+    /// None: what turning the switch on stores by default.
+    static func autoLockSummary(_ triggers: AutoLockSettings) -> String {
+        guard triggers != AutoLockSettings() else { return autoLockSummary(defaultAutoLock) }
+        var parts: [String] = []
+        if let minutes = triggers.idleMinutes {
+            // settings.json may hold any positive number; Int(exactly:) never traps on one.
+            let count = Int(exactly: minutes).map { "\($0)" } ?? "\(minutes)"
+            parts.append(minutes == 1 ? "after 1 minute of inactivity" : "after \(count) minutes of inactivity")
+        }
+        if triggers.screenSaver || triggers.displaySleep { parts.append("when the screen saver starts or the display turns off") }
+        if triggers.systemSleep { parts.append("when the Mac sleeps") }
+        let list = parts.count < 3 ? parts.joined(separator: " and ") : "\(parts[0]), \(parts[1]), and \(parts[2])"
+        return list.capitalizedFirst + "."
     }
 
-    /// A switch, lined up with the others at the end of its row.
-    private func row(_ title: String, isOn: Binding<Bool>) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Toggle(title, isOn: isOn).toggleStyle(.switch).labelsHidden()
-        }
-        .frame(maxWidth: 460)
+    /// The line under Lock Now: Touch ID only when the next lock offers it.
+    static func unlockLine(touchID: Bool) -> String {
+        touchID ? "Unlock with Touch ID or your password." : "Unlock with your password."
     }
 }

@@ -27,6 +27,26 @@ import Testing
         #expect(AppModel.Section.config.title == "Lua Config" && AppModel.Section(rawValue: "config") == .config)
     }
 
+    /// The line under Lock Now never promises Touch ID to a Mac or a setting that does not offer it.
+    @MainActor @Test func theUnlockLineNamesOnlyWhatWorks() {
+        #expect(WelcomeView.unlockLine(touchID: true) == "Unlock with Touch ID or your password.")
+        #expect(WelcomeView.unlockLine(touchID: false) == "Unlock with your password.")
+    }
+
+    /// "Lock automatically" says what is stored, in Settings' words; with nothing stored, what turning it on stores.
+    @MainActor @Test(arguments: [
+        (AutoLockSettings(idleMinutes: 5, systemSleep: true), "After 5 minutes of inactivity and when the Mac sleeps."),
+        (AutoLockSettings(idleMinutes: 15, systemSleep: true, screenSaver: true),
+         "After 15 minutes of inactivity, when the screen saver starts or the display turns off, and when the Mac sleeps."),
+        (AutoLockSettings(systemSleep: true), "When the Mac sleeps."),
+        (AutoLockSettings(displaySleep: true), "When the screen saver starts or the display turns off."),
+        (AutoLockSettings(), "After 5 minutes of inactivity and when the Mac sleeps."),
+        (AutoLockSettings(idleMinutes: 1), "After 1 minute of inactivity."),
+    ] as [(AutoLockSettings, String)])
+    func theAutoLockLineSaysWhatIsStored(_ triggers: AutoLockSettings, _ line: String) {
+        #expect(WelcomeView.autoLockSummary(triggers) == line)
+    }
+
     private let record = #"{"theme": "broken", "fallback": "default", "message": "themes/broken.lua:3: boom", "date": 1000}"#
 
     @Test func aThemeFailureReadsAsDataOrAsAString() throws {
