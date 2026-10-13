@@ -1,5 +1,7 @@
 import AppKit
+import ApplicationServices
 import Carbon
+import GuardCore
 import SwiftUI
 
 /// One locked (or previewed) screen: a window per display, the Lua runtime, and the way out.
@@ -51,11 +53,15 @@ final class LockSession: NSObject, NSWindowDelegate {
     private let authModel = AuthModel()
     private var touchID: TouchID?
     private var touchIDFallback: Task<Void, Never>?
-    private var safetyExit: DispatchWorkItem?
-    private var autoUnlock: Task<Void, Never>?
-    /// The safety timer's length while it is armed, to arm it again after a sleep.
-    private var safetySeconds: Double?
+    /// Lock only: locks the Mac with the macOS lock screen if Locky crashes, hangs, or is killed.
+    private var lockGuard: LockGuard?
     private var keyMonitor: Any?
+    /// Lock only: takes the keys while another app holds the keyboard (see takeKeyboard).
+    private var keyTap: (port: CFMachPort, source: CFRunLoopSource)?
+    /// The macOS lock screen was asked for; this lock ends when it is up.
+    private var handingOver = false
+    /// A pending check that the lock holds the keyboard.
+    private var keyboardCheck: Task<Void, Never>?
     private var keyboardObserver: NSObjectProtocol?
     private var activityMonitor: Any?
     private var idleTimer: Task<Void, Never>?
@@ -64,7 +70,6 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var napGuard: NSObjectProtocol?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var ended = false
-    private let banner = SafetyBanner.Model()
     /// The battery saver: on battery or in Low Power Mode, with settings.json's battery_saver on, nothing moves.
     private var still = false
     private var powerObserver: PowerObserver?
@@ -95,6 +100,11 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     func begin() {
+        if mode == .lock {
+            lockGuard = LockGuard { [weak self] reason in self?.handOver(reason) }
+            // Without its guard, a crash would leave the shield's open session behind: the macOS lock instead.
+            if lockGuard == nil { handOver("the guard did not start") }
+        }
         if mode != .embedded {
             napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
         }
@@ -136,7 +146,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             installAuth(look.auth, style: LockyStyle(palette: look.palette, font: look.font, scale: Layout.scale(for: first.bounds.size)))
         }
         if mode == .lock {
-            armSafety(after: 60)
+            installEmergencyExit()
             reclaimKeyboardSoon()
             startDisplayOff()
             // The kiosk options (no app switching, no Force Quit) apply only while Locky is the active app, and a
@@ -197,11 +207,16 @@ final class LockSession: NSObject, NSWindowDelegate {
         guard !ended else { return }
         ended = true
         if mode != .embedded { LogFile.shared.write(level: "info", message: "\(mode == .lock ? "lock" : "preview") ended: \(reason)", source: "locky") }
+        lockGuard?.release()
         runtime?.stop()
         touchID?.stop()
         touchIDFallback?.cancel()
-        safetyExit?.cancel()
-        autoUnlock?.cancel()
+        keyboardCheck?.cancel()
+        if let keyTap {
+            CGEvent.tapEnable(tap: keyTap.port, enable: false)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), keyTap.source, .commonModes)
+            CFMachPortInvalidate(keyTap.port)
+        }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
@@ -245,19 +260,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         // A display added, removed, or rearranged during the lock gets covered too.
         observe(.default, NSApplication.didChangeScreenParametersNotification) { $0.rebuildForDisplays() }
         // Anything that takes the keyboard (another app, a system prompt) gives it back to the password field.
-        observe(.default, NSApplication.didResignActiveNotification) { $0.reclaimKeyboard() }
+        observe(.default, NSApplication.didResignActiveNotification) { $0.keyboardTaken() }
         observe(.default, NSWindow.didResignKeyNotification) { session in
-            DispatchQueue.main.async { if !session.ended, !(session.windows.first?.isKeyWindow ?? true) { session.reclaimKeyboard() } }
-        }
-        observe(.default, NSWindow.didBecomeKeyNotification) { session in
-            guard session.windows.first?.isKeyWindow == true, session.authModel.needsClick else { return }
-            session.authModel.needsClick = false
-            session.authModel.focusRequest += 1
-        }
-        // The safety timer counts time awake; after a sleep it starts again, so a lock made before the sleep
-        // does not open by itself on wake.
-        observe(workspace, NSWorkspace.didWakeNotification) { session in
-            if let seconds = session.safetySeconds { session.armSafety(after: seconds) }
+            DispatchQueue.main.async { if !session.ended, !(session.windows.first?.isKeyWindow ?? true) { session.keyboardTaken() } }
         }
     }
 
@@ -269,22 +274,109 @@ final class LockSession: NSObject, NSWindowDelegate {
         authModel.focusRequest += 1
     }
 
-    /// macOS treats activation as a request it may refuse; check a few times that the lock got the keyboard.
-    /// If it still has not, the field asks for a click instead of looking ready for typing: a click on the
-    /// shield always gives it the keyboard.
+    /// macOS treats activation as a request it may refuse: ask a few times, and check that the lock holds the
+    /// keyboard 1.5 s after it started.
     private func reclaimKeyboardSoon() {
-        Task { [weak self] in
-            for _ in 0..<6 {
+        keyboardCheck = Task { [weak self] in
+            for attempt in 1...5 {
                 try? await Task.sleep(for: .milliseconds(300))
-                guard let self, !ended else { return }
-                if !(windows.first?.isKeyWindow ?? false) { reclaimKeyboard() }
+                guard let self, !Task.isCancelled, !ended else { return }
+                if attempt == 5 { checkKeyboard("Locky did not get the keyboard when the lock started") }
+                else if !holdsKeyboard { reclaimKeyboard() }
             }
-            guard let self, !ended else { return }
-            authModel.needsClick = !(windows.first?.isKeyWindow ?? false)
-            // A theme that hides the field until a key press (Glass) gets no key press now: show it, so the
-            // request to click shows too.
-            if authModel.needsClick { screens.first?.setAuthVisible(true, dim: auth?.dim ?? 0, animated: true) }
         }
+    }
+
+    /// Something took the keyboard: ask for it back, and check that the lock holds it again 1 s later.
+    private func keyboardTaken() {
+        reclaimKeyboard()
+        guard keyboardCheck == nil else { return }
+        keyboardCheck = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.checkKeyboard("Locky lost the keyboard and did not get it back")
+        }
+    }
+
+    /// Locky is the active app, with the main shield key: what is typed goes to the lock.
+    private var holdsKeyboard: Bool { NSApp.isActive && windows.first?.isKeyWindow == true }
+
+    enum KeyboardAction: Equatable { case keep, tap, handOver }
+
+    /// A lock that does not hold the keyboard must not stay up, since typing would go to the app behind it. It
+    /// takes the keys with an event tap if Accessibility allows one, or hands over to the macOS lock screen.
+    /// Another app's secure keyboard entry hides the keys from every event tap: a hand-over then too.
+    static func keyboardAction(holds: Bool, tapped: Bool, trusted: Bool, secureInput: Bool) -> KeyboardAction {
+        if holds { return .keep }
+        if secureInput { return .handOver }
+        if tapped { return .keep }
+        return trusted ? .tap : .handOver
+    }
+
+    /// Secure keyboard entry is on for another app (Terminal's Secure Keyboard Entry, a focused password field).
+    private static var secureInputElsewhere: Bool {
+        guard IsSecureEventInputEnabled() else { return false }
+        return (CGSessionCopyCurrentDictionary() as? [String: Any])?["kCGSSessionSecureInputPID"] as? Int != Int(getpid())
+    }
+
+    private func checkKeyboard(_ reason: String) {
+        keyboardCheck = nil
+        guard mode == .lock, !ended else { return }
+        let secureInput = Self.secureInputElsewhere
+        switch Self.keyboardAction(holds: holdsKeyboard, tapped: keyTap != nil, trusted: AXIsProcessTrusted(), secureInput: secureInput) {
+        case .keep:
+            // While the tap holds the keys, another app may turn secure keyboard entry on: check each second.
+            guard !holdsKeyboard else { return }
+            keyboardCheck = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                self?.checkKeyboard("the event tap held the keyboard")
+            }
+        case .tap:
+            if takeKeyboard() {
+                LogFile.shared.write(level: "info", message: "took the keyboard with an event tap: \(reason)", source: "locky")
+            } else {
+                handOver("\(reason), and the event tap failed")
+            }
+        case .handOver: handOver(secureInput ? "\(reason), and secure keyboard entry in another app hides the keys from an event tap" : reason)
+        }
+    }
+
+    /// Takes key presses for the rest of the lock with an event tap: while another app is active, they go to
+    /// the password field and not to that app.
+    private func takeKeyboard() -> Bool {
+        let mask = [CGEventType.keyDown, .keyUp, .flagsChanged].reduce(CGEventMask(0)) { $0 | 1 << $1.rawValue }
+        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: mask,
+                                           callback: { _, type, event, session in
+                                               guard let session else { return Unmanaged.passUnretained(event) }
+                                               let lock = Unmanaged<LockSession>.fromOpaque(session).takeUnretainedValue()
+                                               let taken = MainActor.assumeIsolated { lock.tapped(type, event) }
+                                               return taken ? nil : Unmanaged.passUnretained(event)
+                                           }, userInfo: Unmanaged.passUnretained(self).toOpaque()),
+              let source = CFMachPortCreateRunLoopSource(nil, port, 0) else { return false }
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: port, enable: true)
+        keyTap = (port, source)
+        return true
+    }
+
+    /// An event from the tap. true keeps it from every other app.
+    private func tapped(_ type: CGEventType, _ event: CGEvent) -> Bool {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let keyTap { CGEvent.tapEnable(tap: keyTap.port, enable: true) }
+            return false
+        }
+        // While Locky holds the keyboard, keys take the usual way, through the event monitors.
+        guard !ended, !holdsKeyboard else { return false }
+        guard let key = NSEvent(cgEvent: event) else { return true }
+        if emergencyExit, Self.isEmergencyExit(key) {
+            handOver("⌃⌥⌘Q")
+            return true
+        }
+        displayOff?.noteActivity()
+        if activityMonitor != nil, key.type == .keyDown { activity() }
+        windows.first?.sendEvent(key)
+        return true
     }
 
     // MARK: Windows
@@ -426,8 +518,6 @@ final class LockSession: NSObject, NSWindowDelegate {
             windows.first?.title = "Locky Preview — \(theme.name)"
             for problem in started.problems { LogFile.shared.write(level: "warn", message: problem, source: "preview") }
         }
-        if mode == .lock, started.autoUnlock > 0 { armSafety(after: started.autoUnlock) }
-        else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel(); safetySeconds = nil }
         if privacy != started.privacy {
             privacy = started.privacy
             // The field may already hold typing: change the name it shows, not the field.
@@ -491,7 +581,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             }
             if main {
                 screen.message = started.message.map { NSHostingController(rootView: LockMessage(text: $0, auth: theme.auth, style: style)) }
-                if mode == .lock { screen.banner = NSHostingView(rootView: SafetyBanner(model: banner)) }
+                if mode == .lock, emergencyExit { screen.banner = NSHostingView(rootView: SafetyBanner()) }
                 if mode != .lock, !started.problems.isEmpty {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
                 }
@@ -663,29 +753,51 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     // MARK: Safety
 
-    /// Prototype only. The lock opens after `seconds`. If the main thread hangs, a timer on another thread
-    /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q quits at once, unless settings.json's
-    /// emergency_exit is false.
-    private func armSafety(after seconds: Double) {
-        safetySeconds = seconds
-        banner.quits = options.settings["emergency_exit"].bool != false
-        if keyMonitor == nil, banner.quits {
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                // Only these four keys count, so Caps Lock or Fn being on does not stop it.
-                if event.modifierFlags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command], event.keyCode == 12 { exit(0) }
-                return event
-            }
+    /// ⌃⌥⌘Q. Only these four keys count, so Caps Lock or Fn being on does not stop it.
+    static func isEmergencyExit(_ event: NSEvent) -> Bool {
+        event.type == .keyDown && event.keyCode == 12
+            && event.modifierFlags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command]
+    }
+
+    /// Locks the Mac with the macOS lock screen, then ends this lock once that screen is up, so the desktop
+    /// never shows between the two: a way out that never lets anyone in. When the macOS lock is out of reach,
+    /// this lock stays.
+    private func handOver(_ reason: String) {
+        guard mode == .lock, !ended, !handingOver else { return }
+        guard SystemLock.engage(reason: reason) else {
+            LogFile.shared.write(level: "error", message: "cannot switch to the macOS lock screen (\(reason)); the lock stays", source: "locky")
+            return
         }
-        safetyExit?.cancel()
-        autoUnlock?.cancel()
-        let exitLater = DispatchWorkItem { exit(0) }
-        safetyExit = exitLater
-        DispatchQueue.global().asyncAfter(deadline: .now() + seconds + 5, execute: exitLater)
-        banner.opensAt = Date().addingTimeInterval(seconds)
-        autoUnlock = Task { [weak self] in
-            // The suspending clock stops while the Mac sleeps; the default continuous one does not.
-            try? await Task.sleep(for: .seconds(seconds), clock: .suspending)
-            if !Task.isCancelled { self?.end("auto_unlock") }
+        handingOver = true
+        LogFile.shared.write(level: "warn", message: "switching to the macOS lock screen: \(reason)", source: "locky")
+        Task { [weak self] in
+            for _ in 0..<30 {
+                try? await Task.sleep(for: .milliseconds(100))
+                if Self.systemLocked {
+                    self?.end("handed over to the macOS lock screen")
+                    return
+                }
+            }
+            guard let self, !ended else { return }
+            handingOver = false
+            LogFile.shared.write(level: "error", message: "the macOS lock screen did not come up (\(reason)); the lock stays", source: "locky")
+        }
+    }
+
+    /// The macOS lock screen is up.
+    private static var systemLocked: Bool {
+        (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true
+    }
+
+    /// settings.json's emergency_exit, on unless false: ⌃⌥⌘Q switches to the macOS lock screen.
+    private var emergencyExit: Bool { options.settings["emergency_exit"].bool != false }
+
+    private func installEmergencyExit() {
+        guard emergencyExit else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard Self.isEmergencyExit(event) else { return event }
+            self?.handOver("⌃⌥⌘Q")
+            return nil
         }
     }
 }
@@ -945,29 +1057,16 @@ final class LockScreenView: NSView {
     }
 }
 
-/// Prototype only: says how the lock opens without a password.
+/// Says the way out that never lets anyone in.
 struct SafetyBanner: View {
-    @MainActor @Observable
-    final class Model {
-        var opensAt: Date?
-        /// Whether ⌃⌥⌘Q quits.
-        var quits = true
-    }
-
-    let model: Model
-
     var body: some View {
-        if let opensAt = model.opensAt {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text("Prototype · opens in \(max(0, Int(opensAt.timeIntervalSince(context.date).rounded()))) s" + (model.quits ? " · ⌃⌥⌘Q quits" : ""))
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(.black.opacity(0.35), in: Capsule())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-        }
+        Text("⌃⌥⌘Q switches to the macOS lock screen")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.white.opacity(0.6))
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(.black.opacity(0.35), in: Capsule())
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

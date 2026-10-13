@@ -436,8 +436,6 @@ end
 
 locky.config = {
   theme = "default",
-  -- Prototype safety: the lock opens by itself after this many seconds. 0 turns it off.
-  auto_unlock = 60,
   -- Replaces the theme's background, such as { wallpaper = true, blur = 30 } or { image = "~/x.jpg" }.
   background = nil,
   -- Merged into the theme's palette, such as { accent = "#ff79c6" }.
@@ -455,7 +453,7 @@ locky.config = {
 -- The type of each setting. Lua and the host both read privacy and hour24 only as true or false, so another
 -- value would hide names in widgets but not in the password field, or fail the host's whole config.
 local setting_types = {
-  theme = "string", auto_unlock = "number", hour24 = "boolean", privacy = "boolean", message = "string",
+  theme = "string", hour24 = "boolean", privacy = "boolean", message = "string",
   background = "table", palette = "table", widgets = "table",
 }
 
@@ -1231,7 +1229,8 @@ return {
       hour24 = nil
     end
     return {
-      theme = config.theme, auto_unlock = config.auto_unlock, hour24 = hour24, privacy = config.privacy == true,
+      -- Only whether auto_unlock is set: it is gone, and the host says so.
+      theme = config.theme, auto_unlock = config.auto_unlock ~= nil, hour24 = hour24, privacy = config.privacy == true,
       message = type(config.message) == "string" and config.message or nil,
     }
   end,
@@ -1253,8 +1252,8 @@ return {
   -- Returns a message for each value of the wrong type; those are skipped.
   apply_settings = function(settings)
     local failures = {}
-    for _, key in ipairs({ "theme", "auto_unlock", "hour24", "privacy", "message" }) do
-      local expected = ({ theme = "string", auto_unlock = "number", hour24 = "boolean", privacy = "boolean", message = "string" })[key]
+    for _, key in ipairs({ "theme", "hour24", "privacy", "message" }) do
+      local expected = ({ theme = "string", hour24 = "boolean", privacy = "boolean", message = "string" })[key]
       local value = settings[key]
       if value ~= nil and type(value) ~= expected then
         failures[#failures + 1] = ("%s: expected a %s, got %s"):format(key, expected, type(value))

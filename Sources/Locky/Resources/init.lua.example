@@ -5,9 +5,6 @@ locky.setup({
   -- A theme from `locky themes`, or one of your own in themes/<name>.lua next to this file.
   theme = "default",
 
-  -- Prototype safety: the lock opens by itself after this many seconds. 0 turns it off.
-  auto_unlock = 60,
-
   -- Override any theme's colors, background, or widget options:
   -- palette = { accent = "#ff79c6" },
   -- background = { wallpaper = true, blur = 30, dim = 0.3 },

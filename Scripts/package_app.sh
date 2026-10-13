@@ -41,17 +41,23 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
+# The guard, which locks the Mac if Locky dies or hangs during a lock. Locky finds it beside its executable.
+cp "$BIN_DIR/locky-guard" "$APP/Contents/MacOS/locky-guard"
 cp -R "$ROOT/Sources/$APP_NAME/Resources/." "$APP/Contents/Resources/"
 xattr -cr "$APP"
 
-# The hardened runtime blocks the camera (intruder photos) unless Locky.entitlements allows it.
+# The guard first, then the app that contains it. Every mode, ad-hoc too, signs with the hardened runtime, so
+# DYLD_INSERT_LIBRARIES and other injected code cannot hook Locky or its guard. The runtime blocks the camera
+# (intruder photos) unless Locky.entitlements allows it.
 if [[ "$SIGNING_MODE" == "adhoc" || -z "$APP_IDENTITY" ]]; then
-  codesign --force --sign - "$APP"
+  IDENTITY=- TIMESTAMP=--timestamp=none
 elif [[ "$SIGNING_MODE" == "release" ]]; then
-  codesign --force --timestamp --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$APP_IDENTITY" "$APP"
+  IDENTITY=$APP_IDENTITY TIMESTAMP=--timestamp
 else
-  codesign --force --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$APP_IDENTITY" "$APP"
+  IDENTITY=$APP_IDENTITY TIMESTAMP=--timestamp=none
 fi
+codesign --force "$TIMESTAMP" --options runtime --sign "$IDENTITY" "$APP/Contents/MacOS/locky-guard"
+codesign --force "$TIMESTAMP" --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$IDENTITY" "$APP"
 echo "Built $APP"
 
 # Install the build in /Applications, where Launch at Login expects a stable path. INSTALL=0 skips it.
