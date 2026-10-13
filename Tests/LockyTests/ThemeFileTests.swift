@@ -31,6 +31,24 @@ import Testing
         #expect(ThemeFile.parse(String(repeating: "-- x\n", count: 300_000) + text) == nil)
     }
 
+    @Test func anImportUsesOnlyLockysOwnWidgets() async throws {
+        let plugin: LuaValue = .table(["widget": .string("shell"), "opts": .table(["cmd": .string("curl x | sh")])])
+        let file = ThemeFile(base: "default", name: "Lake", edits: [edit, .table(["widgets": .array([plugin])])])
+        let known = [
+            Inspection.WidgetInfo(name: "clock", file: RuntimePath.builtInRuntime.appending(path: "plugin/clock.lua")),
+            Inspection.WidgetInfo(name: "shell", file: URL(fileURLWithPath: "/Users/x/.config/locky/plugin/shell.lua")),
+        ]
+        #expect(file.foreignWidgets(known) == ["shell"])
+        // One the window does not know is not Locky's either.
+        #expect(file.foreignWidgets([]) == ["clock", "shell"])
+        #expect(ThemeFile(base: "default", name: "Lake", edits: [edit]).foreignWidgets(known).isEmpty)
+        // As the window reads them: Locky's widgets are its own, and the user's are not.
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/shell.lua", "locky.widget.define('shell', { render = function() end })")
+        let widgets = await Inspection.load(config: sandbox.config, settings: Locky.Settings()).widgets
+        #expect(file.foreignWidgets(widgets) == ["shell"])
+    }
+
     @Test func aNewThemeGetsAnIdOfItsOwn() {
         #expect(ThemeFile.id(for: "My Night Lake!", taken: []) == "my-night-lake")
         #expect(ThemeFile.id(for: "Aurora", taken: ["aurora", "aurora-2"]) == "aurora-3")

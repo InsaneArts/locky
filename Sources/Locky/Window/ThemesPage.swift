@@ -136,6 +136,14 @@ struct ThemesPage: View {
             problem = ("Can't Import This Theme", "It is made from “\(file.base)”, which is not one of Locky's themes.")
             return
         }
+        let foreign = file.foreignWidgets(model.inspection.widgets)
+        guard foreign.isEmpty else {
+            problem = ("Can't Import This Theme", """
+            It uses widgets that do not come with Locky: \(foreign.joined(separator: ", ")). A theme file sets a widget's \
+            options, and a plugin's widget could run them as commands, so Locky imports only themes with its own widgets.
+            """)
+            return
+        }
         importing = file
     }
 

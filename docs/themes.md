@@ -128,7 +128,9 @@ The Themes page makes themes without Lua. Its ⋯ menu has two commands:
 **Import Theme…**, below the theme list, adds an exported file to `~/.config/locky/themes/`. A theme file is Lua,
 and Lua can run code, so Locky imports only files in the shape Export Theme writes. It reads the settings from
 the file as text, checks that the theme loads, and writes the file again from those settings. No code from an
-imported file runs. A theme written in Lua by hand goes in `~/.config/locky/themes/` directly.
+imported file runs. The file sets widget options, and a plugin's widget could run an option as a command, so
+Locky refuses a file that uses widgets that do not come with Locky. A theme written in Lua by hand goes in
+`~/.config/locky/themes/` directly.
 
 The file calls `locky.theme.derive`:
 

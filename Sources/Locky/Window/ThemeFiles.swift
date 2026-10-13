@@ -64,6 +64,17 @@ struct ThemeFile: Equatable {
         return roots.contains { FileManager.default.fileExists(atPath: $0.appending(path: "themes/\(theme).lua").path) }
     }
 
+    /// The widgets the changes name that do not come with Locky, as `known` (the window's widget list) has them. An
+    /// imported theme may not use them: it gives a widget options, and a plugin's widget could run one as a command.
+    func foreignWidgets(_ known: [Inspection.WidgetInfo]) -> [String] {
+        let resources = RuntimePath.resources.resolvingSymlinksInPath().path + "/"
+        let names = Set(edits.flatMap { $0["widgets"].array ?? [] }.compactMap { $0["widget"].string })
+        return names.filter { name in
+            guard let file = known.first(where: { $0.name == name })?.file else { return true }
+            return !file.resolvingSymlinksInPath().path.hasPrefix(resources)
+        }.sorted()
+    }
+
     /// The ids a new theme must not take: every theme's, every file's in the config's themes folder, and every
     /// id settings.json has changes for, which a theme removed in Finder leaves behind.
     static func takenIDs(_ themes: [Inspection.ThemeInfo], settings: Settings, config: URL) -> Set<String> {
