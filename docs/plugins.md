@@ -127,8 +127,10 @@ own code need no grant.
 Locky decides by the call stack: if any Lua function on it comes from a plugin without the grant, or from
 code loaded from a string (`load`), the call fails. A coroutine counts the code that resumed it. Locky's Lua
 makes no proper tail calls, so `return f()` keeps its caller on the stack; deep recursion through tail calls
-runs out of stack. Only `init.lua` and your own config may call `locky.pack.add`, so a plugin cannot grant
-itself anything.
+runs out of stack. The function must also be called by its name from Lua code: handed over as a callback, a
+metamethod, or an iterator, called through `pcall`, or under another name (`local run = locky.system`), it
+fails. Otherwise a plugin could get Locky's own code to make the call for it, with no plugin code on the stack.
+Only `init.lua` and your own config may call `locky.pack.add`, so a plugin cannot grant itself anything.
 
 This is defense in depth, not a sandbox. A plugin still runs as you: it can read your files and show what it
 reads on the lock screen. Lua is not built to isolate code, and a determined plugin may find a way around

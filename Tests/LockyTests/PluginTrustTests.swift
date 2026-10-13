@@ -186,6 +186,58 @@ import Testing
         runtime.stop()
     }
 
+    /// Ways to get trusted code to make the call with no plugin frame on the stack: a metamethod or an iterator the
+    /// core runs while it reads the plugin's theme, a function the plugin put in place of one that the core or a
+    /// built-in widget calls with the plugin's data, the <close> variable of a coroutine the host resumed, and a callback.
+    @Test(arguments: [
+        "return { palette = setmetatable(CMD, { __pairs = locky.system }) }",
+        "return { palette = setmetatable({}, { __pairs = function() return locky.system, CMD, nil end }) }",
+        "locky.tbl.islist = locky.system return { palette = { x = CMD } }",
+        "ipairs = locky.system return { widgets = { { 'worldclock', opts = { zones = CMD } } } }",
+        """
+        locky.defer(coroutine.wrap(function()
+          local co = coroutine.running()
+          local x <close> = setmetatable(CMD, { __close = locky.system })
+          locky.defer(function() coroutine.close(co) end)
+          coroutine.yield()
+        end))
+        return {}
+        """,
+    ])
+    func aPluginCannotHaveTrustedCodeCallForIt(_ theme: String) async throws {
+        let sandbox = try Sandbox()
+        let path = target(sandbox)
+        try thirdParty(["themes/evil.lua": theme.replacingOccurrences(of: "CMD", with: "{ '/usr/bin/touch', '\(path)' }")], in: sandbox)
+        let runtime = runtime(sandbox)
+        _ = await runtime.start(theme: "evil")
+        try await Task.sleep(for: .milliseconds(300))
+        runtime.stop()
+        #expect(!FileManager.default.fileExists(atPath: path))
+    }
+
+    /// Your own code calls them by name; pcall and another name would let trusted code be tricked into the call.
+    @Test func yourOwnCodeCallsThemByName() throws {
+        let sandbox = try Sandbox()
+        let runtime = runtime(sandbox)
+        #expect(runtime.bootForTest().isEmpty)
+        let viaPcall = try runtime.eval("return pcall(os.remove, '\(target(sandbox))')")
+        #expect(viaPcall.last?.string?.contains("os.remove: call it by its name from your own code") == true, "\(viaPcall)")
+        let renamed = try runtime.eval("local run = locky.system return pcall(function() run({ 'true' }) end)")
+        #expect(renamed.last?.string?.contains("locky.system: call it by its name from your own code") == true, "\(renamed)")
+    }
+
+    /// A plugin's theme cannot have the core add a plugin for it, with a grant.
+    @Test func aPluginCannotHaveTheCoreAddPlugins() async throws {
+        let sandbox = try Sandbox()
+        try thirdParty(["themes/evil.lua": """
+            return { palette = setmetatable({ { dir = '/tmp', name = 'x', allow = { 'system' } } }, { __pairs = locky.pack.add }) }
+            """], in: sandbox)
+        let runtime = runtime(sandbox)
+        let started = await runtime.start(theme: "evil")
+        runtime.stop()
+        #expect(started.problems.contains { $0.contains("locky.pack.add: only init.lua and your own config may add plugins") }, "\(started.problems)")
+    }
+
     @Test func aPluginCannotAddPluginsOrGrantItself() throws {
         let sandbox = try Sandbox()
         try thirdParty(["lua/evil.lua": "locky.pack.add({ { dir = '/tmp/x', allow = { 'system' } } }) return {}"], in: sandbox)

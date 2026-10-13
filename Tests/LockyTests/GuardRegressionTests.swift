@@ -51,7 +51,7 @@ import Testing
 
     @Test func badArgumentsAreErrorsNotCrashes() throws {
         let runtime = try runtime()
-        let nul = try runtime.eval(#"return select(2, pcall(locky.system, { "echo", "a\0b" }))"#)
+        let nul = try runtime.eval(#"return select(2, pcall(function() locky.system({ "echo", "a\0b" }) end))"#)
         #expect(nul.first?.string?.contains("NUL") == true)
         let timer = try runtime.eval("return select(2, pcall(locky.defer, function() end, 1e12))")
         #expect(timer.first?.string?.contains("1e9") == true)

@@ -93,10 +93,24 @@ local function plugins_on_stack(level)
   end
 end
 
--- Raises an error for the code `level` frames up unless every plugin on the stack may use `capability`.
+local core_source = raw_getinfo(1, "S").source
+
+-- Whether the function `level` frames up was called under `name` by a Lua function outside the core. Anything else
+-- is trusted code making the call for whoever handed it the function or the data, with no plugin frame left on the
+-- stack: a metamethod, a for iterator, a C function such as pairs or pcall, the core, the host (a callback, or the
+-- <close> variable of a closed coroutine), or code calling what a plugin put in place of a function it knows, such as
+-- ipairs or locky.tbl.islist.
+local function called_directly(level, name)
+  local how, info = raw_getinfo(level + 1, "n"), raw_getinfo(level + 2, "S")
+  return info ~= nil and info.what ~= "C" and info.source ~= core_source and how.namewhat ~= "metamethod"
+    and how.name == name
+end
+
+-- Raises an error for the code `level` frames up unless every plugin on the stack may use `capability` and the
+-- function the check guards was called directly.
 local function require_grant(capability, what, level)
+  local words = capabilities[capability]
   for name in pairs(plugins_on_stack(2)) do
-    local words = capabilities[capability]
     if name == "" then
       error(("%s: code loaded from a string may not %s"):format(what, words[1]), level + 1)
     end
@@ -105,6 +119,10 @@ local function require_grant(capability, what, level)
       error(("%s: plugin %q may not %s. To allow it, turn on %s for it on the Plugins page, or add allow = { %q } to its locky.pack.add entry in init.lua")
         :format(what, name, words[1], words[2], capability), level + 1)
     end
+  end
+  if not called_directly(level, what:match("[^.]+$")) then
+    error(("%s: call it by its name from your own code, not through pcall, a callback, a metamethod, or another name")
+      :format(what), level + 1)
   end
 end
 
@@ -1362,7 +1380,7 @@ end
 --- allow = { "system", "files" } lets a plugin run programs and change files.
 function locky.pack.add(specs)
   -- A plugin adding packages could grant itself anything.
-  if raw_next(plugins_on_stack(1)) ~= nil then
+  if raw_next(plugins_on_stack(1)) ~= nil or not called_directly(1, "add") then
     error("locky.pack.add: only init.lua and your own config may add plugins", 2)
   end
   validate("specs", specs, "table")
