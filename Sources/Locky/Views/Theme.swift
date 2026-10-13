@@ -66,6 +66,8 @@ struct Theme: Sendable, Equatable {
         var align: String?
         /// nil: no card. Otherwise a card style.
         var card: String?
+        /// Apple's widget family: "circular", "rectangular", "inline", "small", "medium", "large", or nil.
+        var family: String?
         var allDisplays: Bool
         var known: Bool
         /// The options the widget's instance gets, as plain data: the theme editor's preview keeps an instance
@@ -160,6 +162,7 @@ struct Theme: Sendable, Equatable {
                 size: Self.point(entry["size"]).map { CGSize(width: $0.x, height: $0.y) },
                 align: entry["align"].string,
                 card: card,
+                family: entry["family"].string,
                 allDisplays: entry["display"].string == "all",
                 known: entry["known"].bool ?? false,
                 options: entry["opts"]

@@ -817,12 +817,24 @@ end
 local widgets = {}
 locky.widget = {}
 
+-- Apple's widget families, with their sizes in points: circular, rectangular, and inline as on the Lock Screen,
+-- small, medium, and large as on the desktop. Inline fits its one line of text.
+local families = {
+  inline = false, circular = { 76, 76 }, rectangular = { 172, 76 },
+  small = { 170, 170 }, medium = { 364, 170 }, large = { 364, 382 },
+}
+local family_names = "inline, circular, rectangular, small, medium, large"
+local function is_family(v)
+  return families[v] ~= nil, "expected a family: " .. family_names
+end
+
 --- Defines a widget. spec:
 ---   render(self)  required: returns a view built with locky.ui, or nil to show nothing
 ---   init(self)    optional: runs when the lock screen opens; start timers and processes here
 ---   opts          optional: default options; a theme's and the user's options merge into them
 ---   size          optional: { width, height } in points; without it the widget fits its content
 ---   card          optional: true to sit on the theme's card unless the theme says otherwise
+---   families      optional: the families it draws, such as { "circular", "small" }; render reads self.family
 ---   choices       optional: the values an option takes, for the Locky window's editor, such as
 ---                 { style = { "list", "dots" } }
 ---   description   optional
@@ -835,6 +847,17 @@ function locky.widget.define(name, spec)
   validate("spec.init", spec.init, "callable", true)
   validate("spec.opts", spec.opts, "table", true)
   validate("spec.size", spec.size, "table", true)
+  validate("spec.families", spec.families, function(v)
+    if type(v) ~= "table" or not tbl.islist(v) then
+      return false, "expected a list of families: " .. family_names
+    end
+    for _, family in ipairs(v) do
+      if families[family] == nil then
+        return false, ("unknown family %q: expected one of %s"):format(tostring(family), family_names)
+      end
+    end
+    return true
+  end, true)
   validate("spec.choices", spec.choices, function(v)
     local expected = "expected lists of strings by option, such as { style = { \"list\", \"dots\" } }"
     if type(v) ~= "table" then
@@ -1018,6 +1041,7 @@ local function normalize_theme(name, theme, background_from_settings)
       return anchors[v] ~= nil, "expected one of top, top-left, top-right, left, center, right, bottom, bottom-left, bottom-right"
     end)
     validate(where .. ".opts", entry.opts, "table", true)
+    validate(where .. ".family", entry.family, is_family, true)
     result.widgets[i] = {
       widget = widget,
       anchor = anchor,
@@ -1025,6 +1049,7 @@ local function normalize_theme(name, theme, background_from_settings)
       size = point(where .. ".size", entry.size),
       align = entry.align,
       card = entry.card,
+      family = entry.family,
       display = entry.display or "main",
       opts = entry.opts or {},
       settings_opts = entry.settings_opts,
@@ -1153,6 +1178,7 @@ local function settings_edit(name, theme, edit)
       validate(at .. ".card", entry.card, function(v)
         return type(v) == "boolean" or card_styles[v] ~= nil, "expected true, false, or a card style: glass, solid, outline, none"
       end, true)
+      validate(at .. ".family", entry.family, is_family, true)
       validate(at .. ".display", entry.display, function(v)
         return v == "main" or v == "all", "expected \"main\" or \"all\""
       end, true)
@@ -1188,7 +1214,7 @@ local function settings_edit(name, theme, edit)
           placement[1] = nil
         end
         placement.widget = entry.widget
-        for _, key in ipairs({ "anchor", "align", "card", "display" }) do
+        for _, key in ipairs({ "anchor", "align", "card", "family", "display" }) do
           if entry[key] ~= nil then
             placement[key] = entry[key]
           end
@@ -1563,8 +1589,13 @@ return {
       exported.widgets[i].settings_opts = nil
       local definition = widgets[placement.widget]
       exported.widgets[i].known = definition ~= nil
-      exported.widgets[i].size = placement.size or (definition and definition.size)
-      if placement.card == nil and definition then
+      local family = families[placement.family]
+      exported.widgets[i].size = placement.size or (family and { family[1], family[2] }) or (definition and definition.size)
+      if placement.card == nil and placement.family then
+        -- Desktop families sit on the theme's card; Lock Screen ones on the bare screen, the circle on a disc.
+        local system = placement.family == "small" or placement.family == "medium" or placement.family == "large"
+        exported.widgets[i].card = system or placement.family == "circular"
+      elseif placement.card == nil and definition then
         exported.widgets[i].card = definition.card
       end
     end
@@ -1584,6 +1615,8 @@ return {
       name = definition.name,
       -- The user has the last word, and the window's layer wins, as everywhere.
       opts = widget_opts(definition.name, placement),
+      -- Apple's family the placement asks for, or nil: the widget's own size.
+      family = placement.family,
       state = {},
       theme = current_theme,
     }, Instance)
@@ -1666,7 +1699,8 @@ return {
       local ok, opts = pcall(widget_opts, placement.widget, placement, false)
       widgets_list[i] = {
         widget = placement.widget, anchor = placement.anchor, offset = placement.offset, size = placement.size,
-        align = placement.align, card = plain(placement.card), display = placement.display, opts = ok and plain(opts) or nil,
+        align = placement.align, card = plain(placement.card), family = placement.family, display = placement.display,
+        opts = ok and plain(opts) or nil,
       }
     end
     return {
@@ -1688,6 +1722,7 @@ return {
         return {
           name = name, description = text(definition.description), file = text(definition.file), card = definition.card == true,
           opts = opts_ok and plain(opts) or nil, defaults = plain(definition.opts), choices = plain(definition.choices),
+          families = plain(definition.families),
         }
       end)
       list[#list + 1] = ok and info or { name = name, error = error_text(info) }

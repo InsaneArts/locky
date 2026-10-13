@@ -53,6 +53,7 @@ local ui = locky.ui
 locky.widget.define("uptime", {
   description = "How long the Mac has been on",
   card = true,                         -- sit on the theme's card unless the theme says otherwise
+  families = { "inline", "small" },    -- optional: Apple's sizes it draws; render reads self.family (nil: its own size)
   opts = { label = "Up" },             -- defaults; the theme's and the user's options merge in
   choices = { label = { "Up", "On" } }, -- optional: the values an option takes, for the window's editor
   init = function(self)

@@ -66,6 +66,19 @@ and so on (default center). `card = true` uses the theme's card, or name a style
 "all"` repeats the widget on every display; by default widgets show on the main display only, and every
 display gets the background.
 
+**Families.** `family` gives a widget one of Apple's widget sizes, and the widget draws its layout for it:
+
+| Family | Size (points) | Card |
+|---|---|---|
+| `circular` | 76 × 76 | a disc, as on the Lock Screen |
+| `rectangular` | 172 × 76 | none |
+| `inline` | one line of text | none |
+| `small` | 170 × 170 | the theme's card, 16-point margins |
+| `medium` | 364 × 170 | the theme's card, 16-point margins |
+| `large` | 364 × 382 | the theme's card, 16-point margins |
+
+`card` and `size` still override what the family sets. [widgets.md](widgets.md) lists each widget's families.
+
 **Testing.** `Scripts/snapshot.sh <id> out.png` renders a theme to a PNG. `LOCKY_WALLPAPER=/path/to/image.jpg`
 (or `none`) stands in for the desktop picture, to try a theme on other wallpapers. A `preview.png` or
 `preview.jpg` next to `themes/` becomes the theme's thumbnail in the Locky window.
