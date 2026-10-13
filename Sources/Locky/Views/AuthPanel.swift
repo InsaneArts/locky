@@ -1,3 +1,4 @@
+import Accessibility
 import AppKit
 import Collaboration
 import LocalAuthentication
@@ -186,6 +187,9 @@ final class TouchID {
     private(set) var context = LAContext()
     /// Changes with every new context; the glyph view is made again for it.
     private(set) var generation = 0
+    /// Touch ID stopped listening (fingers that did not match, or too many restarts) until the next restart: the
+    /// glyph goes, and the field asks for the password alone.
+    private(set) var gaveUp = false
     private var wanted = false
     private var running = false
     private var readyGeneration = -1
@@ -207,7 +211,9 @@ final class TouchID {
     }
 
     private func evaluateIfReady() {
-        guard wanted, !running, readyGeneration == generation else { return }
+        // Never once Touch ID gave up: its glyph is out of the window then, and a hidden one makes macOS show its own
+        // prompt.
+        guard wanted, !running, !gaveUp, readyGeneration == generation else { return }
         running = true
         let generation = generation
         context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "unlock your Mac") { success, error in
@@ -230,10 +236,13 @@ final class TouchID {
         if let code, [.systemCancel, .appCancel, .invalidContext, .notInteractive].contains(code), restarts < 10 {
             restarts += 1
             restart(after: 1)
+        } else {
+            gaveUp = true
         }
     }
 
-    /// A new context (and glyph), evaluated again if it was wanted: after a display wake or a rebuilt window.
+    /// A new context (and glyph), evaluated again if it was wanted: after a display wake or a rebuilt window. It
+    /// brings back a glyph that gave up, with the new context.
     func restart(after delay: Double = 0) {
         context.invalidate()
         running = false
@@ -242,6 +251,7 @@ final class TouchID {
             guard let self else { return }
             context = LAContext()
             generation += 1
+            gaveUp = false
         }
     }
 
@@ -258,9 +268,12 @@ final class TouchID {
 
 private struct TouchIDGlyph: NSViewRepresentable {
     let touchID: TouchID
+    /// .mini in the status line, .small in the ring. LAAuthenticationView's side: mini 16, small 32, regular 64,
+    /// large 128 points.
+    let size: NSControl.ControlSize
 
     func makeNSView(context _: Context) -> LAAuthenticationView {
-        let view = LAAuthenticationView(context: touchID.context, controlSize: .regular)
+        let view = LAAuthenticationView(context: touchID.context, controlSize: size)
         let generation = touchID.generation
         // The view exists from the next turn of the main queue on; evaluation may start then.
         DispatchQueue.main.async { [touchID] in touchID.glyphAppeared(generation) }
@@ -270,7 +283,7 @@ private struct TouchIDGlyph: NSViewRepresentable {
     func updateNSView(_: LAAuthenticationView, context _: Context) {}
 }
 
-/// The password field, in the theme's style: "pill", "underline", "box", "terminal", or "minimal".
+/// The password field, in the theme's style: "pill", "underline", "box", "terminal", "minimal", or "ring".
 /// Native on purpose: no plugin sees keystrokes.
 struct AuthPanel: View {
     let auth: Theme.Auth
@@ -282,36 +295,66 @@ struct AuthPanel: View {
     var onSize: (CGSize) -> Void = { _ in }
     /// false in the theme editor's preview: the field shows, but never takes the keyboard.
     var interactive = true
-    /// Previews without Touch ID on a Mac that has it: the glyph and its hint show as a picture, where the lock
-    /// shows the live ones.
+    /// Previews without Touch ID on a Mac that has it: the glyph shows as a picture, where the lock shows the live one.
     var touchIDPicture = false
 
     private var password: String {
         get { model.password }
         nonmutating set { model.password = newValue }
     }
-    private var checking: Bool { model.checking }
-    private var wrong: Int { model.wrong }
     private var user: Auth.User { model.user }
-    /// "Try again in 8 s" while the wait after wrong passwords runs.
-    private var waitText: String? { model.waitLeft > 0 ? "Try again in \(model.waitLeft) s" : nil }
+    /// A check runs, or the wait after wrong passwords: the field and the arrow are disabled.
+    private var busy: Bool { model.checking || model.waitLeft > 0 }
+    /// What the field says in place of its placeholder, while there is something to say.
+    private var note: String? { Self.note(waitLeft: model.waitLeft, wrongShown: model.wrongShown) }
+    /// The theme's placeholder. The minimal and terminal styles have none unless the theme gives one.
+    private var placeholderText: String {
+        auth.placeholder ?? (auth.style == "minimal" || auth.style == "terminal" ? "" : "Enter Password")
+    }
+    private var touchIDOffered: Bool { touchID != nil || touchIDPicture }
+    /// Touch ID listens, so its glyph shows.
+    private var listening: Bool { touchIDPicture || touchID?.gaveUp == false }
+    private var statusText: String? {
+        Self.statusText(touchIDOffered: touchIDOffered, listening: listening, placeholder: placeholderText, hint: auth.hint)
+    }
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The "ring" style's lit arc: where it starts (0 to 1), its role color, and a counter that restarts its fade.
     @State private var arc: (start: Double, color: String, key: Int) = (0, "accent", 0)
 
     private var s: CGFloat { style.scale }
     private var width: CGFloat { auth.width * s }
 
+    /// The field's note, in place of its placeholder: the wait after wrong passwords, then "Wrong Password" until the
+    /// next key. Plain English on purpose: Duration.formatted rounds to the nearest minute and follows the system's
+    /// language.
+    static func note(waitLeft: Int, wrongShown: Bool) -> String? {
+        if waitLeft > 59 {
+            let minutes = Int((Double(waitLeft) / 60).rounded(.up))
+            return minutes == 1 ? "Try again in 1 minute" : "Try again in \(minutes) minutes"
+        }
+        if waitLeft > 0 { return waitLeft == 1 ? "Try again in 1 second" : "Try again in \(waitLeft) seconds" }
+        return wrongShown ? "Wrong Password" : nil
+    }
+
+    /// The line under the field says how to unlock, unless the field's placeholder says it already. nil: no text
+    /// (the glyph alone still shows while Touch ID listens).
+    static func statusText(touchIDOffered: Bool, listening: Bool, placeholder: String, hint: Bool) -> String? {
+        guard hint else { return nil }
+        if touchIDOffered { return listening ? "Touch ID or Enter Password" : "Enter Password" }
+        return placeholder.isEmpty ? "Enter Password" : nil
+    }
+
     var body: some View {
         if auth.style == "ring" { ring } else { stack }
     }
 
     /// i3lock's ring: the password field is the ring. Each key lights an arc at a random place; backspace
-    /// lights one in the warning color; checking turns the ring accent, and a wrong password flashes it.
+    /// lights one in the warning color; checking turns the ring accent, and a wrong password turns it danger.
     private var ring: some View {
         let diameter = width
         let line = auth.ringWidth.map { $0 * s } ?? max(6, diameter * 0.03)
-        let base = checking ? style.color("accent") : wrong > 0 && password.isEmpty ? style.color("danger") : style.color("border")
+        let base = model.checking ? style.color("accent") : model.wrongShown ? style.color("danger") : style.color("border")
         return ZStack {
             if let fill = auth.ringFill {
                 Circle().fill(style.color(fill)).padding(line / 2)
@@ -324,22 +367,23 @@ struct AuthPanel: View {
                 .shadow(color: auth.ringGlow ? style.color(arc.color) : .clear, radius: auth.ringGlow ? line : 0)
                 .opacity(arc.key == 0 ? 0 : 1)
                 .id(arc.key)
-                .transition(.opacity)
-            secureField(placeholder: "")
+                // A key lights its arc at once; the arc before it fades out.
+                .transition(.asymmetric(insertion: .identity, removal: .opacity))
+            secureField(slot: "")
                 .frame(width: 1, height: 1)
                 .opacity(0.011)
-            if showsGlyph, !checking, !(wrong > 0 && password.isEmpty), waitText == nil {
-                glyph.offset(y: diameter * 0.34)
-            } else if auth.hint || waitText != nil {
-                Text(waitText ?? (checking ? "Verifying…" : wrong > 0 && password.isEmpty ? "Wrong password" : ""))
+            // Fixed in place while Touch ID listens, whatever the note says: a glyph taken out during an evaluation
+            // makes macOS show its own prompt.
+            if listening { glyph(.small).offset(y: diameter * 0.34) }
+            if let note {
+                Text(note)
                     .font(font(12, "medium"))
-                    .foregroundStyle(wrong > 0 && password.isEmpty && waitText == nil ? style.color("danger") : quiet(onField: true))
-                    .offset(y: diameter * 0.36)
+                    .foregroundStyle(model.waitLeft > 0 ? style.quiet(on: auth.ringFill) : style.color("danger"))
+                    .offset(y: diameter * 0.24)
             }
         }
         .frame(width: diameter, height: diameter)
         .animation(.easeOut(duration: 0.25), value: arc.key)
-        .animation(.easeOut(duration: 0.2), value: checking)
         .onChange(of: password.count) { old, new in
             guard new != old else { return }
             arc = (Double.random(in: 0..<1), new > old ? "accent" : "warning", arc.key + 1)
@@ -359,33 +403,30 @@ struct AuthPanel: View {
         .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
     }
 
-    private var showsGlyph: Bool { touchID != nil || touchIDPicture }
-
-    /// The Touch ID glyph, made again for each new context.
-    @ViewBuilder private var glyph: some View {
+    /// The Touch ID glyph at its natural side, made again for each new context. Gone once Touch ID gave up.
+    @ViewBuilder private func glyph(_ size: NSControl.ControlSize) -> some View {
+        let side: CGFloat = size == .mini ? 16 : 32
         if let touchID {
-            TouchIDGlyph(touchID: touchID).id(touchID.generation).frame(width: 34 * s, height: 34 * s)
+            if !touchID.gaveUp {
+                TouchIDGlyph(touchID: touchID, size: size).id(touchID.generation).frame(width: side, height: side)
+            }
         } else if touchIDPicture {
-            Image(systemName: "touchid").resizable().scaledToFit().symbolRenderingMode(.multicolor)
-                .padding(4 * s).frame(width: 34 * s, height: 34 * s)
+            Image(systemName: "touchid").resizable().scaledToFit().symbolRenderingMode(.multicolor).frame(width: side, height: side)
         }
     }
 
+    /// Avatar, name, field, and the status line, in one column: nothing beside the field, so its center is the stack's.
     private var stack: some View {
         VStack(alignment: auth.hintAlign == "leading" ? .leading : .center, spacing: 12 * s) {
-            if auth.avatar && auth.style != "terminal" && auth.style != "minimal" { avatar }
+            if auth.avatar, auth.style != "terminal", auth.style != "minimal", let picture = user.picture { avatar(picture) }
             if auth.name && !user.name.isEmpty && auth.style != "terminal" && auth.style != "minimal" {
-                Text(user.name).font(font(15, "semibold")).foregroundStyle(style.color("fg"))
+                Text(user.name).font(font(15, "semibold")).foregroundStyle(style.color("fg")).lineLimit(1)
             }
-            HStack(spacing: 10 * s) {
-                // A gap as wide as the Touch ID glyph keeps the field itself centered.
-                if showsGlyph, auth.hintAlign != "leading", auth.style != "terminal" { Color.clear.frame(width: 34 * s, height: 1) }
-                field
-                if showsGlyph { glyph }
+            // Only the shake animates: the note and the arrow change with it at once.
+            field.animation(reduceMotion ? nil : .linear(duration: 0.45)) { content in
+                content.modifier(Shake(phase: CGFloat(model.wrong), amplitude: 10 * s))
             }
-            .modifier(Shake(times: CGFloat(wrong)))
-            .animation(.default, value: wrong)
-            if auth.hint { hint }
+            if touchIDOffered || statusText != nil { statusLine }
         }
         .fixedSize()
         .onGeometryChange(for: CGSize.self) { $0.size } action: { onSize($0) }
@@ -399,6 +440,22 @@ struct AuthPanel: View {
         .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
     }
 
+    /// The live Touch ID glyph and how to unlock, under the field. As tall as the glyph while Touch ID is offered, so
+    /// nothing moves when it gives up.
+    private var statusLine: some View {
+        HStack(spacing: 6 * s) {
+            if listening { glyph(.mini) }
+            if let statusText {
+                Text(statusText).font(font(12, "medium")).foregroundStyle(style.quiet(on: nil))
+            }
+        }
+        .frame(minHeight: touchIDOffered ? 16 : nil)
+        // One element that reads the line once: the glyph's own label would say "Touch ID" twice.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(statusText ?? "Touch ID")
+        .accessibilityHidden(statusText == nil && !listening)
+    }
+
     /// Sizes are given for a 14-point field and scale with auth.font.size.
     private func font(_ size: CGFloat, _ weight: String, mono: Bool = false) -> Font {
         let size = size * auth.size / 14
@@ -406,17 +463,6 @@ struct AuthPanel: View {
             return Font.system(size: size * s, weight: StyleWeights.weight(auth.font.weight ?? weight), design: .monospaced)
         }
         return style.font(size: size, weight: auth.font.weight ?? weight, design: auth.font.design, family: auth.font.family, mono: false, italic: false)
-    }
-
-    /// The palette's muted color, lifted toward fg where it would not reach 4.5:1: on the field's surface (or the
-    /// ring's fill), or on the screen's bg for text outside the field and for styles without a surface.
-    private func quiet(onField: Bool) -> Color {
-        guard let muted = style.palette["muted"], let fg = style.palette["fg"], let bg = style.palette["bg"] else { return style.color("muted") }
-        var layers = [bg]
-        if onField, let surface = fieldSurface, let color = style.palette[surface] ?? (surface.hasPrefix("#") ? surface : nil) {
-            layers.append(color)
-        }
-        return Contrast.readable(muted, fg: fg, on: layers).flatMap { Color(hex: $0) } ?? style.color("muted")
     }
 
     /// The palette role (or color) the field's text sits on; nil where it sits on the screen.
@@ -430,23 +476,28 @@ struct AuthPanel: View {
 
     private var glowColor: Color { auth.glow == nil ? .clear : style.color(auth.style == "terminal" ? "accent" : "fg") }
 
-    private var avatar: some View {
-        Group {
-            if let picture = user.picture { Image(nsImage: picture).resizable().scaledToFill() }
-            else { Image(systemName: "person.crop.circle.fill").resizable().foregroundStyle(style.color("muted")) }
-        }
-        .frame(width: 64 * s, height: 64 * s)
-        .clipShape(Circle())
-        .shadow(color: .black.opacity(0.3), radius: 10 * s, y: 4 * s)
+    /// The underline's or the box's line: danger after a wrong password, else the focus color while the field is
+    /// focused. The editor's preview never takes focus, and draws the focus color as the lock does.
+    private var lineColor: Color {
+        if model.wrongShown { return style.color("danger") }
+        return style.color(interactive ? (focused ? auth.focus : "border") : auth.focus)
     }
 
-    /// The native secure field, with Locky's own placeholder: SwiftUI draws a field's prompt in the system's
+    private func avatar(_ picture: NSImage) -> some View {
+        Image(nsImage: picture).resizable().scaledToFill()
+            .frame(width: 64 * s, height: 64 * s)
+            .clipShape(Circle())
+            .shadow(color: .black.opacity(0.3), radius: 10 * s, y: 4 * s)
+    }
+
+    /// The native secure field, with Locky's own placeholder, `slot`: SwiftUI draws a field's prompt in the system's
     /// gray, which disappears on light themes. Locky draws it in the palette's muted color instead.
-    private func secureField(placeholder: String? = nil, alignment: Alignment = .leading) -> some View {
-        let text = waitText ?? placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
-        return ZStack(alignment: alignment) {
-            if password.isEmpty, !text.isEmpty {
-                Text(text).font(font(14, "regular")).foregroundStyle(quiet(onField: true)).allowsHitTesting(false)
+    private func secureField(slot: String, alignment: Alignment = .leading) -> some View {
+        ZStack(alignment: alignment) {
+            if password.isEmpty, !slot.isEmpty {
+                Text(slot).font(font(14, "regular")).foregroundStyle(style.quiet(on: fieldSurface))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             SecureField("", text: $model.password)
                 .textFieldStyle(.plain)
@@ -454,8 +505,9 @@ struct AuthPanel: View {
                 .foregroundStyle(style.color("fg"))
                 .multilineTextAlignment(alignment == .center ? .center : .leading)
                 .focused($focused)
-                .disabled(checking || waitText != nil || !interactive)
+                .disabled(busy || !interactive)
                 .onSubmit(submit)
+                .accessibilityLabel("Password")
         }
         .shadow(color: glowColor, radius: auth.glow ?? 0)
     }
@@ -464,46 +516,51 @@ struct AuthPanel: View {
         switch auth.style {
         case "underline":
             VStack(spacing: 8 * s) {
-                secureField(alignment: auth.hintAlign == "leading" ? .leading : .center)
-                Rectangle().fill(wrong > 0 && password.isEmpty ? style.color("danger") : style.color(focused ? auth.focus : "border"))
-                    .frame(height: 1.5 * s)
+                secureField(slot: note ?? placeholderText, alignment: auth.hintAlign == "leading" ? .leading : .center)
+                Rectangle().fill(lineColor).frame(height: 1.5 * s)
             }
             .frame(width: width)
         case "box":
-            secureField()
+            secureField(slot: note ?? placeholderText)
                 .padding(.horizontal, 14 * s)
                 .frame(width: width, height: 40 * s)
                 .background(style.color("surface"), in: RoundedRectangle(cornerRadius: 10 * s, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10 * s, style: .continuous).strokeBorder(style.color(focused ? auth.focus : "border"), lineWidth: 1.5 * s))
+                .overlay(RoundedRectangle(cornerRadius: 10 * s, style: .continuous).strokeBorder(lineColor, lineWidth: 1.5 * s))
         case "terminal":
             HStack(spacing: 0) {
                 Text(auth.prompt ?? "\(user.login)@\(user.host) ~ % ").font(font(14, "regular")).foregroundStyle(style.color("accent"))
                     .shadow(color: glowColor, radius: auth.glow ?? 0)
                 Text("unlock ").font(font(14, "regular")).foregroundStyle(style.color("fg"))
                     .shadow(color: glowColor, radius: auth.glow ?? 0)
-                secureField(placeholder: auth.placeholder ?? "").frame(width: width * 0.6)
+                secureField(slot: note ?? placeholderText).frame(width: width * 0.6)
             }
         case "minimal":
-            // The field is there and focused from the start, but only appears once you type.
-            secureField(alignment: .center)
+            // The field is there and focused from the start, but only appears once you type or it has a note.
+            secureField(slot: note ?? placeholderText, alignment: .center)
                 .frame(width: width)
-                .opacity(password.isEmpty && waitText == nil ? 0.01 : 1)
-                .animation(.smooth, value: password.isEmpty)
+                .opacity(!password.isEmpty || note != nil ? 1 : 0.01)
         default:
-            secureField()
-                .padding(.horizontal, 16 * s)
-                .frame(width: width, height: 36 * s)
-                .modifier(GlassCapsule(fill: style.color("surface")))
+            HStack(spacing: 6 * s) {
+                secureField(slot: note ?? placeholderText)
+                if !password.isEmpty {
+                    // A pointer target only: Return stays the keyboard's way.
+                    Button(action: submit) {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.system(size: 20 * s))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(style.color("fg"))
+                    }
+                    .buttonStyle(PressDim())
+                    .focusable(false)
+                    .disabled(busy)
+                    .accessibilityLabel("Unlock")
+                }
+            }
+            .padding(.leading, 16 * s)
+            .padding(.trailing, (password.isEmpty ? 16 : 8) * s)
+            .frame(width: width, height: 36 * s)
+            .modifier(GlassCapsule(fill: style.color("surface")))
         }
-    }
-
-    private var hint: some View {
-        let text = auth.style == "minimal" ? "Type your password to unlock"
-            : !showsGlyph || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
-        return Text(wrong > 0 ? "Wrong password" : text)
-            .font(font(12, "medium"))
-            .foregroundStyle(wrong > 0 ? style.color("danger") : quiet(onField: false))
-            .opacity(auth.style == "minimal" && !password.isEmpty ? 0 : 1)
     }
 
     private func submit() {
@@ -517,6 +574,7 @@ struct AuthPanel: View {
                 unlock()
             } else {
                 model.failed()
+                AccessibilityNotification.Announcement("Wrong Password").post()
                 failed()
                 focused = true
             }
@@ -570,7 +628,19 @@ enum Contrast {
     }
 }
 
-/// "Press any key to unlock", faint, where the password field of a theme that shows it on activity will appear.
+extension LockyStyle {
+    /// The palette's muted color, lifted toward fg where it would not reach 4.5:1 on `surface` (a palette role or a
+    /// color) over the screen's bg, or on bg alone when nil: the field's placeholder, the status line, the glance
+    /// hint, and the message.
+    func quiet(on surface: String?) -> Color {
+        guard let muted = palette["muted"], let fg = palette["fg"], let bg = palette["bg"] else { return color("muted") }
+        var layers = [bg]
+        if let surface, let hex = palette[surface] ?? (surface.hasPrefix("#") ? surface : nil) { layers.append(hex) }
+        return Contrast.readable(muted, fg: fg, on: layers).flatMap { Color(hex: $0) } ?? color("muted")
+    }
+}
+
+/// "Press any key to unlock", where the password field of a theme that shows it on activity will appear.
 struct GlanceHint: View {
     let auth: Theme.Auth
     let style: LockyStyle
@@ -579,8 +649,7 @@ struct GlanceHint: View {
         Text("Press any key to unlock")
             .font(style.font(size: 13 * auth.size / 14, weight: auth.font.weight ?? "medium", design: auth.font.design,
                              family: auth.font.family, mono: false, italic: false))
-            .foregroundStyle(style.color("muted"))
-            .opacity(0.8)
+            .foregroundStyle(style.quiet(on: nil))
     }
 }
 
@@ -588,27 +657,40 @@ enum StyleWeights {
     static func weight(_ name: String) -> Font.Weight { LockyStyle.weights[name] ?? .regular }
 }
 
+/// The pill's glass. The regular variant: the pill holds text (HIG Materials).
 private struct GlassCapsule: ViewModifier {
     let fill: Color
 
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(.clear.tint(fill), in: .capsule)
+            content.glassEffect(.regular.tint(fill), in: .capsule)
         } else {
-            content.background(.ultraThinMaterial, in: Capsule())
+            content.background(.regularMaterial, in: Capsule())
         }
     }
 }
 
-/// The macOS login window's head-shake for a wrong password.
-private struct Shake: GeometryEffect {
-    var times: CGFloat
+/// The unlock arrow: dimmed while the pointer is down, at once, as AppKit highlights a press, and while it is disabled.
+private struct PressDim: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed || !isEnabled ? 0.55 : 1)
+    }
+}
+
+/// The macOS login window's head-shake for a wrong password: three swings that die down while `phase` moves to the
+/// next whole number.
+struct Shake: GeometryEffect {
+    var phase: CGFloat
+    var amplitude: CGFloat
     var animatableData: CGFloat {
-        get { times }
-        set { times = newValue }
+        get { phase }
+        set { phase = newValue }
     }
 
     func effectValue(size: CGSize) -> ProjectionTransform {
-        ProjectionTransform(CGAffineTransform(translationX: 10 * sin(times * .pi * 4), y: 0))
+        let f = phase - phase.rounded(.down)
+        return ProjectionTransform(CGAffineTransform(translationX: amplitude * sin(f * 6 * .pi) * (1 - f), y: 0))
     }
 }

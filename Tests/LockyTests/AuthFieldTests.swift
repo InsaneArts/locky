@@ -27,6 +27,56 @@ import Testing
     }
 }
 
+/// What the field and the line under it say, and how the field shakes.
+@MainActor
+@Suite struct FieldTextTests {
+    @Test(arguments: [
+        (1, false, "Try again in 1 second"), (8, false, "Try again in 8 seconds"), (59, false, "Try again in 59 seconds"),
+        (60, false, "Try again in 1 minute"), (89, false, "Try again in 2 minutes"), (300, false, "Try again in 5 minutes"),
+        // The wait says more than a wrong password does.
+        (8, true, "Try again in 8 seconds"),
+        (0, true, "Wrong Password"), (0, false, nil),
+    ] as [(Int, Bool, String?)])
+    func note(waitLeft: Int, wrongShown: Bool, text: String?) {
+        #expect(AuthPanel.note(waitLeft: waitLeft, wrongShown: wrongShown) == text)
+    }
+
+    @Test(arguments: [
+        // touchIDOffered, listening, placeholder, hint, text
+        (true, true, "", true, "Touch ID or Enter Password"), (true, true, "Enter Password", true, "Touch ID or Enter Password"),
+        (true, false, "", true, "Enter Password"), (true, false, "Enter Password", true, "Enter Password"),
+        (false, true, "", true, "Enter Password"), (false, true, "Enter Password", true, nil),
+        (false, false, "", true, "Enter Password"), (false, false, "Enter Password", true, nil),
+        (true, true, "", false, nil), (true, true, "Enter Password", false, nil),
+        (true, false, "", false, nil), (true, false, "Enter Password", false, nil),
+        (false, true, "", false, nil), (false, true, "Enter Password", false, nil),
+        (false, false, "", false, nil), (false, false, "Enter Password", false, nil),
+    ] as [(Bool, Bool, String, Bool, String?)])
+    func statusText(touchIDOffered: Bool, listening: Bool, placeholder: String, hint: Bool, text: String?) {
+        #expect(AuthPanel.statusText(touchIDOffered: touchIDOffered, listening: listening, placeholder: placeholder, hint: hint) == text)
+    }
+
+    @Test func theShakeStartsAndEndsStillAndStaysWithinItsAmplitude() {
+        func x(_ phase: CGFloat) -> CGFloat { Shake(phase: phase, amplitude: 10).effectValue(size: .zero).m31 }
+        #expect(x(0) == 0 && x(1) == 0 && x(3) == 0)
+        for step in 1..<100 { #expect(abs(x(CGFloat(step) / 100)) <= 10) }
+        // The first swing is the widest, and the last one has almost died down.
+        #expect(abs(x(1.0 / 12) - 9.17) < 0.01 && abs(x(11.0 / 12)) < 0.9)
+    }
+
+    /// The quiet color of glass, and of Tokyo Night, whose muted color must be lifted, on their own bg.
+    @Test(arguments: [("#1c3a66", "#ffffff", "#ffffffb3"), ("#1a1b26", "#c0caf5", "#565f89")])
+    func theQuietColorReadsOnTheThemesBg(bg: String, fg: String, muted: String) throws {
+        let style = LockyStyle(palette: ["bg": bg, "fg": fg, "muted": muted])
+        let color = try #require(NSColor(style.quiet(on: nil)).usingColorSpace(.sRGB))
+        let backdrop = try #require(Contrast.over(bg, Contrast.RGB(r: 0, g: 0, b: 0)))
+        let a = color.alphaComponent
+        let text = Contrast.RGB(r: color.redComponent * a + backdrop.r * (1 - a), g: color.greenComponent * a + backdrop.g * (1 - a),
+                                b: color.blueComponent * a + backdrop.b * (1 - a))
+        #expect(Contrast.ratio(text, backdrop) >= 4.5)
+    }
+}
+
 /// The model, not the view, decides when a check may start.
 @MainActor
 @Suite struct AuthModelTests {
