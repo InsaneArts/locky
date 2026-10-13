@@ -67,9 +67,11 @@ import Testing
         window.contentView = NSHostingView(rootView: ThemesPage(model: model))
         model.refresh()
         var overlay: CanvasOverlay?
+        // The grid as the defaults have it: the page may first see the last test's.
+        let grid = UserDefaults.standard.bool(forKey: "themeEditorGrid")
         let ready = await wait(window) {
             overlay = Self.find(CanvasOverlay.self, in: window.contentView!)
-            return overlay.map { !$0.isHidden && $0.preview!.editables.contains { $0.item == .widget(0) } } ?? false
+            return overlay.map { !$0.isHidden && $0.preview!.canvas?.grid == grid && $0.preview!.editables.contains { $0.item == .widget(0) } } ?? false
         }
         try #require(ready, "the canvas never showed the theme's widgets")
         return Page(sandbox: sandbox, model: model, window: window, overlay: overlay!)
@@ -143,7 +145,7 @@ import Testing
 
     @Test func theGridSnapsADrag() async throws {
         UserDefaults.standard.set(true, forKey: "themeEditorGrid")
-        defer { UserDefaults.standard.removeObject(forKey: "themeEditorGrid") }
+        defer { UserDefaults.standard.set(false, forKey: "themeEditorGrid") }
         let page = try await open()
         let box = try #require(frame(of: .widget(0), page))
         drag(page, from: CGPoint(x: box.midX, y: box.midY), by: CGPoint(x: -551, y: -322))
@@ -180,6 +182,22 @@ import Testing
         page.model.selectedTheme = "u"
         #expect(await wait(page.window) { page.preview.editables.isEmpty })
         #expect(await wait(page.window) { frame(of: .widget(0), page) == CGRect(x: 620, y: 0, width: 200, height: 100) })
+    }
+
+    @Test func aDragIsOneStepEditUndoTakesBack() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(0), page))
+        drag(page, from: CGPoint(x: box.midX, y: box.midY), by: CGPoint(x: -560, y: -330))
+        #expect(!saved(page)["themes"].isNil)
+        let undo = try #require(page.window.undoManager)
+        #expect(undo.undoMenuItemTitle == "Undo Move Box")
+        // The preview shows the drop before the undo, as it would for a person.
+        #expect(await wait(page.window) { frame(of: .widget(0), page) == CGRect(x: 60, y: 70, width: 200, height: 100) })
+        undo.undo()
+        #expect(saved(page)["themes"].isNil)
+        #expect(await wait(page.window) { frame(of: .widget(0), page) == box })
+        undo.redo()
+        #expect(saved(page).themeEdit("t", "widgets")[0]["anchor"] == .string("top-left"))
     }
 
     @Test func thePasswordFieldMovesToo() async throws {
@@ -249,6 +267,44 @@ import Testing
         let added = editing.placements[index]
         #expect(editing.inherited(added) == ["size": .int(12), "label": .string("w")])
         #expect(editing.card(added))
+    }
+
+    @Test func undoAndRedoPutTheThemesChangesBack() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'w', anchor = 'top' } } }")
+        try sandbox.write("plugin/w.lua", "locky.widget.define('w', { render = function() end })")
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.store.update { $0["theme"] = .string("t") }
+        let editing = ThemeEditing(theme: Inspection.ThemeInfo(id: "t", name: "t"), model: model)
+        await editing.load()
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        editing.undoManager = undo
+        let step = { (change: () -> Void) in
+            undo.beginUndoGrouping()
+            change()
+            undo.endUndoGrouping()
+        }
+        step { editing.add("w") }
+        step { editing.setAuth(anchor: "top-left", x: 30, y: 30) }
+        let changed = model.store.settings
+        #expect(undo.undoActionName == "Move Password Field")
+        // No change, no step: outside a group, a step would raise.
+        editing.setAuth(anchor: "top-left", x: 30, y: 30)
+        #expect(undo.undoActionName == "Move Password Field")
+
+        undo.undo()
+        #expect(model.store.settings.themeEdit("t", "auth").isNil)
+        #expect(editing.placements.count == 2)
+        #expect(undo.undoActionName == "Add W" && undo.redoActionName == "Move Password Field")
+        undo.undo()
+        // Back to no changes at all; the rest of settings.json stays.
+        #expect(model.store.settings["themes"].isNil && model.store.settings["theme"] == .string("t"))
+        #expect(Locky.Settings.load(config: sandbox.config).settings["themes"].isNil)
+        undo.redo()
+        undo.redo()
+        #expect(model.store.settings == changed)
     }
 
     /// Off and on again, a widget goes back to the theme's card, in the theme's style: the switch saves only a change.

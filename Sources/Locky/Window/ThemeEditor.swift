@@ -55,7 +55,7 @@ struct ThemeEditor: View {
                 }
             }
             Section("Background") {
-                BackgroundEditor(model: model, theme: theme, layout: editing.layout, draft: $draft)
+                BackgroundEditor(model: model, editing: editing, draft: $draft)
             }
             Section {
                 ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
@@ -167,7 +167,7 @@ private struct WidgetInspector: View {
             }
             Section("Position") {
                 PositionEditor(anchor: placement.anchor, x: placement.x, y: placement.y) { anchor, x, y in
-                    change {
+                    change("Move") {
                         $0.anchor = anchor
                         $0.x = x
                         $0.y = y
@@ -193,7 +193,7 @@ private struct WidgetInspector: View {
                         Text("Options")
                         Spacer()
                         if !placement.opts.isEmpty {
-                            Button("Reset Options") { change { $0.opts = [:] } }
+                            Button("Reset Options") { change("Reset Options of") { $0.opts = [:] } }
                                 .buttonStyle(.link)
                                 .font(.callout)
                         }
@@ -217,8 +217,8 @@ private struct WidgetInspector: View {
 
     /// Changes this widget as it is now, together with the colors picked so far, which save first: a color never
     /// lands after a later change, nor brings back an older copy of the widget. An option set back to what the theme
-    /// gives it leaves settings.json.
-    private func change(_ edit: (inout EditorPlacement) -> Void = { _ in }) {
+    /// gives it leaves settings.json. `verb` names the step Edit ▸ Undo takes back, as in "Move Clock".
+    private func change(_ verb: String = "Change", _ edit: (inout EditorPlacement) -> Void = { _ in }) {
         saving?.cancel()
         saving = nil
         let colors = picked
@@ -229,7 +229,7 @@ private struct WidgetInspector: View {
         let inherited = editing.inherited(placement)
         for (key, value) in colors { placement.opts[key] = value == inherited[key] ? nil : value }
         edit(&placement)
-        editing.set(index, placement)
+        editing.set(index, placement, action: "\(verb) \(EditorPlacement.title(placement.widget))")
     }
 
     /// A color being picked: the preview shows it at once, and it saves once the picking stops for a moment.
@@ -637,8 +637,7 @@ struct AddWidgetSheet: View {
 /// colors show in the preview as they change, and save when they stop.
 private struct BackgroundEditor: View {
     @Bindable var model: AppModel
-    let theme: Inspection.ThemeInfo
-    let layout: ThemeLayout?
+    let editing: ThemeEditing
     @Binding var draft: Settings?
     /// Colors being picked: shown at once, saved once the picking stops for a moment, with the next change, or when
     /// the panel goes away.
@@ -661,6 +660,8 @@ private struct BackgroundEditor: View {
     }
 
     private var store: SettingsStore { model.store }
+    private var theme: Inspection.ThemeInfo { editing.theme }
+    private var layout: ThemeLayout? { editing.layout }
     private var edit: LuaValue { store.settings.themeEdit(theme.id, "background") }
 
     private var kind: Kind {
@@ -716,7 +717,7 @@ private struct BackgroundEditor: View {
             value = .table(["gradient": .array([.string(palette["bg"] ?? "#101820"), .string(palette["accent"] ?? "#0a84ff")]),
                             "angle": .int(180)])
         }
-        store.update { $0.setThemeEdit(theme.id, "background", value) }
+        editing.record("Change Background") { store.update { $0.setThemeEdit(theme.id, "background", value) } }
         draft = nil
     }
 
@@ -740,7 +741,7 @@ private struct BackgroundEditor: View {
         saving = nil
         let value = patched(picked.merging(fields) { $1 })
         picked = [:]
-        store.update { $0.setThemeEdit(theme.id, "background", value) }
+        editing.record("Change Background") { store.update { $0.setThemeEdit(theme.id, "background", value) } }
         draft = nil
     }
 

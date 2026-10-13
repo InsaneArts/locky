@@ -25,6 +25,28 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate {
         }
         super.init(window: window)
         window.delegate = self
+        if NSApp.mainMenu == nil { NSApp.mainMenu = Self.mainMenu() }
+    }
+
+    /// The menu bar while the window is open: the app's menu, and Edit, for undo and the clipboard in text fields.
+    private static func mainMenu() -> NSMenu {
+        let app = NSMenu()
+        app.addItem(withTitle: "Hide Locky", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let menu = NSMenu()
+        for (title, submenu) in [("Locky", app), ("Edit", edit)] {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.submenu = submenu
+            menu.addItem(item)
+        }
+        return menu
     }
 
     required init?(coder: NSCoder) { fatalError() }

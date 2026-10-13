@@ -13,6 +13,7 @@ struct ThemesPage: View {
     /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
     @State private var draft: Settings?
     @AppStorage("themeEditorGrid") private var grid = false
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +35,7 @@ struct ThemesPage: View {
                 // Read again when Lua files change: init.lua may give the theme other widgets or options.
                 .task(id: "\(info.id)-\(model.inspection.sources)") {
                     let next = ThemeEditing(theme: info, model: model)
+                    next.undoManager = undoManager
                     await next.load()
                     // A newer load replaced this one.
                     guard !Task.isCancelled else { return }
