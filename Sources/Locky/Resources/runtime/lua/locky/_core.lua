@@ -459,7 +459,68 @@ local setting_types = {
   background = "table", palette = "table", widgets = "table",
 }
 
+-- Once init.lua has run, the settings belong to the core: locky.config gives read-only views of them, so a plugin,
+-- theme, or widget reads options but cannot change what the user set (privacy above all).
+local frozen
+local read_only = "locky.config is read-only once init.lua has run: set options in init.lua"
+local raw_next, raw_rawset = next, rawset
+local targets = raw_setmetatable({}, { __mode = "k" })  -- each view → the table it shows
+local views = raw_setmetatable({}, { __mode = "k" })    -- each table → its view
+
+local view_mt
+local function view(t)
+  if type(t) ~= "table" then
+    return t
+  end
+  if not views[t] then
+    local v = raw_setmetatable({}, view_mt)
+    targets[v], views[t] = t, v
+  end
+  return views[t]
+end
+view_mt = {
+  __index = function(v, key)
+    return view(targets[v][key])
+  end,
+  __newindex = function()
+    error(read_only, 2)
+  end,
+  __len = function(v)
+    return #targets[v]
+  end,
+  __pairs = function(v)
+    return function(_, key)
+      local k, value = raw_next(targets[v], key)
+      return k, view(value)
+    end, v, nil
+  end,
+  __metatable = false,
+}
+
+function next(t, key)
+  if targets[t] then
+    local k, value = raw_next(targets[t], key)
+    return k, view(value)
+  end
+  return raw_next(t, key)
+end
+
+function rawset(t, key, value)
+  if targets[t] or (t == locky and key == "config") then
+    error(read_only, 2)
+  end
+  return raw_rawset(t, key, value)
+end
+
+-- The settings themselves, for the core: locky.config while init.lua runs, the frozen table after.
+local function current_config()
+  return frozen or rawget(locky, "config")
+end
+
 function locky.setup(opts)
+  if frozen then
+    error(read_only, 2)
+  end
   validate("opts", opts, "table")
   for key, kind in pairs(setting_types) do
     validate("opts." .. key, opts[key], kind, true)
@@ -689,7 +750,7 @@ end
 -- (locky.setup({ widgets = ... })), then settings.json's. `with_settings = false` leaves settings.json's out.
 local function widget_opts(name, placement, with_settings)
   local definition = widgets[name] or {}
-  return tbl.deep_extend("force", definition.opts or {}, placement.opts or {}, locky.config.widgets[name] or {},
+  return tbl.deep_extend("force", definition.opts or {}, placement.opts or {}, current_config().widgets[name] or {},
     with_settings ~= false and placement.settings_opts or nil)
 end
 
@@ -813,9 +874,9 @@ local function normalize_theme(name, theme, background_from_settings)
     palette = tbl.deep_extend("force", {
       bg = "#000000", fg = "#ffffff", muted = "#ffffff99", accent = "#0a84ff", surface = "#ffffff1a",
       border = "#ffffff26", success = "#30d158", warning = "#ff9f0a", danger = "#ff453a",
-    }, theme.palette or {}, locky.config.palette or {}),
+    }, theme.palette or {}, current_config().palette or {}),
     font = theme.font or {},
-    background = background_from_settings and theme.background or locky.config.background or theme.background or { color = "#000000" },
+    background = background_from_settings and theme.background or current_config().background or theme.background or { color = "#000000" },
     overlay = theme.overlay,
     card = tbl.deep_extend("force", { style = "glass", radius = 22 }, theme.card or {}),
     auth = tbl.deep_extend("force", { style = "pill", anchor = "bottom", offset = { 0, -60 }, avatar = true, name = true, hint = true }, theme.auth or {}),
@@ -1249,6 +1310,26 @@ return {
     return failures
   end,
 
+  -- After init.lua: from here on locky.config is read-only.
+  freeze_config = function()
+    frozen = rawget(locky, "config")
+    raw_rawset(locky, "config", nil)
+    raw_setmetatable(locky, {
+      __index = function(_, key)
+        if key == "config" then
+          return view(frozen)
+        end
+      end,
+      __newindex = function(t, key, value)
+        if key == "config" then
+          error(read_only, 2)
+        end
+        raw_rawset(t, key, value)
+      end,
+      __metatable = false,
+    })
+  end,
+
   -- settings.json's values, after init.lua, so they win. Its theme changes apply as each theme loads.
   -- Returns a message for each value of the wrong type; those are skipped.
   apply_settings = function(settings)
@@ -1259,7 +1340,7 @@ return {
       if value ~= nil and type(value) ~= expected then
         failures[#failures + 1] = ("%s: expected a %s, got %s"):format(key, expected, type(value))
       elseif value ~= nil then
-        locky.config[key] = value
+        current_config()[key] = value
       end
     end
     settings_themes = type(settings.themes) == "table" and settings.themes or {}

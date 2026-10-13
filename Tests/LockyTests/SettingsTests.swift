@@ -39,12 +39,13 @@ import Testing
     @Test func settingsWinOverPluginScripts() throws {
         let sandbox = try Sandbox()
         try sandbox.write("settings.json", #"{ "theme": "from-settings" }"#)
+        // A plugin script cannot set options at all: locky.config is read-only once init.lua has run.
         try sandbox.write("plugin/setup.lua", "locky.setup({ theme = 'from-plugin', message = 'from the plugin' })")
         let runtime = runtime(sandbox)
-        #expect(runtime.bootForTest().isEmpty)
+        #expect(runtime.bootForTest().first?.contains("plugin/setup.lua:1: locky.config is read-only") == true)
         let config = try config(runtime)
         #expect(config["theme"] == .string("from-settings"))
-        #expect(config["message"] == .string("from the plugin"))
+        #expect(config["message"] == .nil)
     }
 
     @Test func setupChecksItsTypes() throws {

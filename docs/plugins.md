@@ -35,7 +35,7 @@ So a file of yours shadows a built-in one with the same path. `require("a.b")` l
 
 Each time the screen locks, Locky starts a fresh Lua state and:
 
-1. runs `init.lua`
+1. runs `init.lua`, then makes `locky.config` read-only: plugins, themes, and widgets read options but never change them
 2. runs every `plugin/*.lua` in the runtime path, in path order, then by file name
 3. loads the theme (`locky.config.theme`, or the one picked in the menu)
 4. creates the theme's widgets, calls each one's `init`, and draws them
