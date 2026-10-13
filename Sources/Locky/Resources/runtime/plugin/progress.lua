@@ -39,9 +39,9 @@ locky.widget.define("progress", {
         spacing = s, align = "leading",
         ui.grid { columns = o.columns or 30, spacing = s * 0.35, dots },
         ui.hstack {
-          ui.text(tostring(t.year), { size = s, weight = "semibold", mono = true }),
+          ui.text(tostring(t.year), { size = s * 0.75, weight = "semibold", mono = true }),
           ui.spacer(),
-          ui.text(("%s · %d days left"):format(percent(p.year), p.days_left_in_year), { size = s, color = "muted", mono = true }),
+          ui.text(("%s · %d days left"):format(percent(p.year), p.days_left_in_year), { size = s * 0.75, color = "muted", mono = true }),
         },
       }
     end
