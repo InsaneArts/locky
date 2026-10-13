@@ -1,5 +1,6 @@
 -- quote: a short quote that changes every half hour: from a built-in list of thinkers and programmers, or from
 -- `fortune` when it is installed and opts.source is "fortune".
+--   Families: medium, large (the quote in the system font, the author under it).
 --   opts.source     "builtin" (default) or "fortune"
 --   opts.quotes     your own list of { "text", "author" }, used instead of the built-in one
 --   opts.every      minutes between quotes (default 30); opts.author false hides the author
@@ -39,10 +40,37 @@ local builtin = {
   { "There are only two hard things in computer science: cache invalidation and naming things.", "Phil Karlton" },
 }
 
+-- Apple's layouts: the quote as big as its length allows, the author at the bottom.
+local function family(s, o, f)
+  local n = #s.text
+  local text = (o.quote_marks == false) and s.text or ("“" .. s.text .. "”")
+  local author = o.author ~= false and s.author and ui.text("— " .. s.author, ui.font(f == "large" and "subheadline" or "footnote", { weight = "medium", color = "muted", lines = 1 }))
+  if f == "medium" then
+    local style = n <= 40 and "title2" or n <= 110 and "title3" or n <= 150 and "body" or "callout"
+    return ui.vstack {
+      spacing = 6, align = "leading", fill = "both",
+      ui.text(text, ui.font(style, { weight = "medium", lines = n <= 150 and 4 or 5, line_spacing = 2, text_align = "leading" })),
+      ui.spacer(),
+      author,
+    }
+  end
+  -- The large card centers the quote between the mark and the author.
+  local style = n <= 40 and "large_title" or n <= 80 and "title" or n <= 160 and "title2" or n <= 260 and "title3" or "body"
+  return ui.vstack {
+    spacing = 10, align = "leading", fill = "both",
+    ui.symbol("quote.opening", { size = 28, weight = "semibold", color = "accent" }),
+    ui.spacer(),
+    ui.text(s.text, ui.font(style, { weight = "medium", lines = 9, line_spacing = 3, text_align = "leading" })),
+    ui.spacer(),
+    author,
+  }
+end
+
 locky.widget.define("quote", {
   description = "A short quote that changes every half hour",
   opts = { source = "builtin", every = 30, author = true, size = 18, max_width = 560, text_align = "center" },
   choices = { source = { "builtin", "fortune" } },
+  families = { "medium", "large" },
   init = function(self)
     self:every(self.opts.every * 60, function(self)
       local o = self.opts
@@ -64,6 +92,9 @@ locky.widget.define("quote", {
     local o, s = self.opts, self.state
     if not s.text then
       return nil
+    end
+    if self.family then
+      return family(s, o, self.family)
     end
     local align = o.text_align == "leading" and "leading" or o.text_align == "trailing" and "trailing" or "center"
     return ui.vstack {
