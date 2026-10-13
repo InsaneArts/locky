@@ -5,6 +5,8 @@
 --   opts.title     header text (default "Agents"); false hides the header
 --   opts.offline   text when herdr is not running; false hides the widget then
 --   opts.every     seconds between checks (default 3)
+--   Families: circular (how many need you), rectangular, inline, small, medium, large (lists like Apple's
+--   Reminders).
 local ui = locky.ui
 
 local herdr = require("locky.herdr")
@@ -22,9 +24,121 @@ local function detail(a)
   return #parts > 0 and table.concat(parts, " · ") or words[a.status]
 end
 
+-- Apple's layouts for each family. data is false when herdr is not running.
+local function family(f, data, o)
+  local tint = o.color or "accent"
+  local c = data and data.counts
+  local total = data and #data.agents or 0
+  -- The count that leads, and its name: who needs you, else who works, else everyone.
+  local count, label = 0, "Agents"
+  if data and data.need > 0 then
+    count, label = data.need, "Need You"
+  elseif data and c.working > 0 then
+    count, label = c.working, "Working"
+  elseif data then
+    count = total
+  end
+  local empty = not data and (o.offline or "herdr is not running") or total == 0 and "No agents running" or nil
+  local parts = {}
+  if data and data.need > 0 then
+    parts[#parts + 1] = data.need .. " need you"
+  end
+  if data and c.working > 0 then
+    parts[#parts + 1] = c.working .. " working"
+  end
+  local summary = empty or (#parts > 0 and table.concat(parts, " · ") or "Nothing needs you")
+  if f == "inline" then
+    return ui.hstack { spacing = 4, ui.symbol("terminal", ui.font("subheadline")), ui.text(summary, ui.font("subheadline", { lines = 1 })) }
+  elseif f == "circular" then
+    if empty or count == 0 then
+      return ui.symbol(empty and "terminal" or "checkmark", { size = 26, weight = "medium", opacity = empty and 0.6 or 1 })
+    end
+    return ui.vstack {
+      spacing = 0,
+      ui.symbol(data.need > 0 and "hand.raised.fill" or "terminal.fill", { size = 14, weight = "medium" }),
+      ui.text(count, { size = 24, weight = "semibold", mono = true }),
+    }
+  elseif f == "rectangular" then
+    return ui.vstack {
+      spacing = 1, align = "leading", fill = "both",
+      ui.hstack { spacing = 5, ui.symbol("terminal.fill", ui.font("headline")), ui.text("Agents", ui.font("headline")) },
+      empty and ui.text(empty, ui.font("subheadline", { color = "muted", lines = 2 })),
+      not empty and ui.text(data.need > 0 and (data.need .. " need you") or "Nothing needs you", ui.font("subheadline", { lines = 1 })),
+      not empty and ui.text(c.working > 0 and (c.working .. " working") or (total .. " idle"), ui.font("subheadline", { color = "muted", lines = 1 })),
+    }
+  end
+  -- Reminders' list icon: a symbol on a tinted circle.
+  local icon = ui.zstack {
+    ui.circle({ color = tint, width = 28, height = 28 }),
+    ui.symbol("terminal.fill", { size = 13, weight = "semibold", color = "#ffffff" }),
+  }
+  local small = f == "small"
+  local list = {}
+  for i = 1, math.min(f == "large" and 5 or 3, total) do
+    list[i] = data.agents[i]
+  end
+  local more = total - #list
+  local function row(a, i)
+    local dot = ui.dot({ size = small and 7 or 9, color = colors[a.status] or "muted", glow = a.status == "blocked", opacity = a.status == "idle" and 0.5 or 1 })
+    if small then
+      return ui.hstack { spacing = 7, dot, ui.text(a.title, ui.font("footnote", { weight = "medium", lines = 1 })), ui.spacer() }
+    end
+    return ui.vstack {
+      spacing = 0, align = "leading", fill = "width",
+      i > 1 and ui.divider(),
+      ui.hstack {
+        spacing = 10, padding = { f == "large" and 6 or 3, 0 },
+        dot,
+        ui.vstack {
+          spacing = 0, align = "leading",
+          ui.text(a.title, ui.font("subheadline", { weight = "semibold", lines = 1 })),
+          ui.text(detail(a), ui.font("footnote", { color = "muted", lines = 1 })),
+        },
+        ui.spacer(),
+      },
+    }
+  end
+  local rows = empty and ui.vstack {
+    spacing = 0, fill = "both",
+    ui.text(empty, ui.font(small and "footnote" or "subheadline", { weight = "medium", color = "muted", text_align = "center", lines = 2 })),
+  } or ui.vstack {
+    spacing = small and 5 or 0, align = "leading", fill = "width",
+    ui.each(list, row),
+    more > 0 and f == "large" and ui.text(more .. " more", ui.font("footnote", { weight = "medium", color = "muted", padding = { 4, 0, 0, 19 } })),
+  }
+  local number = ui.text(empty and "" or count, ui.font(small and "title" or "large_title", { weight = "bold", mono = true }))
+  local name = ui.text(label, ui.font(small and "subheadline" or "headline", { weight = "semibold", color = tint, lines = 1 }))
+  if small or empty then
+    return ui.vstack {
+      spacing = 0, align = "leading", fill = "both",
+      ui.hstack { align = "top", icon, ui.spacer(), number },
+      name,
+      ui.spacer(),
+      rows,
+      ui.spacer(),
+    }
+  elseif f == "medium" then
+    return ui.hstack {
+      spacing = 14, fill = "both", align = "top",
+      ui.vstack { spacing = 0, align = "leading", width = 96, fill = "height", icon, ui.spacer(), number, name },
+      rows,
+    }
+  end
+  return ui.vstack {
+    spacing = 0, align = "leading", fill = "both",
+    ui.hstack { align = "top", icon, ui.spacer(), number },
+    name,
+    ui.text(empty and "" or summary, ui.font("footnote", { weight = "medium", color = "muted", padding = { 0, 0, 10, 0 } })),
+    empty and ui.spacer(),
+    rows,
+    ui.spacer(),
+  }
+end
+
 locky.widget.define("agents", {
   description = "herdr coding agents: blocked, done, and working",
   card = true,
+  families = { "circular", "rectangular", "inline", "small", "medium", "large" },
   opts = { style = "list", rows = 4, title = "Agents", offline = "herdr is not running", every = 3, size = 13 },
   choices = { style = { "list", "summary", "dots", "board" } },
   init = function(self)
@@ -36,6 +150,9 @@ locky.widget.define("agents", {
     local o, data = self.opts, self.state.data
     if data == nil then
       return nil
+    end
+    if self.family then
+      return family(self.family, data, o)
     end
     if data == false then
       return o.offline and ui.text(o.offline, { size = o.size, color = "muted" }) or nil
