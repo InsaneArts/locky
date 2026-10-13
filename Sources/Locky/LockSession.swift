@@ -218,7 +218,19 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock { NSApp.presentationOptions = [] }
         if let napGuard { ProcessInfo.processInfo.endActivity(napGuard) }
         observers.forEach { $0.0.removeObserver($0.1) }
-        windows.forEach { $0.delegate = nil; $0.orderOut(nil) }
+        windows.forEach { $0.delegate = nil }
+        if mode == .lock {
+            // The lock fades out instead of vanishing.
+            let closing = windows
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.25
+                closing.forEach { $0.animator().alphaValue = 0 }
+            }, completionHandler: {
+                MainActor.assumeIsolated { closing.forEach { $0.orderOut(nil) } }
+            })
+        } else {
+            windows.forEach { $0.orderOut(nil) }
+        }
         if mode == .embedded { screens.forEach { $0.removeFromSuperview() } }
         windows = []
         screens = []
