@@ -172,6 +172,36 @@ import Testing
     }
 }
 
+@Suite struct SafeLayoutTests {
+    private let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+    private let size = CGSize(width: 240, height: 64)
+
+    @Test func aFramePastAnEdgeMovesBackInside() {
+        func kept(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            Layout.keep(CGRect(origin: CGPoint(x: x, y: y), size: size), inside: screen, margin: 16).origin
+        }
+        #expect(kept(-40, 300) == CGPoint(x: 16, y: 300))
+        #expect(kept(600, -10) == CGPoint(x: 600, y: 16))
+        #expect(kept(1300, 300) == CGPoint(x: 1440 - 16 - 240, y: 300))
+        #expect(kept(600, 880) == CGPoint(x: 600, y: 900 - 16 - 64))
+        #expect(kept(600, 400) == CGPoint(x: 600, y: 400))
+        // Wider than the screen: its left edge stays on the margin.
+        #expect(Layout.keep(CGRect(x: -100, y: 400, width: 2000, height: 20), inside: screen, margin: 16).minX == 16)
+    }
+
+    /// An offset that reaches past the edge leaves the field 16 points inside it.
+    @MainActor @Test func thePasswordFieldStaysOnTheScreen() {
+        let view = LockScreenView(frame: screen)
+        var spec = Theme.Auth()
+        spec.anchor = .bottomLeft
+        spec.offset = CGPoint(x: -40, y: 30)
+        view.auth = (NSView(), spec)
+        view.authSize = size
+        view.layout()
+        #expect(view.auth?.view.frame == CGRect(x: 16, y: 900 - 16 - 64, width: 240, height: 64))
+    }
+}
+
 @MainActor
 @Suite struct GlanceHintTests {
     private func screen(reveal: String) async throws -> (LockSession, LockScreenView) {

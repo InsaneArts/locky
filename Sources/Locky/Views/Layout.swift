@@ -26,4 +26,13 @@ enum Layout {
         guard size.width > 0, size.height > 0 else { return 1 }
         return min(max(min(size.width / 1440, size.height / 900), 0.8), 2)
     }
+
+    /// `frame` moved inside `bounds` inset by `margin` on every side. A frame bigger than that keeps its top-left
+    /// corner on the inset edge.
+    static func keep(_ frame: CGRect, inside bounds: CGRect, margin: CGFloat) -> CGRect {
+        let (left, top) = (bounds.minX + margin, bounds.minY + margin)
+        let x = min(max(frame.minX, left), max(left, bounds.maxX - margin - frame.width))
+        let y = min(max(frame.minY, top), max(top, bounds.maxY - margin - frame.height))
+        return CGRect(x: x, y: y, width: frame.width, height: frame.height)
+    }
 }

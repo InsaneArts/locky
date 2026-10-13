@@ -1086,7 +1086,9 @@ final class LockScreenView: NSView {
         if let auth {
             if authSize.width > 0 {
                 let offset = CGPoint(x: auth.spec.offset.x * scale, y: auth.spec.offset.y * scale)
-                auth.view.frame = auth.spec.anchor.frame(size: authSize, offset: offset, in: bounds).integral
+                // An offset past the edge must not push the field off the screen.
+                let frame = auth.spec.anchor.frame(size: authSize, offset: offset, in: bounds)
+                auth.view.frame = Layout.keep(frame, inside: bounds, margin: 16 * scale).integral
             } else {
                 auth.view.frame = bounds
             }
@@ -1113,9 +1115,8 @@ final class LockScreenView: NSView {
         let y = below + size.height <= bounds.maxY - 12 * scale ? below : frame.minY - gap - size.height
         let x = spec.hintAlign == "leading" ? frame.minX : frame.midX - size.width / 2
         // A field near an edge (Poster's is at the bottom left) must not push a long message off the screen.
-        let margin = 16 * scale
-        let clamped = min(max(x, bounds.minX + margin), max(bounds.minX + margin, bounds.maxX - margin - size.width))
-        return CGRect(x: clamped, y: y, width: size.width, height: size.height).integral
+        let kept = Layout.keep(CGRect(x: x, y: y, width: size.width, height: size.height), inside: bounds, margin: 16 * scale)
+        return CGRect(x: kept.minX, y: y, width: size.width, height: size.height).integral
     }
 }
 
