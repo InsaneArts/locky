@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Every theme as a card, and the selected one in the editor: its live preview is a canvas where widgets are
-/// clicked to change them and dragged to move them, and the panel beside it changes what is selected. Changes save to
-/// settings.json at once and the preview follows.
+/// Every theme in a list to search, and the selected one in the editor: its live preview is a canvas where widgets
+/// are clicked to change them and dragged to move them, and the panel beside it changes what is selected. Changes
+/// save to settings.json at once and the preview follows.
 struct ThemesPage: View {
     @Bindable var model: AppModel
     /// The theme being edited; a new one per theme, so one theme's layout is never saved as another's.
@@ -14,10 +14,12 @@ struct ThemesPage: View {
     @State private var draft: Settings?
     @AppStorage("themeEditorGrid") private var grid = false
     @Environment(\.undoManager) private var undoManager
+    @State private var search = ""
+    @State private var adding = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            strip
+        HStack(spacing: 0) {
+            list
             Divider()
             if let id = model.selectedTheme, let info = model.inspection.theme(id) {
                 HStack(spacing: 0) {
@@ -25,12 +27,12 @@ struct ThemesPage: View {
                     Divider()
                     Group {
                         if let editing, editing.theme.id == info.id {
-                            ThemeEditor(model: model, editing: editing, selection: $selection, draft: $draft)
+                            ThemeEditor(model: model, editing: editing, selection: $selection, draft: $draft, adding: $adding)
                         } else {
                             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                     }
-                    .frame(width: 340)
+                    .frame(width: 300)
                 }
                 // Read again when Lua files change: init.lua may give the theme other widgets or options.
                 .task(id: "\(info.id)-\(model.inspection.sources)") {
@@ -54,25 +56,40 @@ struct ThemesPage: View {
         }
     }
 
-    private var strip: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                HStack(spacing: 14) {
-                    ForEach(model.inspection.themes) { info in
-                        Button { model.selectedTheme = info.id } label: {
-                            ThemeCard(info: info, selected: info.id == model.selectedTheme, active: info.id == model.activeTheme)
-                        }
-                        .buttonStyle(.plain)
-                        .id(info.id)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-            }
-            .scrollIndicators(.never)
-            // The selected card in view: after the page opens on a theme, or the list loads.
-            .onChange(of: model.inspection.themes.count, initial: true) { proxy.scrollTo(model.selectedTheme, anchor: .center) }
+    /// The themes whose name, id, or description has the search text.
+    private var shown: [Inspection.ThemeInfo] {
+        let query = search.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return model.inspection.themes }
+        return model.inspection.themes.filter { info in
+            [info.name, info.id, info.description ?? ""].contains { $0.localizedCaseInsensitiveContains(query) }
         }
+    }
+
+    private var list: some View {
+        VStack(spacing: 0) {
+            TextField("Search", text: $search, prompt: Text("Search Themes"))
+                .textFieldStyle(.roundedBorder)
+                .padding(10)
+            Divider()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(shown) { info in
+                            Button { model.selectedTheme = info.id } label: {
+                                ThemeRow(info: info, selected: info.id == model.selectedTheme, active: info.id == model.activeTheme)
+                            }
+                            .buttonStyle(.plain)
+                            .id(info.id)
+                        }
+                    }
+                    .padding(6)
+                }
+                // The selected theme in view: after the page opens on it, the list loads, or a search ends.
+                .onChange(of: shown.count, initial: true) { proxy.scrollTo(model.selectedTheme, anchor: .center) }
+                .onChange(of: model.selectedTheme) { proxy.scrollTo(model.selectedTheme) }
+            }
+        }
+        .frame(width: 190)
     }
 
     private func stage(_ info: Inspection.ThemeInfo) -> some View {
@@ -86,16 +103,16 @@ struct ThemesPage: View {
                     .aspectRatio(1.6, contentMode: .fit)
                     .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                HStack(spacing: 12) {
-                    Toggle(isOn: $grid) { Label("Grid", systemImage: "grid") }
-                        .toggleStyle(.button)
-                        .help("Show a grid, and snap what you drag to its lines")
-                    Text(selection == nil ? "Click a widget to change it, and drag it to move it."
-                         : "Drag it, or press the arrow keys, to move it. Delete removes a widget.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
+                // Icons alone where the labels do not fit, as in a narrow window.
+                ViewThatFits(in: .horizontal) {
+                    tools.labelStyle(.titleAndIcon)
+                    tools.labelStyle(.iconOnly)
                 }
+                Text(selection == nil ? "Click a widget to change it, and drag it to move it."
+                     : "Drag it, or press the arrow keys, to move it. Delete removes a widget.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(20)
@@ -105,20 +122,27 @@ struct ThemesPage: View {
                 Button("Preview", systemImage: "play.rectangle") { model.preview(info.id) }
                     .help("Show this theme full size in a window")
             }
-            ToolbarItem(placement: .primaryAction) {
-                if info.id == model.activeTheme {
-                    Label("In Use", systemImage: "checkmark.circle.fill")
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(.secondary)
-                        .help("Locky locks with this theme")
-                } else {
-                    Button("Use This Theme") { model.store.update { $0["theme"] = .string(info.id) } }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(info.error != nil)
-                        .help("Lock with this theme from now on")
-                }
+        }
+        .sheet(isPresented: $adding) {
+            AddWidgetSheet(model: model) { name in
+                if let editing { selection = .widget(editing.add(name)) }
             }
         }
+    }
+
+    /// The canvas's buttons: the grid, Add Widget, and the password field, which has no row of its own to click.
+    private var tools: some View {
+        HStack(spacing: 8) {
+            Toggle(isOn: $grid) { Label("Grid", systemImage: "grid") }
+                .toggleStyle(.button)
+                .help("Show a grid, and snap what you drag to its lines")
+            Button("Add Widget…", systemImage: "plus") { adding = true }
+                .help("Add a widget to this theme")
+            Button("Password Field", systemImage: "character.cursor.ibeam") { selection = .passwordField }
+                .help("Select the password field, to move it")
+            Spacer(minLength: 0)
+        }
+        .disabled(editing?.layout == nil)
     }
 
     /// The editor's canvas over the preview, once the theme's layout is in: what is selected, the grid, and where
@@ -136,35 +160,34 @@ struct ThemesPage: View {
     }
 }
 
-/// A theme's thumbnail (its preview image, or its palette) and name.
-private struct ThemeCard: View {
+/// A theme in the list: its thumbnail (its preview image, or its palette), its name, and whether a lock uses it.
+private struct ThemeRow: View {
     let info: Inspection.ThemeInfo
     let selected: Bool
     let active: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 10) {
             thumbnail
-                .frame(width: 168, height: 105)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .frame(width: 64, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: selected ? 3 : 1)
+                    RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.primary.opacity(0.12))
                 }
-                .overlay(alignment: .topTrailing) {
-                    if active {
-                        Image(systemName: "checkmark.circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .green)
-                            .font(.system(size: 17))
-                            .padding(6)
-                    }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(info.name)
+                    .font(.callout.weight(selected ? .semibold : .regular))
+                    .lineLimit(1)
+                if active {
+                    Text("In Use").font(.caption).foregroundStyle(.green)
+                } else if info.error != nil {
+                    Text("Does not load").font(.caption).foregroundStyle(.orange)
                 }
-            Text(info.name)
-                .font(.callout.weight(selected ? .semibold : .regular))
-                .lineLimit(1)
+            }
+            Spacer(minLength: 0)
         }
-        .frame(width: 168)
+        .padding(5)
+        .background(selected ? Color.accentColor.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -178,9 +201,9 @@ private struct ThemeCard: View {
             ZStack {
                 LinearGradient(colors: [color("bg", "#000000"), color("surface", "#1c1c1e")], startPoint: .top, endPoint: .bottom)
                 Text("12:00")
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(color("fg", "#ffffff"))
-                Circle().fill(color("accent", "#0a84ff")).frame(width: 8).offset(y: 30)
+                Circle().fill(color("accent", "#0a84ff")).frame(width: 4).offset(y: 11)
             }
         }
     }

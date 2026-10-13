@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The theme editor's panel. With nothing selected: the theme, its background, and its widgets and password field
-/// to select. With a widget selected: where it sits, its card, and its options. With the password field selected:
+/// The theme editor's panel. On top: the theme, and whether a lock uses it. With nothing selected: its background,
+/// and its widgets and password field to select. With a widget selected: where it sits, its card, and its options. With the password field selected:
 /// where it sits. Changes save to settings.json at once, and the preview shows them as they are made.
 struct ThemeEditor: View {
     @Bindable var model: AppModel
@@ -11,11 +11,51 @@ struct ThemeEditor: View {
     @Binding var selection: EditorItem?
     /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
     @Binding var draft: Settings?
-    @State private var adding = false
+    /// The Add Widget sheet, which the page shows.
+    @Binding var adding: Bool
 
     private var theme: Inspection.ThemeInfo { editing.theme }
 
     var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            content
+        }
+    }
+
+    /// The theme being edited, and whether a lock uses it: the theme selected here is not always the one that locks.
+    private var header: some View {
+        let active = model.activeTheme
+        let scheduled = model.store.settings.schedule != nil
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(theme.name).font(.title3.weight(.semibold)).lineLimit(1)
+                if theme.id == active { Tag("In Use", color: .green) }
+                if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
+                Spacer(minLength: 0)
+            }
+            if theme.id != active {
+                let name = model.inspection.theme(active)?.name ?? active
+                Text(scheduled ? "Not in use: the theme schedule shows \(name) now." : "Not in use: your lock shows \(name).")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !scheduled {
+                    Button { model.store.update { $0["theme"] = .string(theme.id) } } label: {
+                        Text("Use This Theme").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(theme.error != nil)
+                    .help("Lock with this theme from now on")
+                }
+            }
+        }
+        .padding(16)
+    }
+
+    private var content: some View {
         Group {
             if let layoutError = editing.layoutError {
                 ContentUnavailableView("Can't Edit This Theme", systemImage: "exclamationmark.triangle", description: Text(layoutError))
@@ -34,27 +74,18 @@ struct ThemeEditor: View {
                 }
             }
         }
-        .sheet(isPresented: $adding) {
-            AddWidgetSheet(model: model) { name in
-                selection = .widget(editing.add(name))
-            }
-        }
+        .frame(maxHeight: .infinity)
     }
 
     private var overview: some View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(theme.name).font(.title3.weight(.semibold))
-                        if theme.id == model.activeTheme { Tag("In Use", color: .green) }
-                        if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
-                    }
                     Text(theme.description ?? theme.id).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     if let author = theme.author { Text("By \(author)").font(.caption).foregroundStyle(.tertiary) }
                 }
             }
-            Section("Background") {
+            Section {
                 BackgroundEditor(model: model, editing: editing, draft: $draft)
             }
             Section {
@@ -684,7 +715,7 @@ private struct BackgroundEditor: View {
         .onDisappear { if !picked.isEmpty { save([:]) } }
         switch kind {
         case .theme:
-            LabeledContent("Uses", value: summary(layout?.background ?? .nil))
+            LabeledContent("Shows", value: summary(layout?.background ?? .nil))
         case .wallpaper:
             slider("Blur", key: "blur", range: 0...60, fallback: 30)
             slider("Dim", key: "dim", range: 0...0.8, fallback: 0.25)
@@ -791,15 +822,15 @@ private struct BackgroundEditor: View {
         ColorWell(title: title, hex: get() ?? "#000000", pick: { pick(fields($0)) })
     }
 
-    /// What the theme's own background is, in a few words.
+    /// What the theme's own background is, in a few plain words.
     private func summary(_ background: LuaValue) -> String {
-        if let shader = background["shader"].string { return "Animated shader · \(shader)" }
-        if background["wallpaper"].bool == true { return "Desktop picture" }
-        if let image = background["image"].string { return "Image · \(URL(fileURLWithPath: image).lastPathComponent)" }
-        if let video = background["video"].string { return "Video · \(URL(fileURLWithPath: video).lastPathComponent)" }
-        if background["gradient"].array != nil { return "Gradient" }
-        if background["color"].string != nil { return "Color" }
-        return "—"
+        if background["shader"].string != nil { return "An animated scene" }
+        if background["wallpaper"].bool == true { return "Your desktop picture" }
+        if background["image"].string != nil { return "A picture" }
+        if background["video"].string != nil { return "A video" }
+        if background["gradient"].array != nil { return "A gradient" }
+        if background["color"].string != nil { return "One color" }
+        return "Nothing"
     }
 
     @MainActor
