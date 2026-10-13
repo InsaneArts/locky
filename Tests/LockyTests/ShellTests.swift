@@ -102,6 +102,56 @@ import Testing
         #expect(model.editingTheme == "matrix" && model.addingWidget)
     }
 
+    /// A `Locky window widgets` that waits for the first read gives way to what came after it: closing the window, or
+    /// Customize for another theme.
+    @Test func aWaitingCustomizeGivesWayToALaterOne() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        _ = NSApplication.shared
+        func waiting(then change: (AppModel) -> Void) async -> AppModel {
+            let model = AppModel(store: SettingsStore(config: sandbox.config))
+            model.refresh()
+            model.customizeInUse(addingWidget: true)
+            change(model)
+            _ = await wait { model.inspection.loaded }
+            return model
+        }
+        let closed = await waiting { $0.finishEditing() }
+        #expect(closed.editingTheme == nil && !closed.addingWidget)
+        let other = await waiting { $0.customize("glass") }
+        #expect(other.editingTheme == "glass" && !other.addingWidget)
+    }
+
+    /// Nothing opens during a lock: the waiting Customize comes after the unlock, whose refresh reads the config again.
+    @Test func aWaitingCustomizeWaitsForTheUnlock() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.locked = true
+        model.refresh()
+        model.customizeInUse(addingWidget: true)
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.editingTheme == nil && !model.addingWidget)
+        let read = model.revision
+        model.locked = false
+        model.refresh()
+        #expect(await wait { model.revision > read })
+        #expect(model.editingTheme == "matrix" && model.addingWidget)
+    }
+
+    /// A theme in use that is gone, such as a file deleted in Finder, leaves the gallery and no endless spinner.
+    @Test func aWaitingCustomizeOfAMissingThemeShowsTheGallery() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "theme": "gone" }"#)
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        model.customizeInUse(addingWidget: true)
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.editingTheme == nil && !model.addingWidget)
+    }
+
     // MARK: Themes
 
     /// A model of a sandbox whose config has been read.

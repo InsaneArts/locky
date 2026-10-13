@@ -119,13 +119,19 @@ final class AppModel {
         try LoginItem.set(on)
     }
 
-    /// Opens Customize for `id`. Callers never animate it: Customize swaps at once from any input.
-    func customize(_ id: String) { editingTheme = id }
+    /// Opens Customize for `id`, in place of a `customizeInUse` that still waits. Callers never animate it: Customize swaps
+    /// at once from any input.
+    func customize(_ id: String) {
+        editingTheme = id
+        pendingCustomize = nil
+    }
 
+    /// Ends Customize, and a `customizeInUse` that still waits, so the next open shows the gallery.
     func finishEditing() {
         editingTheme = nil
         addingWidget = false
         editorRequest = nil
+        pendingCustomize = nil
     }
 
     /// Customize for the theme in use, with Add Widget open or not. It waits for the first read of the config: until then
@@ -222,13 +228,14 @@ final class AppModel {
             if let problem = store.problem { result.problems.insert(problem, at: 0) }
             inspection = result
             revision += 1
-            // The theme open in Customize is gone, such as a file deleted in Finder.
-            if let editingTheme, result.theme(editingTheme) == nil { finishEditing() }
-            if let adding = pendingCustomize {
-                pendingCustomize = nil
+            // A customizeInUse waited for this read, and customize() ends the wait. During a lock nothing opens: the
+            // refresh after the unlock runs it.
+            if let adding = pendingCustomize, !locked {
                 customize(activeTheme)
                 addingWidget = adding
             }
+            // The theme open in Customize does not exist, such as a file deleted in Finder.
+            if let editingTheme, result.theme(editingTheme) == nil { finishEditing() }
         }
     }
 
