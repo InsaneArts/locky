@@ -10,8 +10,10 @@ struct WelcomeView: View {
     /// The triggers the switch turned off during this visit, which turning it on again restores. Closing the window ends
     /// the visit.
     @State private var turnedOff: AutoLockSettings?
-    /// Whether this Mac can use Touch ID, read once: an LAContext on every body pass is waste.
+    /// Whether this Mac can use Touch ID now, read when the window opens and each time it comes forward: an LAContext on
+    /// every body pass is waste.
     @State private var biometrics = false
+    @Environment(\.appearsActive) private var appearsActive
 
     /// Set once the Welcome has opened by itself.
     static let shownKey = "welcomeShown"
@@ -84,11 +86,18 @@ struct WelcomeView: View {
             .padding(.bottom, 20)
         }
         .frame(width: 560)
-        .onAppear { biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) }
+        .onAppear(perform: readBiometrics)
+        // onAppear runs once for the window's life, so read again each time the window comes forward: the lid may have
+        // closed, or a Touch ID keyboard gone, since the last read.
+        .onChange(of: appearsActive) { if appearsActive { readBiometrics() } }
         // AppDelegate keeps the window, and this view, for the next visit.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
             if (note.object as? NSWindow)?.contentViewController is NSHostingController<WelcomeView> { turnedOff = nil }
         }
+    }
+
+    private func readBiometrics() {
+        biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
     }
 
     /// On while any trigger is stored. A change goes to the file as it is now, through `setAutoLock(_:in:turnedOff:)`.
