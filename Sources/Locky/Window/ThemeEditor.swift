@@ -35,7 +35,7 @@ struct ThemeEditor: View {
             }
         }
         .sheet(isPresented: $adding) {
-            AddWidgetSheet(widgets: model.inspection.widgets) { name in
+            AddWidgetSheet(model: model) { name in
                 selection = .widget(editing.add(name))
             }
         }
@@ -557,15 +557,17 @@ private struct AnchorPicker: View {
 }
 
 struct AddWidgetSheet: View {
-    let widgets: [Inspection.WidgetInfo]
+    let model: AppModel
     let add: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
+    @State private var gallery = WidgetGallery()
+    @State private var hovered: String?
 
     private var shown: [Inspection.WidgetInfo] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { return widgets }
-        return widgets.filter { $0.name.lowercased().contains(query) || ($0.description ?? "").lowercased().contains(query) }
+        guard !query.isEmpty else { return model.inspection.widgets }
+        return model.inspection.widgets.filter { $0.name.lowercased().contains(query) || ($0.description ?? "").lowercased().contains(query) }
     }
 
     var body: some View {
@@ -573,34 +575,51 @@ struct AddWidgetSheet: View {
             HStack {
                 Text("Add a Widget").font(.headline)
                 Spacer()
-                TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(width: 200)
+                TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(width: 220)
             }
             .padding(16)
             Divider()
-            List(shown) { widget in
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(EditorPlacement.title(widget.name)).font(.body.weight(.medium))
-                        Text(widget.description ?? "").font(.callout).foregroundStyle(.secondary).lineLimit(2)
-                        Text(Self.source(of: widget)).font(.caption).foregroundStyle(.tertiary)
-                    }
-                    Spacer()
-                    Button("Add") {
-                        add(widget.name)
-                        dismiss()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18, pinnedViews: .sectionHeaders) {
+                    ForEach(WidgetGroup.groups(shown)) { group in
+                        Section {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 16) {
+                                ForEach(group.widgets) { widget in
+                                    Button {
+                                        add(widget.name)
+                                        dismiss()
+                                    } label: {
+                                        WidgetCard(gallery: gallery, widget: widget, highlighted: hovered == widget.name)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .onHover { hovered = $0 ? widget.name : (hovered == widget.name ? nil : hovered) }
+                                    .help("Add \(EditorPlacement.title(widget.name))")
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                        } header: {
+                            Text(group.title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16).padding(.vertical, 6)
+                                .background(.bar)
+                        }
                     }
                 }
-                .padding(.vertical, 3)
+                .padding(.vertical, 12)
             }
             Divider()
             HStack {
-                Text("The new widget starts at the center. Drag it where you want it.").font(.callout).foregroundStyle(.secondary)
+                Text("Click a widget to add it at the center. Drag it where you want it.").font(.callout).foregroundStyle(.secondary)
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             .padding(12)
         }
-        .frame(width: 520, height: 520)
+        .frame(width: 780, height: 640)
+        .task(id: model.revision) {
+            gallery.start(widgets: model.inspection.widgets.map(\.name), settings: model.store.settings, config: model.store.config, revision: model.revision)
+        }
+        .onDisappear { gallery.stop() }
     }
 
     /// "Built in", a package's name, or the user's config.
