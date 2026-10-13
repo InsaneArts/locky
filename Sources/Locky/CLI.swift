@@ -176,6 +176,7 @@ enum CLI {
                 lines.append("ERROR shader \(LuaError.shortenPaths(url.path)): \(error.localizedDescription)")
             }
         }
+        for spec in PackManager(path: .standard()).specs().specs { lines.append("  plugin \(spec.name): \(spec.grants)") }
         for problem in started.problems { lines.append("ERROR \(problem)") }
         let ok = shaderOK && started.problems.isEmpty && failures.isEmpty && !started.instances.contains(nil)
         lines.append(ok ? "No problems." : "Problems found.")
@@ -239,8 +240,9 @@ enum CLI {
 
         let (specs, _) = PackManager(path: path).specs()
         for spec in specs where spec.dir == nil && !FileManager.default.fileExists(atPath: path.packs.appending(path: spec.name).path) {
-            warn("package \(spec.name) is not installed", "run `locky pack sync`")
+            warn("plugin \(spec.name) is not installed", "run `locky pack sync`")
         }
+        for spec in specs { lines.append("  INFO    plugin \(spec.name): \(spec.grants)") }
 
         for section in pluginSections["sections"].array ?? [] {
             lines.append("")

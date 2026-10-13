@@ -93,13 +93,18 @@ final class AppModel {
         }
     }
 
-    /// Runs `locky pack <action>` in the background, one run at a time, then reads the config again.
-    func runPack(_ action: PackManager.Action, then done: ((PackManager.Report) -> Void)? = nil) {
+    /// Runs `locky pack <action>` (or `work`, which reports as `action`) in the background, one run at a time, then
+    /// reads the config again, unless it was a check: that changes nothing, and reading the config runs plugin code.
+    func runPack(_ action: PackManager.Action, work: (@Sendable (PackManager) -> PackManager.Report)? = nil,
+                 then done: ((PackManager.Report) -> Void)? = nil) {
         guard packRunning == nil else { return }
         packRunning = action
         let config = store.config
         Task {
-            let report = await Task.detached { PackManager(path: .standard(config: config)).run(action) }.value
+            let report = await Task.detached {
+                let manager = PackManager(path: .standard(config: config))
+                return work?(manager) ?? manager.run(action)
+            }.value
             packRunning = nil
             packReport = (action, report)
             // What was checked no longer holds: Update All brought every plugin up to date, and a removed one has
@@ -109,18 +114,23 @@ final class AppModel {
             case .clean: updates.removeAll { !FileManager.default.fileExists(atPath: RuntimePath.defaultPacks.appending(path: $0.name).path) }
             default: break
             }
-            refresh()
+            if action != .check { refresh() }
             done?(report)
         }
     }
 
-    /// Fetches every installed plugin and compares it with the pinned commit; changes nothing.
+    /// Moves each plugin to the commit the user reviewed in `updates`.
+    func applyUpdates(_ updates: [PackUpdate]) {
+        runPack(.update, work: { $0.apply(updates) })
+    }
+
+    /// Fetches every plugin the lockfile pins and compares it with the pinned commit; changes nothing and runs no Lua.
     func checkForUpdates(then done: (() -> Void)? = nil) {
-        runPack(.check) { [weak self] report in
+        runPack(.check, then: { [weak self] report in
             self?.updates = report.updates
             self?.lastUpdateCheck = Date()
             done?()
-        }
+        })
     }
 
     func findEditors() async {

@@ -109,6 +109,15 @@ function M.parse(json, imperial, now)
   }
 end
 
+--- wttr.in's address for a location. Spaces become "+", as wttr.in writes them; anything else that is not plain
+--- (such as "?", "#", "/", or "é") is percent-encoded, so a location stays one part of the path.
+function M.url(location)
+  local path = location:gsub(" ", "+"):gsub("[^%w%-._~,+@]", function(c)
+    return ("%%%02X"):format(c:byte())
+  end)
+  return "https://wttr.in/" .. path .. "?format=j1"
+end
+
 local cache_dir = locky.fs.home .. "/Library/Caches/Locky"
 
 local function cache_file(location)
@@ -167,7 +176,7 @@ function M.watch(self, opts, fn)
       return
     end
     waiting[location] = { entry }
-    local url = "https://wttr.in/" .. location:gsub(" ", "+") .. "?format=j1"
+    local url = M.url(location)
     self:system({ "mkdir", "-p", cache_dir }, function(self)
       self:system({ "curl", "-sfL", "--max-time", "10", url }, { timeout = 12 }, function(self, result)
         local ok = result.code == 0 and M.parse(result.stdout, imperial) ~= nil

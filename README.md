@@ -63,7 +63,7 @@ Pick one in the menu's Theme submenu, or in `init.lua` with `locky.setup({ theme
 
 Settings… (⌘,) in the menu opens Locky's window: a live dashboard, a theme editor (drag widgets on the live
 preview, with a grid to snap to; change a widget's options, the background, and where the password field sits),
-every widget drawn live with Install Widgets…, plugins (install, update, remove), the config with Open in your
+every widget drawn live with Install Plugin…, plugins (install, update, remove), the config with Open in your
 editor, and settings such as the Lock Now shortcut, auto-lock, Open at Login, a lock screen message, privacy mode,
 a theme schedule, the battery saver, and a photo after wrong passwords. It saves to
 `~/.config/locky/settings.json`, which wins over init.lua key by key: see [settings.md](docs/settings.md).

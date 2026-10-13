@@ -2029,10 +2029,8 @@ static void retstat (LexState *ls) {
     nret = explist(ls, &e);  /* optional return values */
     if (hasmultret(e.k)) {
       luaK_setmultret(fs, &e);
-      if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc) {  /* tail call? */
-        SET_OPCODE(getinstruction(fs,&e), OP_TAILCALL);
-        lua_assert(GETARG_A(getinstruction(fs,&e)) == luaY_nvarstack(fs));
-      }
+      /* Locky: no proper tail calls. A tail call drops its caller's frame, and Locky decides what a plugin may
+       * do by the frames on the stack (see _core.lua), so "return f()" is an ordinary call and a return. */
       nret = LUA_MULTRET;  /* return all values */
     }
     else {

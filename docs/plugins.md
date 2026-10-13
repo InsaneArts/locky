@@ -35,7 +35,7 @@ So a file of yours shadows a built-in one with the same path. `require("a.b")` l
 
 Each time the screen locks, Locky starts a fresh Lua state and:
 
-1. runs `init.lua`
+1. runs `init.lua`, then makes `locky.config` read-only: plugins, themes, and widgets read options but never change them
 2. runs every `plugin/*.lua` in the runtime path, in path order, then by file name
 3. loads the theme (`locky.config.theme`, or the one picked in the menu)
 4. creates the theme's widgets, calls each one's `init`, and draws them
@@ -108,9 +108,33 @@ view and property, and [api.md](api.md) for `locky.*`.
   returns a function: that would hand plugins the raw `pcall`, which can catch a timeout).
 - **No keyboard.** Widgets never get keystrokes or clicks. No event carries any part of the password.
 
-Plugins are trusted code, like Neovim plugins: they run as you and may read your files and run programs.
-Install only what you trust. The guards above stop bugs from breaking the lock screen; they are not a
-sandbox against a hostile plugin.
+## What a plugin may do
+
+A plugin you install (a folder in `~/.local/share/locky/pack`) runs programs and changes files only if you
+allow it. Without the grant, `locky.system` fails, and so do `io.open` in a write, append, or update mode,
+`io.output` with a file name, `os.remove`, `os.rename`, and `os.tmpname`. The error names the plugin and says
+how to allow it. Allow it on the Plugins page ("Run programs", "Change files"), or in `init.lua`:
+
+```lua
+locky.pack.add({ { src = "someone/locky-git", allow = { "system" } } })   -- "system", "files", or both
+```
+
+In settings.json the same entry is `{ "src": "someone/locky-git", "allow": ["system"] }`. `locky check` and
+`locky health` list what each plugin may do. Allowing "Change files" gives as much as "Run programs": a plugin
+that can change files can change your shell's startup files. Your config folder, your local `{ dir = ... }` folders, and Locky's
+own code need no grant.
+
+Locky decides by the call stack: if any Lua function on it comes from a plugin without the grant, or from
+code loaded from a string (`load`), the call fails. A coroutine counts the code that resumed it. Locky's Lua
+makes no proper tail calls, so `return f()` keeps its caller on the stack; deep recursion through tail calls
+runs out of stack. The function must also be called by its name from Lua code: handed over as a callback, a
+metamethod, or an iterator, called through `pcall`, or under another name (`local run = locky.system`), it
+fails. Otherwise a plugin could get Locky's own code to make the call for it, with no plugin code on the stack.
+Only `init.lua` and your own config may call `locky.pack.add`, so a plugin cannot grant itself anything.
+
+This is defense in depth, not a sandbox. A plugin still runs as you: it can read your files and show what it
+reads on the lock screen. Lua is not built to isolate code, and a determined plugin may find a way around
+these checks. Install only plugins you trust.
 
 ## A package
 
@@ -138,9 +162,16 @@ locky.pack.add({
 require("weather").setup({ city = "Tbilisi" })
 ```
 
-`locky pack update` moves every package to the newest commit of its version and rewrites
-`locky-pack-lock.json`; `locky pack clean` deletes packages `init.lua` no longer adds.
-`locky pack check` fetches and lists the packages `update` would move, and moves none.
+A source is `"user/repo"` (GitHub), or an `https://`, `ssh://`, or `git@` address. Locky refuses `http://`,
+`git://`, and `file://`, even through a redirect: anyone on the network could change what they send. For a
+folder on your Mac, use `{ dir = ... }`.
+
+`locky pack update` moves every package to the newest commit of its version, rewrites `locky-pack-lock.json`,
+and lists each moved package's new commits and diffstat; `locky pack clean` deletes packages `init.lua` no
+longer adds. `locky pack check` fetches the packages the lockfile pins and lists the ones `update` would move,
+with the same commits and diffstat, and moves none. It runs no Lua, so no plugin code runs: the Locky app runs
+it once a day in the background. The Plugins page's Update All… shows the same review before it installs
+anything, and installs exactly the commits it showed.
 
 Follow Neovim's conventions: `setup(opts)` only merges options (use `locky.tbl.deep_extend`), keep
 `plugin/<name>.lua` small, and give every option a default.

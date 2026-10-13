@@ -1,8 +1,14 @@
 -- git: your repositories at a glance: branch, uncommitted changes, commits to push or pull, and the last commit.
 --   opts.repos   a list of folders, such as { "~/code/app", "~/dotfiles" }; shows nothing without one
 --   opts.every   seconds between checks (default 60); opts.size, opts.color, opts.width
--- Privacy mode hides commit messages.
+-- Privacy mode shows the counts only: no repository, branch, or commit message.
 local ui = locky.ui
+
+-- git in `path`. A repository's own config could run a program (core.fsmonitor), and a plugin's theme may point
+-- this widget at a repository it ships: a bare one is refused, and no fsmonitor runs.
+local function git(path, ...)
+  return { "git", "-c", "safe.bareRepository=explicit", "-c", "core.fsmonitor=false", "-C", path, ... }
+end
 
 -- `git status --porcelain=v2 --branch` → branch, ahead, behind, changed files.
 local function status(text)
@@ -25,7 +31,7 @@ locky.widget.define("git", {
     self:every(self.opts.every, function(self)
       for i, folder in ipairs(self.opts.repos) do
         local path = locky.fs.expand(folder)
-        self:system({ "git", "-C", path, "status", "--porcelain=v2", "--branch" }, function(self, result)
+        self:system(git(path, "status", "--porcelain=v2", "--branch"), function(self, result)
           if result.code ~= 0 then
             self.state.repos[i] = { name = folder:match("([^/]+)/*$") or folder, error = true }
             self:refresh()
@@ -33,7 +39,7 @@ locky.widget.define("git", {
           end
           local repo = status(result.stdout)
           repo.name = path:match("([^/]+)/*$") or folder
-          self:system({ "git", "-C", path, "log", "-1", "--format=%s%x09%cr" }, function(self, log)
+          self:system(git(path, "log", "-1", "--format=%s%x09%cr"), function(self, log)
             repo.subject, repo.when = log.stdout:match("^([^\t]*)\t([^\n]*)")
             self.state.repos[i] = repo
             self:refresh()
@@ -45,18 +51,19 @@ locky.widget.define("git", {
   render = function(self)
     local o = self.opts
     local s = o.size
+    local private = locky.config.privacy == true
     local rows = {}
     for i = 1, #o.repos do
       local r = self.state.repos[i]
       if r and r.error then
-        rows[#rows + 1] = ui.text(r.name .. ": not a repository", { size = s, color = "muted" })
+        rows[#rows + 1] = ui.text((private and "" or r.name .. ": ") .. "not a repository", { size = s, color = "muted" })
       elseif r then
         local marks = {}
         if r.changed > 0 then marks[#marks + 1] = ui.text("●" .. r.changed, { size = s, color = "warning", mono = true }) end
         if r.ahead > 0 then marks[#marks + 1] = ui.text("↑" .. r.ahead, { size = s, color = "accent", mono = true }) end
         if r.behind > 0 then marks[#marks + 1] = ui.text("↓" .. r.behind, { size = s, color = "danger", mono = true }) end
         if #marks == 0 then marks[1] = ui.text("✓", { size = s, color = "success" }) end
-        rows[#rows + 1] = ui.vstack {
+        rows[#rows + 1] = private and ui.hstack { spacing = 6, marks } or ui.vstack {
           spacing = 2, align = "leading",
           ui.hstack {
             spacing = 8, width = o.width,
@@ -66,7 +73,7 @@ locky.widget.define("git", {
             ui.hstack { spacing = 6, marks },
           },
           r.subject and ui.text(
-            (locky.config.privacy == true and "" or (r.subject .. " · ")) .. (r.when or ""),
+            r.subject .. " · " .. (r.when or ""),
             { size = s * 0.85, color = "muted", lines = 1, max_width = o.width }
           ),
         }

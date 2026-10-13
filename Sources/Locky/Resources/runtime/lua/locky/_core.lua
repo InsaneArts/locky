@@ -42,14 +42,100 @@ function xpcall(f, handler, ...)
   end, ...))
 end
 
-coroutine.resume = function(co, ...)
+-------------------------------------------------------------------------------
+-- Trust. Third-party plugins (folders in the pack folder) run programs and change files only when the user
+-- allows it. Every Lua frame on the stack counts, and so does the code that resumed the running coroutine; code
+-- loaded from a string counts as a plugin's. Locky's Lua makes no proper tail calls (see lparser.c), so a caller
+-- never leaves the stack early. Defense in depth, not a sandbox: see docs/plugins.md.
+-------------------------------------------------------------------------------
+
+local sub, lower = string.sub, string.lower
+local raw_running = coroutine.running
+-- Plugin folder name (lowercase) → { system = true, files = true }: what locky.pack.add and settings.json allow.
+local grants = {}
+local capabilities = { system = { "run programs", "Run programs" }, files = { "change files", "Change files" } }
+-- Each frame source → the plugin folder it is in, "" for code loaded from a string, or false for trusted code.
+local plugin_of = {}
+-- Each coroutine → the plugins that were on the stack when it was last resumed.
+local resumed_by = raw_setmetatable({}, { __mode = "k" })
+
+local function plugin_from(source)
+  local name = plugin_of[source]
+  if name == nil then
+    if sub(source, 1, 1) == "@" then
+      name = native.plugin_of(sub(source, 2)) or false
+    else
+      name = ""
+    end
+    plugin_of[source] = name
+  end
+  return name
+end
+
+-- The plugins with code on the stack, from `level` up, as a set of folder names.
+local function plugins_on_stack(level)
+  local found = {}
+  for name in pairs(resumed_by[raw_running()] or {}) do
+    found[name] = true
+  end
+  while true do
+    local info = raw_getinfo(level + 1, "S")
+    if not info then
+      return found
+    end
+    if info.what ~= "C" then
+      local name = plugin_from(info.source)
+      if name then
+        found[name] = true
+      end
+    end
+    level = level + 1
+  end
+end
+
+local core_source = raw_getinfo(1, "S").source
+
+-- Whether the function `level` frames up was called under `name` by a Lua function outside the core. Anything else
+-- is trusted code making the call for whoever handed it the function or the data, with no plugin frame left on the
+-- stack: a metamethod, a for iterator, a C function such as pairs or pcall, the core, the host (a callback, or the
+-- <close> variable of a closed coroutine), or code calling what a plugin put in place of a function it knows, such as
+-- ipairs or locky.tbl.islist.
+local function called_directly(level, name)
+  local how, info = raw_getinfo(level + 1, "n"), raw_getinfo(level + 2, "S")
+  return info ~= nil and info.what ~= "C" and info.source ~= core_source and how.namewhat ~= "metamethod"
+    and how.name == name
+end
+
+-- Raises an error for the code `level` frames up unless every plugin on the stack may use `capability` and the
+-- function the check guards was called directly.
+local function require_grant(capability, what, level)
+  local words = capabilities[capability]
+  for name in pairs(plugins_on_stack(2)) do
+    if name == "" then
+      error(("%s: code loaded from a string may not %s"):format(what, words[1]), level + 1)
+    end
+    local granted = grants[lower(name)]
+    if not (granted and granted[capability]) then
+      error(("%s: plugin %q may not %s. To allow it, turn on %s for it on the Plugins page, or add allow = { %q } to its locky.pack.add entry in init.lua")
+        :format(what, name, words[1], words[2], capability), level + 1)
+    end
+  end
+  if not called_directly(level, what:match("[^.]+$")) then
+    error(("%s: call it by its name from your own code, not through pcall, a callback, a metamethod, or another name")
+      :format(what), level + 1)
+  end
+end
+
+local function resume(co, ...)
+  resumed_by[co] = plugins_on_stack(2)
   return rethrow_timeout(raw_resume(co, ...))
 end
+coroutine.resume = resume
 
 coroutine.wrap = function(f)
   local co = raw_create(f)
   return function(...)
-    local results = pack(coroutine.resume(co, ...))
+    local results = pack(resume(co, ...))
     if not results[1] then
       coroutine.close(co)  -- runs its <close> variables, as Lua's own wrap does
       error(results[2], 0)
@@ -73,6 +159,10 @@ end
 -- Source only, never bytecode. The environment argument is passed on only when given, so chunks keep
 -- their globals.
 function load(chunk, chunkname, _, ...)
+  -- "@" names a file: a string chunk must not pass for one, or for trusted code.
+  if type(chunkname) == "string" and sub(chunkname, 1, 1) == "@" then
+    chunkname = "=" .. sub(chunkname, 2)
+  end
   return rethrow_load(raw_load(chunk, chunkname, "t", ...))
 end
 
@@ -86,17 +176,22 @@ function dofile(path)
 end
 
 -- Opening a named pipe or a device blocks inside C, where no time budget reaches: only regular files and
--- new files open.
+-- new files open. Writing, removing, and renaming files needs the "files" grant.
 do
   local raw_open, raw_lines, raw_input, raw_output = io.open, io.lines, io.input, io.output
+  local raw_remove, raw_rename, raw_tmpname = os.remove, os.rename, os.tmpname
+  local find = string.find
   local function check(path)
     if type(path) == "string" and native.fs_kind(path) == "other" then
       error(path .. ": only regular files can be opened", 3)
     end
   end
-  io.open = function(path, ...)
+  io.open = function(path, mode, ...)
+    if type(mode) == "string" and find(mode, "[wa+]") then
+      require_grant("files", "io.open", 2)
+    end
     check(path)
-    return raw_open(path, ...)
+    return raw_open(path, mode, ...)
   end
   io.lines = function(path, ...)
     check(path)
@@ -107,8 +202,23 @@ do
     return raw_input(file)
   end
   io.output = function(file)
+    if type(file) == "string" then
+      require_grant("files", "io.output", 2)
+    end
     check(file)
     return raw_output(file)
+  end
+  os.remove = function(...)
+    require_grant("files", "os.remove", 2)
+    return raw_remove(...)
+  end
+  os.rename = function(...)
+    require_grant("files", "os.rename", 2)
+    return raw_rename(...)
+  end
+  os.tmpname = function()
+    require_grant("files", "os.tmpname", 2)
+    return raw_tmpname()
   end
 end
 
@@ -457,7 +567,84 @@ local setting_types = {
   background = "table", palette = "table", widgets = "table",
 }
 
+-- Once init.lua has run, the settings belong to the core: locky.config gives read-only views of them, so a plugin,
+-- theme, or widget reads options but cannot change what the user set (privacy above all).
+local frozen
+local read_only = "locky.config is read-only once init.lua has run: set options in init.lua"
+local raw_next, raw_rawset = next, rawset
+local targets = raw_setmetatable({}, { __mode = "k" })  -- each view → the table it shows
+local views = raw_setmetatable({}, { __mode = "k" })    -- each table → its view
+
+local view_mt
+local function view(t)
+  if type(t) ~= "table" then
+    return t
+  end
+  if not views[t] then
+    local v = raw_setmetatable({}, view_mt)
+    targets[v], views[t] = t, v
+  end
+  return views[t]
+end
+view_mt = {
+  __index = function(v, key)
+    return view(targets[v][key])
+  end,
+  __newindex = function()
+    error(read_only, 2)
+  end,
+  __len = function(v)
+    return #targets[v]
+  end,
+  __pairs = function(v)
+    return function(_, key)
+      local k, value = raw_next(targets[v], key)
+      return k, view(value)
+    end, v, nil
+  end,
+  __metatable = false,
+}
+
+function next(t, key)
+  if targets[t] then
+    local k, value = raw_next(targets[t], key)
+    return k, view(value)
+  end
+  return raw_next(t, key)
+end
+
+function rawset(t, key, value)
+  if targets[t] or (t == locky and key == "config") then
+    error(read_only, 2)
+  end
+  return raw_rawset(t, key, value)
+end
+
+-- A copy of a table and the tables in it, read raw and without metatables.
+local function raw_copy(t, seen)
+  if type(t) ~= "table" then
+    return t
+  end
+  seen = seen or {}
+  if not seen[t] then
+    local copy = {}
+    seen[t] = copy
+    for k, v in raw_next, t do
+      copy[raw_copy(k, seen)] = raw_copy(v, seen)
+    end
+  end
+  return seen[t]
+end
+
+-- The settings themselves, for the core: locky.config while init.lua runs, the frozen table after.
+local function current_config()
+  return frozen or rawget(locky, "config")
+end
+
 function locky.setup(opts)
+  if frozen then
+    error(read_only, 2)
+  end
   validate("opts", opts, "table")
   for key, kind in pairs(setting_types) do
     validate("opts." .. key, opts[key], kind, true)
@@ -606,6 +793,7 @@ local function system(owner, cmd, opts, on_exit)
   end)
   validate("opts", opts, "table", true)
   validate("on_exit", on_exit, "callable", true)
+  require_grant("system", "locky.system", 3)
   return native.system(owner, cmd, opts or {}, on_exit)
 end
 
@@ -687,7 +875,7 @@ end
 -- (locky.setup({ widgets = ... })), then settings.json's. `with_settings = false` leaves settings.json's out.
 local function widget_opts(name, placement, with_settings)
   local definition = widgets[name] or {}
-  return tbl.deep_extend("force", definition.opts or {}, placement.opts or {}, locky.config.widgets[name] or {},
+  return tbl.deep_extend("force", definition.opts or {}, placement.opts or {}, current_config().widgets[name] or {},
     with_settings ~= false and placement.settings_opts or nil)
 end
 
@@ -811,9 +999,9 @@ local function normalize_theme(name, theme, background_from_settings)
     palette = tbl.deep_extend("force", {
       bg = "#000000", fg = "#ffffff", muted = "#ffffff99", accent = "#0a84ff", surface = "#ffffff1a",
       border = "#ffffff26", success = "#30d158", warning = "#ff9f0a", danger = "#ff453a",
-    }, theme.palette or {}, locky.config.palette or {}),
+    }, theme.palette or {}, current_config().palette or {}),
     font = theme.font or {},
-    background = background_from_settings and theme.background or locky.config.background or theme.background or { color = "#000000" },
+    background = background_from_settings and theme.background or current_config().background or theme.background or { color = "#000000" },
     overlay = theme.overlay,
     card = tbl.deep_extend("force", { style = "glass", radius = 22 }, theme.card or {}),
     auth = tbl.deep_extend("force", { style = "pill", anchor = "bottom", offset = { 0, -60 }, avatar = true, name = true, hint = true }, theme.auth or {}),
@@ -1125,6 +1313,17 @@ local function pack_spec(spec)
   validate("spec.dir", spec.dir, "string", true)
   validate("spec.version", spec.version, "string", true)
   validate("spec.name", spec.name, "string", true)
+  validate("spec.allow", spec.allow, function(v)
+    if not tbl.islist(v) then
+      return false, "expected a list, such as { \"system\", \"files\" }"
+    end
+    for _, capability in ipairs(v) do
+      if not capabilities[capability] then
+        return false, "expected \"system\" or \"files\", got " .. tostring(capability)
+      end
+    end
+    return true
+  end, true)
   -- git would read a leading "-" as an option.
   validate("spec.src", spec.src, function(v)
     return v == nil or v:sub(1, 1) ~= "-", "must not start with '-'"
@@ -1142,11 +1341,22 @@ local function pack_spec(spec)
   if src and src:match("^[%w_.-]+/[%w_.-]+$") then
     src = "https://github.com/" .. src
   end
+  -- Encrypted sources only: anyone on the network can change what http:// and git:// send. A local folder is
+  -- { dir = ... }.
+  validate("spec.src", src, function(v)
+    return v == nil or v:match("^https://") or v:match("^ssh://") or v:match("^git@"),
+      "use \"user/repo\" for GitHub, or an https://, ssh://, or git@ address (not http:// or file://; for a local folder, use dir = ...)"
+  end)
+  -- Copied with the core's own functions: a module init.lua required may have changed locky.tbl.
+  local allow = {}
+  for i, capability in ipairs(spec.allow or {}) do
+    allow[i] = capability
+  end
   local name = spec.name or (spec.dir and spec.dir:match("([^/]+)/*$")) or src:match("([^/]+)/*$"):gsub("%.git$", "")
   validate("spec.name", name, function(v)
     return v:match("^[%w_.-]+$") ~= nil and v ~= "." and v ~= "..", "expected letters, digits, '_', '-', and '.'"
   end)
-  return { name = name, src = src, version = spec.version, dir = spec.dir and locky.fs.expand(spec.dir) }
+  return { name = name, src = src, version = spec.version, dir = spec.dir and locky.fs.expand(spec.dir), allow = allow }
 end
 
 -- `from` is "settings" for the Locky window's packages (settings.json) and "config" for init.lua's.
@@ -1169,6 +1379,11 @@ local function add_packs(specs, from, level)
       error(("two packages are named %q; give one a name = ..."):format(normalized.name), level)
     else
       insert(pack_specs, normalized)
+      local granted = {}
+      for _, capability in ipairs(normalized.allow) do
+        granted[capability] = true
+      end
+      grants[lower(normalized.name)] = granted
       native.pack_add(normalized.name, normalized.dir)
     end
   end
@@ -1176,7 +1391,12 @@ end
 
 --- Adds plugins: "user/repo", a git URL, or { src = ..., version = "v1.2.0" | branch | commit, name = ... }.
 --- { dir = "~/code/my-plugin" } adds a local folder, for writing a plugin.
+--- allow = { "system", "files" } lets a plugin run programs and change files.
 function locky.pack.add(specs)
+  -- A plugin adding packages could grant itself anything.
+  if raw_next(plugins_on_stack(1)) ~= nil or not called_directly(1, "add") then
+    error("locky.pack.add: only init.lua and your own config may add plugins", 2)
+  end
   validate("specs", specs, "table")
   if type(specs[1]) ~= "string" and type(specs[1]) ~= "table" and (specs.src or specs.dir) then
     specs = { specs }
@@ -1248,6 +1468,27 @@ return {
     return failures
   end,
 
+  -- After init.lua: from here on locky.config is read-only.
+  freeze_config = function()
+    -- A copy: a module init.lua required may hold the table itself, or have given it a metatable.
+    frozen = raw_copy(rawget(locky, "config"))
+    raw_rawset(locky, "config", nil)
+    raw_setmetatable(locky, {
+      __index = function(_, key)
+        if key == "config" then
+          return view(frozen)
+        end
+      end,
+      __newindex = function(t, key, value)
+        if key == "config" then
+          error(read_only, 2)
+        end
+        raw_rawset(t, key, value)
+      end,
+      __metatable = false,
+    })
+  end,
+
   -- settings.json's values, after init.lua, so they win. Its theme changes apply as each theme loads.
   -- Returns a message for each value of the wrong type; those are skipped.
   apply_settings = function(settings)
@@ -1258,7 +1499,7 @@ return {
       if value ~= nil and type(value) ~= expected then
         failures[#failures + 1] = ("%s: expected a %s, got %s"):format(key, expected, type(value))
       elseif value ~= nil then
-        locky.config[key] = value
+        current_config()[key] = value
       end
     end
     settings_themes = type(settings.themes) == "table" and settings.themes or {}

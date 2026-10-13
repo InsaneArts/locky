@@ -27,7 +27,7 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 | `theme` | A theme id, such as `"mocha"` | Themes › Use This Theme, or the menu |
 | `schedule` | `{ "mode": "time", "day": "glass", "night": "default", "day_starts": "07:00", "night_starts": "19:00" }`, or `{ "mode": "appearance", "light": "glass", "dark": "default" }` | Settings › Theme Schedule |
 | `themes` | `{ "<id>": { "background": {…}, "widgets": […], "auth": {…} } }`: see below | Themes › Background and Widgets |
-| `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, a git URL, or `{ "src": …, "version": …, "name": … }` | Plugins › Install |
+| `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, an `https://`, `ssh://`, or `git@` address, or `{ "src": …, "version": …, "name": …, "allow": ["system", "files"] }` (`allow`: what the plugin may do; see [plugins.md](plugins.md#what-a-plugin-may-do)) | Plugins › Install |
 | `message` | A line under the password field | Settings › Lock Screen |
 | `hour24` | `true` or `false`: a 24- or 12-hour clock in every theme | Settings › Lock Screen |
 | `privacy` | `true`: no agent titles or workspaces, no name, picture, or computer name | Settings › Lock Screen |
@@ -38,7 +38,7 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 | `battery_saver` | `true`: on battery or in Low Power Mode, nothing moves | Settings › Power |
 | `display_off` | Seconds on the lock screen without input before the displays turn off | Settings › Power |
 | `intruder_photo` | Take a camera photo at this many wrong passwords in one lock | Settings › Security |
-| `update_check` | `false` stops the daily plugin update check (default `true`) | Settings › Plugins |
+| `update_check` | `false` stops the daily plugin update check, which fetches and compares commits and runs no plugin code (default `true`) | Settings › Plugins |
 | `editor`, `terminal` | What "Open in" uses: an app's bundle id, a command (`"nvim"`), or `"default"`; a terminal's bundle id | Config › Open in |
 
 ## Theme changes
@@ -84,6 +84,10 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
   grid and snaps what you drag to it. The panel beside the canvas shows what is selected: its place, its card,
   and its options (a menu where the widget lists the values an option takes). With nothing selected, it shows
   the background, the widget list, Add Widget, and Reset Layout.
-- **Plugins:** install from git, update, remove, and see what each package provides.
+- **Widgets:** every widget, live. Click one to add it to the active theme, or under Add to, to another; the
+  Themes page then opens on that theme. Install Plugin… adds more.
+- **Plugins:** install from git; Update All… shows each update's commits and diffstat and installs exactly those
+  commits; Run programs and Change files allow a plugin added here to do that; More › Remove Unused… lists the
+  folders it deletes and asks first. Each plugin shows the themes and widgets it adds.
 - **Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
 - **Settings:** everything in the table above.

@@ -8,7 +8,7 @@ minus what [plugins.md](plugins.md#the-rules-that-keep-the-lock-screen-safe) lis
 | | |
 |---|---|
 | `locky.setup(opts)` | Merges `opts` into `locky.config`: `theme`, `background`, `palette`, `widgets`, `hour24` (`true` or `false` forces a 24- or 12-hour clock in every theme), and `privacy` (`true`: `locky.sys.user()` and `locky.sys.hostname()` return generic names, `locky.herdr` gives each agent its kind as the title and no workspace, and the password field shows no name or picture; widgets that show other personal data should check `locky.config.privacy`), and `message` (a line under the password field, such as "If found, call ..."; it stays visible while a theme hides the field). A value of the wrong type is an error. The Locky window's settings.json applies before init.lua and again after the plugin scripts, so it wins. |
-| `locky.config` | The current settings. |
+| `locky.config` | The current settings. Read-only once `init.lua` has run: a plugin script, theme, or widget that writes it (or calls `locky.setup`) gets an error. |
 | `locky.version` | Locky's version. |
 
 ## Widgets
@@ -44,7 +44,7 @@ Everything a widget starts stops when the screen unlocks or the widget fails.
 | `locky.cancel(timer)` | Stops a timer. |
 | `locky.now()` | Seconds since 1970 with fractions, for motion finer than `os.time`'s whole seconds. |
 | `locky.on(event, fn)` | `"lock"` (the screen locked), `"unlock"` (about to close), `"auth_failed"` (a wrong password), `"auth_shown"` and `"auth_hidden"` (the password field appeared or went away, in themes with `auth.reveal = "activity"`). No event carries any part of a password. |
-| `locky.system(cmd, opts, on_exit)` | Runs a program without a shell and without waiting, like `vim.system`. `cmd` is a list: `{ "pmset", "-g", "batt" }`. `opts`: `cwd`, `env` (table), `stdin` (string), `timeout` (seconds, default 10). `on_exit(result)`: `code`, `signal`, `stdout`, `stderr`, `timed_out`. A missing program gives code 127. Homebrew's folders are on `PATH`. Returns a process. |
+| `locky.system(cmd, opts, on_exit)` | Runs a program without a shell and without waiting, like `vim.system`. `cmd` is a list: `{ "pmset", "-g", "batt" }`. `opts`: `cwd`, `env` (table), `stdin` (string), `timeout` (seconds, default 10). `on_exit(result)`: `code`, `signal`, `stdout`, `stderr`, `timed_out`. A missing program gives code 127. Homebrew's folders are on `PATH`. Returns a process. An installed plugin needs the `"system"` grant ([plugins.md](plugins.md#what-a-plugin-may-do)). |
 | `locky.kill(process)` | Stops a process. |
 
 ## System

@@ -46,6 +46,8 @@ struct Inspection: Sendable {
         var installed: Bool
         /// The commit locky-pack-lock.json pins it to.
         var commit: String?
+        /// What the user lets it do: "system" (run programs) and "files" (change files).
+        var allow: [String] = []
     }
 
     var themes: [ThemeInfo] = []
@@ -90,7 +92,7 @@ struct Inspection: Sendable {
                     return PackInfo(name: name, src: spec["src"].string, version: spec["version"].string, dir: dir,
                                     fromSettings: spec["from"].string == "settings", alsoInConfig: spec["in_config"].bool ?? false,
                                     folder: folder, installed: FileManager.default.fileExists(atPath: folder.path),
-                                    commit: dir == nil ? lockfile?.plugins[name]?.rev : nil)
+                                    commit: dir == nil ? lockfile?.plugins[name]?.rev : nil, allow: spec["allow"].array?.compactMap(\.string) ?? [])
                 }
                 result.widgets = ((try? runtime.call("widget_catalog", budget: 1).first?.array) ?? []).map { info in
                     WidgetInfo(name: info["name"].string ?? "?", description: info["description"].string,

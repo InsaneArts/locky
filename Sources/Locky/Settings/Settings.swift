@@ -72,7 +72,7 @@ struct Settings: Equatable, Sendable {
     /// What Lua's apply_settings reads.
     var lua: LuaValue { .table(values.filter { Self.luaKeys.contains($0.key) }) }
 
-    /// Package specs, as locky.pack.add takes them: "user/repo", a URL, or { src, version, name }.
+    /// Package specs, as locky.pack.add takes them: "user/repo", a URL, or { src, version, name, allow }.
     var packs: [LuaValue] {
         get { self["packs"].array ?? [] }
         set { self["packs"] = newValue.isEmpty ? .nil : .array(newValue) }
