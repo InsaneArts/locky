@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if windowController?.window?.isVisible == true { model.refresh() }
         }
         if !tool {
+            IntruderLog().prune()
             applyAppSettings()
             scheduleUpdateChecks()
             DistributedNotificationCenter.default().addObserver(self, selector: #selector(handleRequest(_:)), name: Self.request, object: nil,

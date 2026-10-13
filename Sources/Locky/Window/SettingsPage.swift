@@ -159,7 +159,7 @@ struct SettingsPage: View {
         } header: {
             Text("Security")
         } footer: {
-            Text("Photos stay on this Mac, in ~/Library/Application Support/Locky/Intruders.")
+            Text("Photos stay on this Mac, in ~/Library/Application Support/Locky/Intruders. Locky keeps the newest 20, for 30 days.")
         }
     }
 
