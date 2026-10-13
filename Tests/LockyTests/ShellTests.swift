@@ -67,9 +67,10 @@ import Testing
         #expect(welcome.frame.width > 0 && abs(welcome.frame.midX - screen.visibleFrame.midX) < 1)
     }
 
-    /// Any process can send a size with a request: NaN or infinity would reach AppKit, which traps on it.
-    @Test(arguments: [("1300x800", CGSize(width: 1300, height: 800)), ("nanxinf", nil), ("0x640", nil), ("-980x640", nil), ("980", nil)]
-          as [(String, CGSize?)])
+    /// Any process can send a size with a request: NaN or infinity would reach AppKit, which traps on it, and a frame
+    /// past Int32's range raises an exception that quits Locky.
+    @Test(arguments: [("1300x800", CGSize(width: 1300, height: 800)), ("nanxinf", nil), ("0x640", nil), ("-980x640", nil), ("980", nil),
+                      ("3000000000x800", nil)] as [(String, CGSize?)])
     func aSizeIsTwoPositiveNumbers(_ text: String, _ size: CGSize?) {
         #expect(CLI.GUILaunch.parse(["window", "--size", text]).size == size)
     }

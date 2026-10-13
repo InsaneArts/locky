@@ -36,9 +36,10 @@ enum CLI {
             launch.arguments = arguments
             launch.mode = arguments.first == "preview" ? .preview : arguments.first == "lock" ? .lock : nil
             launch.theme = value("--theme", in: arguments)
-            // Two positive numbers only. A request from any process brings its own size, and AppKit traps on NaN.
+            // Two positive numbers up to 100,000 only. A request from any process brings its own size: AppKit traps on
+            // NaN and raises an exception that quits Locky for a frame past Int32's range.
             if let size = value("--size", in: arguments)?.split(separator: "x").compactMap({ Double($0) }), size.count == 2,
-               size.allSatisfy({ $0.isFinite && $0 > 0 }) {
+               size.allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 100_000 }) {
                 launch.size = CGSize(width: size[0], height: size[1])
             }
             launch.behind = arguments.contains("--behind")
