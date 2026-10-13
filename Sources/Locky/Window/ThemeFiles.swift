@@ -89,15 +89,18 @@ struct ThemeFile: Equatable {
         return id
     }
 
-    /// Writes the theme to the config's themes folder as `id`, once it loads: it is tried first in a config folder
-    /// of its own, so one that fails never lands among the user's themes.
+    /// Writes the theme to the config's themes folder as `id`, once it loads: it is tried first from a folder of its
+    /// own, put before the config's, so one that fails never lands among the user's themes, and a base that is the
+    /// user's own theme or a package's is still found.
     func install(as id: String, config: URL) async throws {
         let text = try source()
         let trial = FileManager.default.temporaryDirectory.appending(path: "locky-theme-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: trial) }
         try FileManager.default.createDirectory(at: trial.appending(path: "themes"), withIntermediateDirectories: true)
         try text.write(to: Self.file(id, config: trial), atomically: true, encoding: .utf8)
-        if case .failure(let error) = await Inspection.layout(of: id, config: trial, wallpaper: nil) { throw error }
+        var path = RuntimePath.standard(config: config)
+        path.roots.insert(trial, at: 0)
+        if case .failure(let error) = await Inspection.layout(of: id, path: path, wallpaper: nil) { throw error }
         let url = Self.file(id, config: config)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard !FileManager.default.fileExists(atPath: url.path) else { throw LuaError("\(LuaError.shortenPaths(url.path)) is there already") }

@@ -66,6 +66,14 @@ import Testing
         await #expect(throws: LuaError.self) { try await ThemeFile(base: "default", name: "Lake", edits: []).install(as: "lake", config: sandbox.config) }
     }
 
+    @Test func aCopyOfTheUsersOwnThemeInstalls() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine', background = { color = '#112233' } }")
+        try await ThemeFile(base: "mine", name: "Mine Copy", edits: []).install(as: "mine-copy", config: sandbox.config)
+        let layout = try await Inspection.layout(of: "mine-copy", config: sandbox.config, wallpaper: nil).get()
+        #expect(layout.name == "Mine Copy" && layout.background["color"] == .string("#112233"))
+    }
+
     @Test func aThemeThatFailsIsNotInstalled() async throws {
         let sandbox = try Sandbox()
         let bad: LuaValue = .table(["widgets": .array([.table(["widget": .string("clock"), "anchor": .string("nowhere")])])])

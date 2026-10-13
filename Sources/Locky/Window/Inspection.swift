@@ -114,10 +114,14 @@ struct Inspection: Sendable {
     /// A theme as init.lua and plugins leave it, before the window's changes: what Reset goes back to.
     /// `wallpaper` is the desktop picture, which some themes choose their background by.
     static func layout(of theme: String, config: URL, wallpaper: String?) async -> Result<ThemeLayout, LuaError> {
+        await layout(of: theme, path: .standard(config: config), wallpaper: wallpaper)
+    }
+
+    static func layout(of theme: String, path: RuntimePath, wallpaper: String?) async -> Result<ThemeLayout, LuaError> {
         await background {
             let environment = LuaRuntime.Environment()
             environment.wallpaper = wallpaper
-            let runtime = LuaRuntime(path: .standard(config: config), environment: environment, delegate: .silent)
+            let runtime = LuaRuntime(path: path, environment: environment, delegate: .silent)
             defer { runtime.stop() }
             return runtime.sync {
                 do {
