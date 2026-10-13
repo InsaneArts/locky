@@ -136,6 +136,70 @@ private struct Fitted<Content: View>: View {
     }
 }
 
+/// Add Widget: every widget, live, to add to `theme`.
+struct WidgetGallerySheet: View {
+    let model: AppModel
+    /// The theme being customized, which the widget goes to.
+    let theme: Inspection.ThemeInfo
+    let add: (_ widget: String, _ family: String?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var search = ""
+    @State private var gallery = WidgetGallery()
+
+    private var shown: [Inspection.WidgetInfo] {
+        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return model.inspection.widgets }
+        return model.inspection.widgets.filter { $0.name.lowercased().contains(query) || ($0.description ?? "").lowercased().contains(query) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Add a Widget").font(.headline)
+                Spacer()
+                TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(width: 220)
+            }
+            .padding(16)
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18, pinnedViews: .sectionHeaders) {
+                    ForEach(WidgetGroup.groups(shown)) { group in
+                        Section {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 18)], spacing: 22) {
+                                ForEach(group.widgets) { widget in
+                                    WidgetCard(gallery: gallery, widget: widget) { family in
+                                        add(widget.name, family)
+                                        dismiss()
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                        } header: {
+                            Text(group.title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16).padding(.vertical, 6)
+                                .background(.bar)
+                        }
+                    }
+                }
+                .padding(.vertical, 12)
+            }
+            Divider()
+            HStack {
+                Text("Click a widget to add it at the center. Drag it where you want it.").font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(12)
+        }
+        .frame(width: 940, height: 700)
+        .task(id: model.revision) {
+            gallery.start(widgets: model.inspection.widgets, settings: model.store.settings, config: model.store.config, revision: model.revision)
+        }
+        .onDisappear { gallery.stop() }
+    }
+}
+
 /// A widget in a gallery, as in macOS's widget gallery: its live picture in the size picked below it, its name,
 /// and what it shows. A click on the picture adds the widget in that size.
 struct WidgetCard: View {
@@ -181,7 +245,7 @@ struct WidgetCard: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(EditorPlacement.title(widget.name)).font(.headline).lineLimit(1)
-                Text(widget.description ?? (showsSource ? AddWidgetSheet.source(of: widget) : ""))
+                Text(widget.description ?? (showsSource ? widget.source ?? "" : ""))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2, reservesSpace: true)
@@ -267,7 +331,7 @@ struct WidgetGroup: Identifiable {
             let path = widget.file?.path ?? ""
             if path.hasPrefix(RuntimePath.builtInRuntime.path) { core.append(widget) }
             else if path.hasPrefix(RuntimePath.defaultConfig.path) { config.append(widget) }
-            else if path.hasPrefix(packages) { themes[AddWidgetSheet.source(of: widget), default: []].append(widget) }
+            else if path.hasPrefix(packages) { themes[folder(of: path), default: []].append(widget) }
             else { installed.append(widget) }
         }
         var list = [WidgetGroup(title: "Locky", widgets: core), WidgetGroup(title: "Your Config", widgets: config),
@@ -276,5 +340,12 @@ struct WidgetGroup: Identifiable {
             list.append(WidgetGroup(title: "\(EditorPlacement.title(name)) Theme", widgets: themes[name]!))
         }
         return list.filter { !$0.widgets.isEmpty }
+    }
+
+    /// The package a widget file is in: the folder before its plugin folder, else the short path.
+    private static func folder(of path: String) -> String {
+        let parts = path.split(separator: "/")
+        if let plugin = parts.lastIndex(of: "plugin"), plugin > 0 { return String(parts[plugin - 1]) }
+        return LuaError.shortenPaths(path)
     }
 }

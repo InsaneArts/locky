@@ -258,7 +258,7 @@ private struct WidgetInspector: View {
                     Text(EditorPlacement.title(placement.widget)).font(.title3.weight(.semibold))
                     if let info {
                         if let description = info.description { Text(description).foregroundStyle(.secondary) }
-                        Text(AddWidgetSheet.source(of: info)).font(.caption).foregroundStyle(.tertiary)
+                        if let source = info.source { Text(source).font(.caption).foregroundStyle(.tertiary) }
                     } else {
                         Label("No widget has this name. Is its plugin installed?", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
@@ -665,77 +665,6 @@ private struct AnchorPicker: View {
         .accessibilityElement()
         .accessibilityLabel("Place")
         .accessibilityValue(anchor)
-    }
-}
-
-struct AddWidgetSheet: View {
-    let model: AppModel
-    let add: (_ widget: String, _ family: String?) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var search = ""
-    @State private var gallery = WidgetGallery()
-
-    private var shown: [Inspection.WidgetInfo] {
-        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { return model.inspection.widgets }
-        return model.inspection.widgets.filter { $0.name.lowercased().contains(query) || ($0.description ?? "").lowercased().contains(query) }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Add a Widget").font(.headline)
-                Spacer()
-                TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(width: 220)
-            }
-            .padding(16)
-            Divider()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18, pinnedViews: .sectionHeaders) {
-                    ForEach(WidgetGroup.groups(shown)) { group in
-                        Section {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 18)], spacing: 22) {
-                                ForEach(group.widgets) { widget in
-                                    WidgetCard(gallery: gallery, widget: widget) { family in
-                                        add(widget.name, family)
-                                        dismiss()
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                        } header: {
-                            Text(group.title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16).padding(.vertical, 6)
-                                .background(.bar)
-                        }
-                    }
-                }
-                .padding(.vertical, 12)
-            }
-            Divider()
-            HStack {
-                Text("Click a widget to add it at the center. Drag it where you want it.").font(.callout).foregroundStyle(.secondary)
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding(12)
-        }
-        .frame(width: 940, height: 700)
-        .task(id: model.revision) {
-            gallery.start(widgets: model.inspection.widgets, settings: model.store.settings, config: model.store.config, revision: model.revision)
-        }
-        .onDisappear { gallery.stop() }
-    }
-
-    /// "Built in", a package's name, or the user's config.
-    static func source(of widget: Inspection.WidgetInfo) -> String {
-        guard let path = widget.file?.path else { return "" }
-        if path.hasPrefix(RuntimePath.builtInRuntime.path) { return "Built in" }
-        if path.hasPrefix(RuntimePath.defaultConfig.path) { return "Your config" }
-        let parts = path.split(separator: "/")
-        if let plugin = parts.lastIndex(of: "plugin"), plugin > 0 { return String(parts[plugin - 1]) }
-        return LuaError.shortenPaths(path)
     }
 }
 

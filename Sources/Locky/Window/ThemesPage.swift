@@ -193,7 +193,7 @@ struct ThemesPage: View {
             }
         }
         .sheet(isPresented: $adding) {
-            AddWidgetSheet(model: model) { name, family in
+            WidgetGallerySheet(model: model, theme: info) { name, family in
                 if let editing { selection = .widget(editing.add(name, family: family)) }
             }
         }
