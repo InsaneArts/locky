@@ -177,3 +177,8 @@ final class AppModel {
         watchers = []
     }
 }
+
+extension String {
+    /// "after 5 min idle" → "After 5 min idle".
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
