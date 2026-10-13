@@ -12,8 +12,9 @@ cannot do.
   of its own. Locky writes it a heartbeat every second from its main thread. If Locky exits during a lock
   without saying the lock ended, the guard locks the Mac with the macOS lock screen. If no heartbeat comes
   for 8 seconds, the guard locks the Mac and then ends Locky, so a frozen shield does not stay after you
-  unlock macOS. If the guard exits during a lock, Locky switches to the macOS lock screen. If the guard does
-  not start, Locky shows the macOS lock screen instead of its own.
+  unlock macOS. If the guard exits during a lock, or does not start, Locky switches to the macOS lock screen.
+  Each switch keeps Locky's lock up until the macOS lock screen is up, so the desktop does not show between
+  the two.
 - **⌃⌥⌘Q switches to the macOS lock screen.** It is the way out when something goes wrong, and it never
   lets anyone in. Settings › Unlock turns it off (`emergency_exit`).
 - **No lock without the keyboard.** If Locky is not the active app with its lock window key within 1.5

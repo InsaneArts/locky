@@ -58,6 +58,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var keyMonitor: Any?
     /// Lock only: takes the keys while another app holds the keyboard (see takeKeyboard).
     private var keyTap: (port: CFMachPort, source: CFRunLoopSource)?
+    /// The macOS lock screen was asked for; this lock ends when it is up.
+    private var handingOver = false
     /// A pending check that the lock holds the keyboard.
     private var keyboardCheck: Task<Void, Never>?
     private var keyboardObserver: NSObjectProtocol?
@@ -101,7 +103,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock {
             lockGuard = LockGuard { [weak self] reason in self?.handOver(reason) }
             // Without its guard, a crash would leave the shield's open session behind: the macOS lock instead.
-            if lockGuard == nil, handOver("the guard did not start") { return }
+            if lockGuard == nil { handOver("the guard did not start") }
         }
         if mode != .embedded {
             napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
@@ -757,18 +759,34 @@ final class LockSession: NSObject, NSWindowDelegate {
             && event.modifierFlags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command]
     }
 
-    /// Locks the Mac with the macOS lock screen, then ends this lock: a way out that never lets anyone in. false,
-    /// with this lock kept, when the macOS lock is out of reach.
-    @discardableResult
-    private func handOver(_ reason: String) -> Bool {
-        guard mode == .lock, !ended else { return false }
+    /// Locks the Mac with the macOS lock screen, then ends this lock once that screen is up, so the desktop
+    /// never shows between the two: a way out that never lets anyone in. When the macOS lock is out of reach,
+    /// this lock stays.
+    private func handOver(_ reason: String) {
+        guard mode == .lock, !ended, !handingOver else { return }
         guard SystemLock.engage(reason: reason) else {
             LogFile.shared.write(level: "error", message: "cannot switch to the macOS lock screen (\(reason)); the lock stays", source: "locky")
-            return false
+            return
         }
-        LogFile.shared.write(level: "warn", message: "switched to the macOS lock screen: \(reason)", source: "locky")
-        end("handed over to the macOS lock screen")
-        return true
+        handingOver = true
+        LogFile.shared.write(level: "warn", message: "switching to the macOS lock screen: \(reason)", source: "locky")
+        Task { [weak self] in
+            for _ in 0..<30 {
+                try? await Task.sleep(for: .milliseconds(100))
+                if Self.systemLocked {
+                    self?.end("handed over to the macOS lock screen")
+                    return
+                }
+            }
+            guard let self, !ended else { return }
+            handingOver = false
+            LogFile.shared.write(level: "error", message: "the macOS lock screen did not come up (\(reason)); the lock stays", source: "locky")
+        }
+    }
+
+    /// The macOS lock screen is up.
+    private static var systemLocked: Bool {
+        (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true
     }
 
     /// settings.json's emergency_exit, on unless false: ⌃⌥⌘Q switches to the macOS lock screen.
