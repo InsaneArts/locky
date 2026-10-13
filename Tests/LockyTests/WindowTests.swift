@@ -7,15 +7,23 @@ import Testing
     @Test func widgetsGroupByWhereTheyComeFrom() {
         func widget(_ name: String, _ file: URL) -> Inspection.WidgetInfo { Inspection.WidgetInfo(name: name, file: file) }
         let packages = RuntimePath.resources.appending(path: "packages")
-        let groups = WidgetGroup.groups([
+        let widgets = [
             widget("sakura.month", packages.appending(path: "sakura/plugin/sakura.lua")),
             widget("clock", RuntimePath.builtInRuntime.appending(path: "plugin/clock.lua")),
             widget("weather.big", RuntimePath.defaultPacks.appending(path: "locky-weather/plugin/big.lua")),
             widget("matrix.whisper", packages.appending(path: "matrix/plugin/matrix.lua")),
             widget("mine", RuntimePath.defaultConfig.appending(path: "plugin/mine.lua")),
-        ])
-        #expect(groups.map(\.title) == ["Locky", "Your Config", "Installed", "Matrix Theme", "Sakura Theme"])
-        #expect(groups.map { $0.widgets.map(\.name) } == [["clock"], ["mine"], ["weather.big"], ["matrix.whisper"], ["sakura.month"]])
+        ]
+        // Without a theme, no theme's pieces.
+        let groups = WidgetGroup.groups(widgets)
+        #expect(groups.map(\.title) == ["Locky", "Lua Config", "locky-weather"])
+        #expect(groups.map { $0.widgets.map(\.name) } == [["clock"], ["mine"], ["weather.big"]])
+        // Sakura's own pieces come last, under its name; another theme's stay out.
+        let sakura = Inspection.ThemeInfo(id: "sakura", name: "Sakura", directory: packages.appending(path: "sakura"))
+        let customizing = WidgetGroup.groups(widgets, theme: sakura)
+        #expect(customizing.map(\.title) == ["Locky", "Lua Config", "locky-weather", "Sakura"])
+        #expect(customizing.last?.widgets.map(\.name) == ["sakura.month"])
+        #expect(!customizing.flatMap(\.widgets).contains { $0.name == "matrix.whisper" })
     }
 
     /// The gallery runs every widget in one runtime, once in each of its families, and hands each card the live

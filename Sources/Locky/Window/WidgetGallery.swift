@@ -163,7 +163,7 @@ struct WidgetGallerySheet: View {
             Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18, pinnedViews: .sectionHeaders) {
-                    ForEach(WidgetGroup.groups(shown)) { group in
+                    ForEach(WidgetGroup.groups(shown, theme: theme)) { group in
                         Section {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 18)], spacing: 22) {
                                 ForEach(group.widgets) { widget in
@@ -316,36 +316,37 @@ struct FamilyPicker: View {
     }
 }
 
-/// Widgets grouped by where they come from: Locky's own, the user's config, installed plugins, then each built-in
-/// theme's.
+/// The Add Widget sheet's groups: Locky's own widgets, the config's, each plugin's (A to Z), then the pieces of the
+/// built-in theme being customized. Other themes' pieces are left out: each is drawn for its own theme.
 struct WidgetGroup: Identifiable {
     var id: String { title }
     var title: String
     var widgets: [Inspection.WidgetInfo]
 
-    static func groups(_ widgets: [Inspection.WidgetInfo]) -> [WidgetGroup] {
+    static func groups(_ widgets: [Inspection.WidgetInfo], theme: Inspection.ThemeInfo? = nil) -> [WidgetGroup] {
         let packages = RuntimePath.resources.appending(path: "packages").path + "/"
-        var core: [Inspection.WidgetInfo] = [], config: [Inspection.WidgetInfo] = [], installed: [Inspection.WidgetInfo] = []
-        var themes: [String: [Inspection.WidgetInfo]] = [:]
+        // The theme's package: the folder its themes/ folder is in.
+        let package = theme?.directory.map { $0.resolvingSymlinksInPath().path + "/" }
+        var core: [Inspection.WidgetInfo] = [], config: [Inspection.WidgetInfo] = [], own: [Inspection.WidgetInfo] = []
+        var plugins: [String: [Inspection.WidgetInfo]] = [:]
         for widget in widgets {
             let path = widget.file?.path ?? ""
-            if path.hasPrefix(RuntimePath.builtInRuntime.path) { core.append(widget) }
-            else if path.hasPrefix(RuntimePath.defaultConfig.path) { config.append(widget) }
-            else if path.hasPrefix(packages) { themes[folder(of: path), default: []].append(widget) }
-            else { installed.append(widget) }
+            if path.hasPrefix(RuntimePath.builtInRuntime.path + "/") {
+                core.append(widget)
+            } else if path.hasPrefix(packages) {
+                if let package, widget.file?.resolvingSymlinksInPath().path.hasPrefix(package) == true { own.append(widget) }
+            } else if path.isEmpty || path.hasPrefix(RuntimePath.defaultConfig.path + "/") {
+                // A widget without a file (defined from a string of Lua) joins the config's.
+                config.append(widget)
+            } else {
+                plugins[widget.source ?? path, default: []].append(widget)
+            }
         }
-        var list = [WidgetGroup(title: "Locky", widgets: core), WidgetGroup(title: "Your Config", widgets: config),
-                    WidgetGroup(title: "Installed", widgets: installed)]
-        for name in themes.keys.sorted() {
-            list.append(WidgetGroup(title: "\(EditorPlacement.title(name)) Theme", widgets: themes[name]!))
+        var list = [WidgetGroup(title: "Locky", widgets: core), WidgetGroup(title: "Lua Config", widgets: config)]
+        for folder in plugins.keys.sorted(by: { $0.localizedStandardCompare($1) == .orderedAscending }) {
+            list.append(WidgetGroup(title: folder, widgets: plugins[folder] ?? []))
         }
+        if let theme { list.append(WidgetGroup(title: theme.name, widgets: own)) }
         return list.filter { !$0.widgets.isEmpty }
-    }
-
-    /// The package a widget file is in: the folder before its plugin folder, else the short path.
-    private static func folder(of path: String) -> String {
-        let parts = path.split(separator: "/")
-        if let plugin = parts.lastIndex(of: "plugin"), plugin > 0 { return String(parts[plugin - 1]) }
-        return LuaError.shortenPaths(path)
     }
 }
