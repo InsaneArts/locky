@@ -33,7 +33,7 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 | `privacy` | `true`: no agent titles or workspaces, no name, picture, or computer name | Settings › Lock Screen |
 | `auto_unlock` | Seconds until the prototype's lock opens by itself; `0` turns it off | Settings › Unlock |
 | `touch_id` | `false` turns Touch ID off (default `true`) | Settings › Unlock |
-| `emergency_exit` | `false` stops ⌃⌥⌘Q from quitting (default `true`) | Settings › Unlock |
+| `emergency_exit` | `false` stops ⌃⌥⌘Q from switching to the macOS lock screen (default `true`) | Settings › Unlock |
 | `shortcut` | `{ "key": 37, "modifiers": ["control", "option", "command"] }`: a virtual key code (37 is L) and modifiers | Settings › General |
 | `auto_lock` | `{ "idle_minutes": 5, "display_sleep": true, "system_sleep": true, "screen_saver": true }`; a missing key is off | Settings › Lock Automatically |
 | `battery_saver` | `true`: on battery or in Low Power Mode, nothing moves | Settings › Power |

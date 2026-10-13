@@ -79,8 +79,8 @@ struct SettingsPage: View {
                 LuaNote(model: model, key: "auto_unlock") { $0.number.map { $0 == 0 ? "off" : Self.duration($0) } }
             }
             Toggle(isOn: store.bool("emergency_exit", default: true)) {
-                Text("Quit with ⌃⌥⌘Q")
-                Text("Ends the lock at once: for when something goes wrong.")
+                Text("Switch to the macOS lock screen with ⌃⌥⌘Q")
+                Text("Ends Locky's lock and locks the Mac with the macOS lock screen: for when something goes wrong.")
             }
             if safetySeconds == 0, store.settings["emergency_exit"].bool == false {
                 Label("With both off, a bug in Locky could keep you locked out until you restart the Mac.", systemImage: "exclamationmark.triangle.fill")

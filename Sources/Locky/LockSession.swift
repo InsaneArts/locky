@@ -672,6 +672,12 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     // MARK: Safety
 
+    /// ⌃⌥⌘Q. Only these four keys count, so Caps Lock or Fn being on does not stop it.
+    static func isEmergencyExit(_ event: NSEvent) -> Bool {
+        event.type == .keyDown && event.keyCode == 12
+            && event.modifierFlags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command]
+    }
+
     /// Locks the Mac with the macOS lock screen, then ends this lock: a way out that never lets anyone in. false,
     /// with this lock kept, when the macOS lock is out of reach.
     @discardableResult
@@ -687,16 +693,16 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     /// Prototype only. The lock opens after `seconds`. If the main thread hangs, a timer on another thread
-    /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q quits at once, unless settings.json's
-    /// emergency_exit is false.
+    /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q switches to the macOS lock screen,
+    /// unless settings.json's emergency_exit is false.
     private func armSafety(after seconds: Double) {
         safetySeconds = seconds
         banner.quits = options.settings["emergency_exit"].bool != false
         if keyMonitor == nil, banner.quits {
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                // Only these four keys count, so Caps Lock or Fn being on does not stop it.
-                if event.modifierFlags.intersection([.control, .option, .command, .shift]) == [.control, .option, .command], event.keyCode == 12 { exit(0) }
-                return event
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard Self.isEmergencyExit(event) else { return event }
+                self?.handOver("⌃⌥⌘Q")
+                return nil
             }
         }
         safetyExit?.cancel()
@@ -973,7 +979,7 @@ struct SafetyBanner: View {
     @MainActor @Observable
     final class Model {
         var opensAt: Date?
-        /// Whether ⌃⌥⌘Q quits.
+        /// Whether ⌃⌥⌘Q switches to the macOS lock screen.
         var quits = true
     }
 
@@ -982,7 +988,7 @@ struct SafetyBanner: View {
     var body: some View {
         if let opensAt = model.opensAt {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text("Prototype · opens in \(max(0, Int(opensAt.timeIntervalSince(context.date).rounded()))) s" + (model.quits ? " · ⌃⌥⌘Q quits" : ""))
+                Text("Prototype · opens in \(max(0, Int(opensAt.timeIntervalSince(context.date).rounded()))) s" + (model.quits ? " · ⌃⌥⌘Q switches to the macOS lock screen" : ""))
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.horizontal, 12)
