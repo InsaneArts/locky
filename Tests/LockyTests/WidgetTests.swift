@@ -47,3 +47,37 @@ import Testing
         #expect(try runtime.eval("return require('locky.weather').parse('<html>', false)") == [.nil])
     }
 }
+
+@Suite struct TimeModuleTests {
+    private func eval(_ source: String) throws -> [LuaValue] {
+        let runtime = LuaRuntime(path: try Sandbox().path(), delegate: Recorder().delegate)
+        _ = runtime.bootForTest()
+        defer { runtime.stop() }
+        return try runtime.eval("local time = require('locky.time') " + source)
+    }
+
+    @Test func theTimeInWords() throws {
+        #expect(try eval("return time.fuzzy(4, 9), time.fuzzy(8, 44), time.fuzzy(23, 58), time.fuzzy(11, 59), time.fuzzy(12, 31), time.fuzzy(0, 1)")
+                == [.string("ten past four"), .string("quarter to nine"), .string("midnight"), .string("noon"),
+                    .string("half past twelve"), .string("midnight")])
+    }
+
+    @Test func progressAndDays() throws {
+        // Noon on 2 July 2026, local time: half the day, about half the year.
+        let values = try eval("""
+            local now = os.time({ year = 2026, month = 7, day = 2, hour = 12 })
+            local p = time.progress(now, 2)
+            return p.day, math.floor(p.year * 100), p.days_left_in_year,
+              time.days_between(now, time.parse_date('2026-12-25')), time.days_between(now, time.parse_date('2026-07-01 23:00'))
+            """)
+        #expect(values[0] == .double(0.5) && values[1] == .int(50) && values[2] == .int(182), "\(values)")
+        #expect(values[3] == .int(176) && values[4] == .int(-1))
+        #expect(try eval("return time.parse_date('soon')") == [.nil])
+    }
+
+    @Test func bitsAndBeats() throws {
+        #expect(try eval("local b = time.bits(5, 4) return b[1], b[2], b[3], b[4]") == [.bool(false), .bool(true), .bool(false), .bool(true)])
+        // Midnight UTC is 01:00 in Biel: @041.
+        #expect(try eval("return time.beat(0)") == [.string("@041")])
+    }
+}
