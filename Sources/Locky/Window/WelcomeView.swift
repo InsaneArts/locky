@@ -7,8 +7,8 @@ import SwiftUI
 struct WelcomeView: View {
     let model: AppModel
     let close: () -> Void
-    /// The triggers the switch turned off, which turning it on again restores. The window is kept between visits, and so
-    /// is this.
+    /// The triggers the switch turned off during this visit, which turning it on again restores. Closing the window ends
+    /// the visit.
     @State private var turnedOff: AutoLockSettings?
     /// Whether this Mac can use Touch ID, read once: an LAContext on every body pass is waste.
     @State private var biometrics = false
@@ -85,6 +85,10 @@ struct WelcomeView: View {
         }
         .frame(width: 560)
         .onAppear { biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) }
+        // AppDelegate keeps the window, and this view, for the next visit.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+            if (note.object as? NSWindow)?.contentViewController is NSHostingController<WelcomeView> { turnedOff = nil }
+        }
     }
 
     /// On while any trigger is stored. A change goes to the file as it is now, through `setAutoLock(_:in:turnedOff:)`.
