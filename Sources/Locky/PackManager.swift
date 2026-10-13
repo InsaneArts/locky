@@ -336,10 +336,12 @@ struct PackManager {
         }
         let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-        // Read both pipes at once: a full stderr pipe would otherwise stall git and this read forever.
+        // Read both pipes at once: a full stderr pipe would otherwise stall git and this read forever. On a thread
+        // of its own: callers block a thread of Swift's pool, and with enough of them blocked, a block queued on a
+        // global queue may never start.
         nonisolated(unsafe) var errors = Data()
         let stderrDone = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
+        Thread.detachNewThread {
             errors = err.fileHandleForReading.readDataToEndOfFile()
             stderrDone.signal()
         }
