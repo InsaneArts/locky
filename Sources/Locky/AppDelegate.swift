@@ -119,6 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Another launch's arguments: open the window at a page, preview, or lock, as that launch would have.
     @objc private func handleRequest(_ notification: Notification) {
         let arguments = notification.userInfo?["arguments"] as? [String] ?? []
+        // Any process can post it: during a lock, nothing it asks for (a window, a preview) may come up.
+        guard session?.mode != .lock else {
+            LogFile.shared.write(level: "warn", message: "ignored a request from another launch during a lock: \(arguments.joined(separator: " "))", source: "locky")
+            return
+        }
         let launch = CLI.GUILaunch.parse(arguments)
         LogFile.shared.write(level: "info", message: "request from another launch: \(arguments.joined(separator: " "))", source: "locky")
         switch launch.mode {
