@@ -466,7 +466,6 @@ final class LockSession: NSObject, NSWindowDelegate {
 
         auth = theme.auth
         if theme.auth.reveal == "activity", authModel.password.isEmpty, let screen = screens.first {
-            screen.glanceHint = NSHostingView(rootView: GlanceHint(auth: theme.auth, style: screen.style))
             screen.setAuthVisible(false, dim: theme.auth.dim, animated: false)
             guard mode != .embedded else { return }
             windows.forEach { $0.acceptsMouseMovedEvents = true }  // the preview's window; lock windows always do
@@ -493,6 +492,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                 touchID?.restartIfRunning()
                 installAuth(theme.auth, style: style)
             }
+            // Also on the windows a display change makes.
+            first.glanceHint = theme.auth.reveal == "activity" ? NSHostingView(rootView: GlanceHint(auth: theme.auth, style: style)) : nil
         }
         for (index, screen) in screens.enumerated() {
             let main = index == 0
