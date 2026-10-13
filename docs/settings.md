@@ -17,7 +17,8 @@ are the exception to the order: settings.json's `packs` load before init.lua run
 plugin scripts, so they win.
 
 The file is plain JSON with sorted keys, so you can edit it by hand and keep it in your dotfiles; the
-window picks up an edit at once. A symlinked settings.json keeps its link when the window saves. If the file
+window picks up an edit at once. A symlinked settings.json keeps its link when the window saves. Locky writes
+the file with mode 0600, and a config folder it creates with mode 0700, so only you can read them. If the file
 has an error, Locky says so in the window and in `locky check`, and does not overwrite it.
 
 ## Keys
@@ -37,7 +38,7 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 | `auto_lock` | `{ "idle_minutes": 5, "display_sleep": true, "system_sleep": true, "screen_saver": true }`; a missing key is off | Settings › Lock Automatically |
 | `battery_saver` | `true`: on battery or in Low Power Mode, nothing moves | Settings › Power |
 | `display_off` | Seconds on the lock screen without input before the displays turn off | Settings › Power |
-| `intruder_photo` | Take a camera photo at this many wrong passwords in one lock | Settings › Security |
+| `intruder_photo` | Take a camera photo at this many wrong passwords in one lock. Locky keeps the newest 20 photos and deletes those older than 30 days | Settings › Security |
 | `update_check` | `false` stops the daily plugin update check, which fetches and compares commits and runs no plugin code (default `true`) | Settings › Plugins |
 | `editor`, `terminal` | What "Open in" uses: an app's bundle id, a command (`"nvim"`), or `"default"`; a terminal's bundle id | Config › Open in |
 

@@ -164,4 +164,17 @@ private final class FakeCamera: CameraSession, @unchecked Sendable {
         #expect(fm.fileExists(atPath: log.folder.appending(path: "notes.txt").path))
         #expect(fm.fileExists(atPath: log.folder.appending(path: "album.jpg").path))
     }
+
+    @Test func onlyTheNewest20PhotosOfTheLast30DaysStay() throws {
+        let sandbox = try Sandbox()
+        let log = IntruderLog(folder: sandbox.root.appending(path: "Intruders"))
+        let now = try date(day: 13, hour: 12)
+        // One from 40 days ago, then 24 an hour apart: the old one and the 4 oldest of the rest go.
+        _ = try log.save(Data("x".utf8), at: now.addingTimeInterval(-40 * 86_400))
+        let recent = try (0..<24).map { try log.save(Data("x".utf8), at: now.addingTimeInterval(Double($0 - 24) * 3600)) }
+        #expect(log.photos().map(\.url) == recent.suffix(20).reversed())
+        // At launch: a photo kept until then goes once it is 30 days old.
+        log.prune(now: now.addingTimeInterval(30 * 86_400 - 2.5 * 3600))
+        #expect(log.photos().map(\.url) == recent.suffix(2).reversed())
+    }
 }

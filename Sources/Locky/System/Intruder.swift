@@ -215,14 +215,23 @@ struct IntruderLog {
         for photo in photos() { try FileManager.default.removeItem(at: photo.url) }
     }
 
-    /// Writes "<yyyy-MM-dd HH.mm.ss>.jpg". The folder gets mode 0700 even when it exists: the photos are private.
+    /// Writes "<yyyy-MM-dd HH.mm.ss>.jpg", then prunes. The folder gets mode 0700 even when it exists: the photos
+    /// are private.
     func save(_ photo: Data, at date: Date = Date()) throws -> URL {
         let fm = FileManager.default
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path)
         let url = folder.appending(path: Self.nameFormatter().string(from: date) + ".jpg")
         try photo.write(to: url, options: .atomic)
+        prune(now: date)
         return url
+    }
+
+    /// Keeps the newest 20 photos, and none older than 30 days: after each photo, and at launch.
+    func prune(now: Date = Date()) {
+        for (index, photo) in photos().enumerated() where index >= 20 || now.timeIntervalSince(photo.date) > 30 * 86_400 {
+            try? FileManager.default.removeItem(at: photo.url)
+        }
     }
 
     /// Names that sort by time, with "." for ":", which Finder shows as "/".

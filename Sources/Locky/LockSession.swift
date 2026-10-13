@@ -50,8 +50,11 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Each widget's latest view and failure, for widgets made later: a rebuilt display, or hosts that did
     /// not exist yet when a widget failed in its init.
     private var latest: [Int: [(WidgetHost) -> Void]] = [:]
-    private let authModel = AuthModel()
+    /// Wrong passwords count across locks, except in the theme editor's preview, which takes none.
+    private lazy var authModel = AuthModel(defaults: mode == .embedded ? nil : .standard)
     private var touchID: TouchID?
+    /// A preview without Touch ID on a Mac that has it: its field shows the glyph as a picture.
+    private var touchIDPicture = false
     private var touchIDFallback: Task<Void, Never>?
     /// Lock only: locks the Mac with the macOS lock screen if Locky crashes, hangs, or is killed.
     private var lockGuard: LockGuard?
@@ -137,6 +140,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         let touchID = TouchID()
         if touchID.isAvailable, mode != .embedded, !(mode == .preview && options.behind), options.settings["touch_id"].bool != false {
             self.touchID = touchID
+        } else if touchID.isAvailable, mode != .lock, options.settings["touch_id"].bool != false {
+            touchIDPicture = true
         }
 
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
@@ -228,7 +233,19 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock { NSApp.presentationOptions = [] }
         if let napGuard { ProcessInfo.processInfo.endActivity(napGuard) }
         observers.forEach { $0.0.removeObserver($0.1) }
-        windows.forEach { $0.delegate = nil; $0.orderOut(nil) }
+        windows.forEach { $0.delegate = nil }
+        if mode == .lock {
+            // The lock fades out instead of vanishing.
+            let closing = windows
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.25
+                closing.forEach { $0.animator().alphaValue = 0 }
+            }, completionHandler: {
+                MainActor.assumeIsolated { closing.forEach { $0.orderOut(nil) } }
+            })
+        } else {
+            windows.forEach { $0.orderOut(nil) }
+        }
         if mode == .embedded { screens.forEach { $0.removeFromSuperview() } }
         windows = []
         screens = []
@@ -481,7 +498,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                                   runtime?.queue.async { runtime?.emit("auth_failed") }
                                   self?.wrongPassword()
                               },
-                              onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded)
+                              onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded,
+                              touchIDPicture: touchIDPicture)
         screen.auth = (NSHostingView(rootView: panel), spec)
     }
 
@@ -508,7 +526,10 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     private func startTouchID() {
         touchIDFallback?.cancel()
-        touchID?.start { [weak self] in self?.end("Touch ID") }
+        touchID?.start { [weak self] in
+            self?.authModel.succeeded()
+            self?.end("Touch ID")
+        }
     }
 
     private func apply(_ started: LuaRuntime.Started) {
@@ -517,6 +538,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .preview {
             windows.first?.title = "Locky Preview — \(theme.name)"
             for problem in started.problems { LogFile.shared.write(level: "warn", message: problem, source: "preview") }
+        }
+        if mode == .lock, let failed = started.failed {
+            ThemeFailure(theme: failed.theme, fallback: theme.id, message: failed.problem, date: Date().timeIntervalSince1970).record()
         }
         if privacy != started.privacy {
             privacy = started.privacy
@@ -531,8 +555,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         startTouchID()
 
         auth = theme.auth
-        if theme.auth.reveal == "activity", authModel.password.isEmpty {
-            screens.first?.setAuthVisible(false, dim: theme.auth.dim, animated: false)
+        if theme.auth.reveal == "activity", authModel.password.isEmpty, let screen = screens.first {
+            screen.setAuthVisible(false, dim: theme.auth.dim, animated: false)
             guard mode != .embedded else { return }
             windows.forEach { $0.acceptsMouseMovedEvents = true }  // the preview's window; lock windows always do
             activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .mouseMoved, .leftMouseDown, .scrollWheel]) { [weak self] event in
@@ -558,6 +582,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                 touchID?.restartIfRunning()
                 installAuth(theme.auth, style: style)
             }
+            // Also on the windows a display change makes.
+            first.glanceHint = theme.auth.reveal == "activity" ? NSHostingView(rootView: GlanceHint(auth: theme.auth, style: style)) : nil
         }
         for (index, screen) in screens.enumerated() {
             let main = index == 0
@@ -802,6 +828,23 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 }
 
+/// The last lock that showed another theme because the chosen one failed to load, for the Dashboard and the menu.
+/// UserDefaults keeps it under "lastThemeFailure" as JSON data: {"theme", "fallback", "message", "date"}, the date
+/// in seconds since 1970.
+struct ThemeFailure: Codable, Equatable {
+    var theme: String
+    var fallback: String
+    /// The theme's first problem.
+    var message: String
+    var date: Double
+
+    static let key = "lastThemeFailure"
+
+    func record(in defaults: UserDefaults = .standard) {
+        defaults.set(try? JSONEncoder().encode(self), forKey: Self.key)
+    }
+}
+
 final class PreviewWindow: NSWindow {
     var unconstrained = false
 
@@ -866,6 +909,17 @@ final class LockScreenView: NSView {
     }
     var authSize: CGSize = .zero { didSet { needsLayout = true } }
     private(set) var authVisible = true
+    /// Where a hidden password field will appear: "Press any key to unlock". Under the field, which takes the clicks.
+    var glanceHint: NSView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let glanceHint {
+                glanceHint.alphaValue = authVisible ? 0 : 1
+                if let field = auth?.view { addSubview(glanceHint, positioned: .below, relativeTo: field) } else { addSubview(glanceHint) }
+            }
+            needsLayout = true
+        }
+    }
     private let dimLayer = CALayer()
 
     /// Shows or hides the password field. Hidden, it keeps the keyboard focus, so the first key counts.
@@ -875,6 +929,7 @@ final class LockScreenView: NSView {
             context.duration = animated ? 0.35 : 0
             context.allowsImplicitAnimation = true
             auth?.view.animator().alphaValue = visible ? 1 : 0.011
+            glanceHint?.animator().alphaValue = visible ? 0 : 1
             dimLayer.opacity = visible ? Float(dim) : 0
         }
     }
@@ -1032,6 +1087,10 @@ final class LockScreenView: NSView {
             } else {
                 auth.view.frame = bounds
             }
+        }
+        if let glanceHint, let field = auth?.view.frame {
+            let size = glanceHint.fittingSize
+            glanceHint.frame = CGRect(x: field.midX - size.width / 2, y: field.midY - size.height / 2, width: size.width, height: size.height).integral
         }
         if let message {
             message.view.frame = messageFrame(size: message.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale)), scale: scale)

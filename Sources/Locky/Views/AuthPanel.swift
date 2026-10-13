@@ -46,12 +46,106 @@ final class AuthModel {
     /// The lock could not take the keyboard (macOS refused it): the field asks for a click instead of looking
     /// ready for typing, so nobody types the password into the app behind the lock.
     var needsClick = false
-    /// Wrong passwords so far, and whether a check (or the wait after the third wrong one) runs. Here and not in
-    /// the field, so a rebuilt field (a display added, the power changed) keeps the wait.
+    /// Wrong passwords in this lock, and whether a check runs. Here and not in the field, so a rebuilt field (a
+    /// display added, the power changed) keeps them.
     var wrong = 0
     var checking = false
+    /// Whole seconds left in the wait before the next try (0: none). Waits outlast the lock: see PasswordAttempts.
+    private(set) var waitLeft = 0
     /// The user the field shows; privacy mode can change it while the field stays.
     var user = Auth.User(name: "", login: "user", host: "mac", picture: nil)
+    /// Where wrong passwords count across locks and relaunches. nil (the theme editor's preview) counts in memory.
+    private let defaults: UserDefaults?
+    private var attempts: PasswordAttempts
+    private var waiting: Task<Void, Never>?
+
+    init(defaults: UserDefaults? = nil) {
+        self.defaults = defaults
+        attempts = defaults.map { PasswordAttempts.load($0) } ?? PasswordAttempts()
+        // Saved as loaded: a last failure in the future becomes now, so the 15 minutes run from here.
+        if let defaults { attempts.save(defaults) }
+        wait(until: attempts.nextTry)
+    }
+
+    /// A wrong password: counted here and across locks, and the next try waits as the policy says.
+    func failed() {
+        wrong += 1
+        if let defaults { attempts = PasswordAttempts.load(defaults) }
+        attempts.fail()
+        if let defaults { attempts.save(defaults) }
+        wait(until: attempts.nextTry)
+    }
+
+    /// The password or Touch ID unlocked: the count starts again.
+    func succeeded() {
+        attempts = PasswordAttempts()
+        if let defaults { attempts.save(defaults) }
+    }
+
+    private func wait(until date: Date?) {
+        waiting?.cancel()
+        waitLeft = date.map { Int(max(0, $0.timeIntervalSinceNow).rounded(.up)) } ?? 0
+        guard let date, waitLeft > 0 else { return }
+        waiting = Task { [weak self] in
+            while !Task.isCancelled {
+                let left = date.timeIntervalSinceNow
+                guard let self, left > 0 else { break }
+                waitLeft = Int(left.rounded(.up))
+                // Until the shown number changes.
+                try? await Task.sleep(for: .seconds(left - Double(waitLeft - 1) + 0.01))
+            }
+            if !Task.isCancelled { self?.waitLeft = 0 }
+        }
+    }
+}
+
+/// Wrong passwords in a row, kept in UserDefaults with the time of the last one, so neither a new lock nor a
+/// relaunch starts the count again. A success, or 15 minutes without a wrong password, does.
+struct PasswordAttempts: Equatable {
+    var count = 0
+    var last: Date?
+
+    /// Seconds before the next try after `failures` wrong passwords in a row. Like the login window: three free
+    /// tries, then 1, 2, 4, ... seconds up to 30; from the tenth, 5 minutes.
+    static func wait(after failures: Int) -> Double {
+        if failures < 3 { return 0 }
+        if failures >= 10 { return 300 }
+        return min(30, pow(2, Double(failures - 3)))
+    }
+
+    static let forgetAfter = 15.0 * 60
+
+    /// When the next try may start; nil without a wait.
+    var nextTry: Date? {
+        guard let last, Self.wait(after: count) > 0 else { return nil }
+        return last.addingTimeInterval(Self.wait(after: count))
+    }
+
+    mutating func fail(at date: Date = Date()) {
+        if let last, date.timeIntervalSince(last) >= Self.forgetAfter { count = 0 }
+        count += 1
+        last = date
+    }
+
+    /// The count as saved, or none once 15 minutes passed. A last failure in the future (the clock went back)
+    /// counts as now, so it cannot stretch the wait.
+    static func load(_ defaults: UserDefaults, now: Date = Date()) -> PasswordAttempts {
+        let count = defaults.integer(forKey: "wrongPasswords"), time = defaults.double(forKey: "lastWrongPassword")
+        guard count > 0, time > 0 else { return PasswordAttempts() }
+        let last = min(Date(timeIntervalSince1970: time), now)
+        guard now.timeIntervalSince(last) < forgetAfter else { return PasswordAttempts() }
+        return PasswordAttempts(count: count, last: last)
+    }
+
+    func save(_ defaults: UserDefaults) {
+        if let last, count > 0 {
+            defaults.set(count, forKey: "wrongPasswords")
+            defaults.set(last.timeIntervalSince1970, forKey: "lastWrongPassword")
+        } else {
+            defaults.removeObject(forKey: "wrongPasswords")
+            defaults.removeObject(forKey: "lastWrongPassword")
+        }
+    }
 }
 
 /// Touch ID drawn inside Locky's window. LAAuthenticationView takes the place of the system's Touch ID sheet,
@@ -157,6 +251,9 @@ struct AuthPanel: View {
     var onSize: (CGSize) -> Void = { _ in }
     /// false in the theme editor's preview: the field shows, but never takes the keyboard.
     var interactive = true
+    /// Previews without Touch ID on a Mac that has it: the glyph and its hint show as a picture, where the lock
+    /// shows the live ones.
+    var touchIDPicture = false
 
     private var password: String {
         get { model.password }
@@ -166,11 +263,10 @@ struct AuthPanel: View {
         get { model.checking }
         nonmutating set { model.checking = newValue }
     }
-    private var wrong: Int {
-        get { model.wrong }
-        nonmutating set { model.wrong = newValue }
-    }
+    private var wrong: Int { model.wrong }
     private var user: Auth.User { model.user }
+    /// "Try again in 8 s" while the wait after wrong passwords runs.
+    private var waitText: String? { model.waitLeft > 0 ? "Try again in \(model.waitLeft) s" : nil }
     @FocusState private var focused: Bool
     /// The "ring" style's lit arc: where it starts (0 to 1), its role color, and a counter that restarts its fade.
     @State private var arc: (start: Double, color: String, key: Int) = (0, "accent", 0)
@@ -204,12 +300,12 @@ struct AuthPanel: View {
             secureField(placeholder: "")
                 .frame(width: 1, height: 1)
                 .opacity(0.011)
-            if touchID != nil, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick {
+            if showsGlyph, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick, waitText == nil {
                 glyph.offset(y: diameter * 0.34)
-            } else if auth.hint || model.needsClick {
-                Text(model.needsClick ? "click to unlock" : checking ? "verifying" : wrong > 0 && password.isEmpty ? "wrong" : "")
+            } else if auth.hint || model.needsClick || waitText != nil {
+                Text(model.needsClick ? "Click to unlock" : waitText ?? (checking ? "Verifying…" : wrong > 0 && password.isEmpty ? "Wrong password" : ""))
                     .font(font(12, "medium"))
-                    .foregroundStyle(wrong > 0 && password.isEmpty ? style.color("danger") : style.color("muted"))
+                    .foregroundStyle(wrong > 0 && password.isEmpty && waitText == nil ? style.color("danger") : quiet(onField: true))
                     .offset(y: diameter * 0.36)
             }
         }
@@ -231,16 +327,19 @@ struct AuthPanel: View {
             if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
-        // A field made during the wait after wrong passwords was disabled when it asked for focus.
-        .onChange(of: model.checking) { if !model.checking, interactive { focused = true } }
+        // A field made during a check or the wait after wrong passwords was disabled when it asked for focus.
+        .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
     }
 
-    private var showsGlyph: Bool { touchID != nil }
+    private var showsGlyph: Bool { touchID != nil || touchIDPicture }
 
     /// The Touch ID glyph, made again for each new context.
     @ViewBuilder private var glyph: some View {
         if let touchID {
             TouchIDGlyph(touchID: touchID).id(touchID.generation).frame(width: 34 * s, height: 34 * s)
+        } else if touchIDPicture {
+            Image(systemName: "touchid").resizable().scaledToFit().symbolRenderingMode(.multicolor)
+                .padding(4 * s).frame(width: 34 * s, height: 34 * s)
         }
     }
 
@@ -268,8 +367,8 @@ struct AuthPanel: View {
             if interactive { focused = true }
         }
         .onChange(of: model.focusRequest) { focused = true }
-        // A field made during the wait after wrong passwords was disabled when it asked for focus.
-        .onChange(of: model.checking) { if !model.checking, interactive { focused = true } }
+        // A field made during a check or the wait after wrong passwords was disabled when it asked for focus.
+        .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
     }
 
     /// Sizes are given for a 14-point field and scale with auth.font.size.
@@ -279,6 +378,26 @@ struct AuthPanel: View {
             return Font.system(size: size * s, weight: StyleWeights.weight(auth.font.weight ?? weight), design: .monospaced)
         }
         return style.font(size: size, weight: auth.font.weight ?? weight, design: auth.font.design, family: auth.font.family, mono: false, italic: false)
+    }
+
+    /// The palette's muted color, lifted toward fg where it would not reach 4.5:1: on the field's surface (or the
+    /// ring's fill), or on the screen's bg for text outside the field and for styles without a surface.
+    private func quiet(onField: Bool) -> Color {
+        guard let muted = style.palette["muted"], let fg = style.palette["fg"], let bg = style.palette["bg"] else { return style.color("muted") }
+        var layers = [bg]
+        if onField, let surface = fieldSurface, let color = style.palette[surface] ?? (surface.hasPrefix("#") ? surface : nil) {
+            layers.append(color)
+        }
+        return Contrast.readable(muted, fg: fg, on: layers).flatMap { Color(hex: $0) } ?? style.color("muted")
+    }
+
+    /// The palette role (or color) the field's text sits on; nil where it sits on the screen.
+    private var fieldSurface: String? {
+        switch auth.style {
+        case "underline", "terminal", "minimal": nil
+        case "ring": auth.ringFill
+        default: "surface"
+        }
     }
 
     private var glowColor: Color { auth.glow == nil ? .clear : style.color(auth.style == "terminal" ? "accent" : "fg") }
@@ -296,10 +415,10 @@ struct AuthPanel: View {
     /// The native secure field, with Locky's own placeholder: SwiftUI draws a field's prompt in the system's
     /// gray, which disappears on light themes. Locky draws it in the palette's muted color instead.
     private func secureField(placeholder: String? = nil, alignment: Alignment = .leading) -> some View {
-        let text = model.needsClick ? "Click to unlock" : placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
+        let text = model.needsClick ? "Click to unlock" : waitText ?? placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
         return ZStack(alignment: alignment) {
             if password.isEmpty, !text.isEmpty {
-                Text(text).font(font(14, "regular")).foregroundStyle(style.color("muted")).allowsHitTesting(false)
+                Text(text).font(font(14, "regular")).foregroundStyle(quiet(onField: true)).allowsHitTesting(false)
             }
             SecureField("", text: $model.password)
                 .textFieldStyle(.plain)
@@ -307,7 +426,7 @@ struct AuthPanel: View {
                 .foregroundStyle(style.color("fg"))
                 .multilineTextAlignment(alignment == .center ? .center : .leading)
                 .focused($focused)
-                .disabled(checking || !interactive)
+                .disabled(checking || waitText != nil || !interactive)
                 .onSubmit(submit)
         }
         .shadow(color: glowColor, radius: auth.glow ?? 0)
@@ -340,7 +459,7 @@ struct AuthPanel: View {
             // The field is there and focused from the start, but only appears once you type.
             secureField(alignment: .center)
                 .frame(width: width)
-                .opacity(password.isEmpty ? 0.01 : 1)
+                .opacity(password.isEmpty && waitText == nil ? 0.01 : 1)
                 .animation(.smooth, value: password.isEmpty)
         default:
             secureField()
@@ -353,34 +472,89 @@ struct AuthPanel: View {
     private var hint: some View {
         let text = model.needsClick ? "Click to unlock"
             : auth.style == "minimal" ? "Type your password to unlock"
-            : touchID == nil || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
+            : !showsGlyph || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
         return Text(wrong > 0 ? "Wrong password" : text)
             .font(font(12, "medium"))
-            .foregroundStyle(wrong > 0 ? style.color("danger") : style.color("muted"))
+            .foregroundStyle(wrong > 0 ? style.color("danger") : quiet(onField: false))
             .opacity(auth.style == "minimal" && !password.isEmpty ? 0 : 1)
     }
 
     private func submit() {
-        guard !password.isEmpty, !checking else { return }
+        guard !password.isEmpty, !checking, waitText == nil else { return }
         checking = true
         Task {
             let ok = await Auth.verify(password)
+            password = ""
             checking = false
             if ok {
+                model.succeeded()
                 unlock()
             } else {
-                password = ""
-                wrong += 1
+                model.failed()
                 failed()
-                // Like the login window: after a few wrong passwords, each next try waits longer (up to 30 s).
-                if wrong >= 3 {
-                    checking = true
-                    try? await Task.sleep(for: .seconds(min(30, pow(2, Double(wrong - 3)))))
-                    checking = false
-                }
                 focused = true
             }
         }
+    }
+}
+
+/// WCAG 2 contrast from the palette's colors, for the field's quiet text: the placeholder and the hint must
+/// reach 4.5:1 on what is behind them.
+enum Contrast {
+    struct RGB: Equatable {
+        var r, g, b: Double
+    }
+
+    /// `hex`, with its alpha, painted over the opaque `below`.
+    static func over(_ hex: String, _ below: RGB) -> RGB? {
+        guard let color = NSColor(hex: hex) else { return nil }
+        let a = color.alphaComponent
+        return RGB(r: color.redComponent * a + below.r * (1 - a), g: color.greenComponent * a + below.g * (1 - a),
+                   b: color.blueComponent * a + below.b * (1 - a))
+    }
+
+    static func luminance(_ color: RGB) -> Double {
+        func linear(_ value: Double) -> Double { value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
+    }
+
+    static func ratio(_ a: RGB, _ b: RGB) -> Double {
+        let (x, y) = (luminance(a), luminance(b))
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    /// The color to draw `text` in over `layers` (painted first to last on black): `text` itself when it reaches
+    /// 4.5:1, otherwise the first mix toward `fg` that does, or `fg`'s own color. nil when a color is not "#rrggbb[aa]".
+    static func readable(_ text: String, fg: String, on layers: [String]) -> String? {
+        var backdrop = RGB(r: 0, g: 0, b: 0)
+        for layer in layers {
+            guard let next = over(layer, backdrop) else { return nil }
+            backdrop = next
+        }
+        guard let start = over(text, backdrop), let end = over(fg, backdrop) else { return nil }
+        if ratio(start, backdrop) >= 4.5 { return text }
+        for step in 1...20 {
+            let t = Double(step) / 20
+            let mix = RGB(r: start.r + (end.r - start.r) * t, g: start.g + (end.g - start.g) * t, b: start.b + (end.b - start.b) * t)
+            if ratio(mix, backdrop) >= 4.5 || step == 20 {
+                return String(format: "#%02x%02x%02x", Int((mix.r * 255).rounded()), Int((mix.g * 255).rounded()), Int((mix.b * 255).rounded()))
+            }
+        }
+        return nil
+    }
+}
+
+/// "Press any key to unlock", faint, where the password field of a theme that shows it on activity will appear.
+struct GlanceHint: View {
+    let auth: Theme.Auth
+    let style: LockyStyle
+
+    var body: some View {
+        Text("Press any key to unlock")
+            .font(style.font(size: 13 * auth.size / 14, weight: auth.font.weight ?? "medium", design: auth.font.design,
+                             family: auth.font.family, mono: false, italic: false))
+            .foregroundStyle(style.color("muted"))
+            .opacity(0.8)
     }
 }
 

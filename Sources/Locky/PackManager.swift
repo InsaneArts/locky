@@ -95,7 +95,7 @@ struct PackManager {
     func writeLockfile(_ lockfile: Lockfile) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        try FileManager.default.createDirectory(at: path.config, withIntermediateDirectories: true)
+        try Settings.createFolder(path.config)
         // Through the link: dotfiles managers (stow, home-manager) often make the lockfile a symlink.
         try encoder.encode(lockfile).write(to: path.lockfile.resolvingSymlinksInPath(), options: .atomic)
     }

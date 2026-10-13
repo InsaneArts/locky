@@ -838,3 +838,43 @@ import Testing
         #expect(list.first { $0["id"] == .string("cycle3") }?["palette"]["accent"] == .string("#ff0000"))
     }
 }
+
+@Suite struct SettingsFileModeTests {
+    private func mode(_ url: URL) throws -> Int? {
+        try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+    }
+
+    /// settings.json is the user's alone, also after a save over a file others could read, and through a symlink.
+    @Test func settingsJSONIsWrittenForTheUserAlone() throws {
+        let sandbox = try Sandbox()
+        let file = Settings.url(config: sandbox.config)
+        try Settings(["theme": .string("a")]).save(config: sandbox.config)
+        #expect(try mode(file) == 0o600)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        try Settings(["theme": .string("b")]).save(config: sandbox.config)
+        #expect(try mode(file) == 0o600)
+
+        let target = sandbox.root.appending(path: "dotfiles/settings.json")
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "{}".write(to: target, atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: target)
+        try Settings(["theme": .string("c")]).save(config: sandbox.config)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: file.path) == target.path)
+        #expect(try mode(target) == 0o600)
+    }
+
+    /// A config folder Locky makes is private; one that is there already keeps its mode.
+    @Test func aConfigFolderLockyMakesIsPrivate() throws {
+        let sandbox = try Sandbox()
+        let made = sandbox.root.appending(path: "new/locky")
+        try Settings.createFolder(made)
+        #expect(try mode(made) == 0o700)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: sandbox.config.path)
+        try Settings.createFolder(sandbox.config)
+        #expect(try mode(sandbox.config) == 0o755)
+        // settings.json in a folder that is not there yet makes it private too.
+        try Settings().save(config: sandbox.root.appending(path: "other"))
+        #expect(try mode(sandbox.root.appending(path: "other")) == 0o700)
+    }
+}

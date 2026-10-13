@@ -40,7 +40,8 @@ return {
   -- The password field: style "pill", "underline", "box", "terminal", "minimal", or "ring" (i3lock's: a
   -- ring `width` wide that lights an arc on each key; place a clock inside it at the same anchor).
   -- reveal = "activity" hides it until a key press or mouse movement (the glance state) and again after
-  -- `idle` seconds; `dim` darkens the background while it shows. Widgets hear "auth_shown"/"auth_hidden".
+  -- `idle` seconds, with a faint "Press any key to unlock" in its place; `dim` darkens the background while
+  -- it shows. Widgets hear "auth_shown"/"auth_hidden".
   -- focus is the palette role of the focused border or underline (default "accent"); font.size sets the
   -- text size (default 14); hint_align = "leading" lines the hint up with the field; glow gives the text a
   -- glow; ring = { width, fill, glow } styles the "ring" style.

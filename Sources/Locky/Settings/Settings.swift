@@ -45,21 +45,31 @@ struct Settings: Equatable, Sendable {
         }
     }
 
-    /// Writes the file atomically with sorted keys, so dotfile diffs stay small. A symlinked settings.json
-    /// (dotfiles managed with stow, for one) keeps its link: the write goes to the file it points at.
+    /// Writes the file atomically with sorted keys, so dotfile diffs stay small, and with mode 0600. A symlinked
+    /// settings.json (dotfiles managed with stow, for one) keeps its link: the write goes to the file it points at.
     func save(config: URL) throws {
         try save(file: Self.url(config: config))
     }
 
     func save(file: URL) throws {
         let url = file.resolvingSymlinksInPath()
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Self.createFolder(url.deletingLastPathComponent())
         let object = try values.mapValues { try $0.jsonObject() }
         var data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         data.append(0x0A)
         // load refuses a larger file, so writing one would leave settings that cannot be read back.
         guard data.count <= 1 << 20 else { throw LuaError("settings.json would grow past 1 MB") }
         try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
+    /// Creates `folder`, such as the config folder, with mode 0700 when it is not there. A folder that is there
+    /// keeps its mode: it is not Locky's.
+    static func createFolder(_ folder: URL) throws {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: folder.path) else { return }
+        try fm.createDirectory(at: folder.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     }
 
     subscript(key: String) -> LuaValue {
