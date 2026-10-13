@@ -116,7 +116,7 @@ enum CLI {
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
-              window [dashboard|themes|plugins|config|settings] [--theme NAME] [--size 1240x780]
+              window [dashboard|themes|widgets|plugins|config|settings|welcome] [--theme NAME] [--size 1240x780]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2
@@ -196,7 +196,7 @@ enum CLI {
         let path = RuntimePath.standard()
         let initFile = path.config.appending(path: "init.lua")
         if FileManager.default.fileExists(atPath: initFile.path) { ok("config: \(LuaError.shortenPaths(initFile.path))") }
-        else { warn("no init.lua", "the Locky window's Config page creates one with examples") }
+        else { warn("no init.lua", "the Locky window's Lua Config page creates one with examples") }
 
         let runtime = LuaRuntime(path: path, delegate: .init(present: { _, _ in }, failed: { _, _, _ in }))
         var pluginSections: LuaValue = .nil

@@ -31,6 +31,11 @@ struct ConfigPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Text("Changes made in this window are saved to settings.json and override init.lua. Use Reset to go back to init.lua.")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
             header
             Divider()
             if let openError {
@@ -82,22 +87,34 @@ struct ConfigPage: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
-            Spacer()
+                .layoutPriority(-1)
+            Spacer(minLength: 0)
             OpenInButton(model: model, file: url, error: $openError)
+            // In a narrow window, the buttons show only their icons instead of shortened titles.
+            ViewThatFits(in: .horizontal) {
+                actions.fixedSize()
+                actions.labelStyle(.iconOnly).fixedSize()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var actions: some View {
+        HStack(spacing: 12) {
             Button("Check", systemImage: "checkmark.seal") { runCheck() }
                 .disabled(check.running)
                 .help("Run init.lua, plugins, and the theme, and report every error (locky check)")
             Button("Show in Finder", systemImage: "folder") {
                 NSWorkspace.shared.activateFileViewerSelecting([FileManager.default.fileExists(atPath: url.path) ? url : model.store.config])
             }
+            .help("Show the file in Finder")
             Button("Open Log", systemImage: "doc.text.magnifyingglass") {
                 LogFile.shared.write(level: "info", message: "log opened", source: "locky")
                 NSWorkspace.shared.open(LogFile.shared.url)
             }
             .help("What plugins print, and every error: ~/Library/Logs/Locky/locky.log")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 
     private var problems: some View {

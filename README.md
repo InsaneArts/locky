@@ -15,7 +15,9 @@ open Locky.app                    # the lock icon appears in the menu bar
 swift test                        # the test suite
 ```
 
-The menu bar icon has Lock Now, the theme picker, and Settings…, which opens Locky's window.
+The first launch opens Locky's window on a short Welcome: pick a theme, try it, and choose when Locky locks by
+itself. The menu bar icon has Lock Now, the theme picker, Preview Theme, Settings…, which opens Locky's window at
+its Settings page, and Welcome….
 
 ## Themes
 
@@ -70,7 +72,7 @@ a theme schedule, the battery saver, and a photo after wrong passwords. It saves
 
 ## Configure
 
-`~/.config/locky/init.lua` (the window's Config page creates it with examples):
+`~/.config/locky/init.lua` (the window's Lua Config page creates it with examples):
 
 ```lua
 locky.setup({ theme = "default", palette = { accent = "#ff79c6" } })

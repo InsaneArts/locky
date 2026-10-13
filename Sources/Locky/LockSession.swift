@@ -831,11 +831,14 @@ final class LockSession: NSObject, NSWindowDelegate {
 /// The last lock that showed another theme because the chosen one failed to load, for the Dashboard and the menu.
 /// UserDefaults keeps it under "lastThemeFailure" as JSON data: {"theme", "fallback", "message", "date"}, the date
 /// in seconds since 1970.
+/// The last lock's theme that did not load, and the theme Locky showed instead. The lock records it in
+/// UserDefaults ("lastThemeFailure") as JSON: { "theme", "fallback", "message", "date" }.
 struct ThemeFailure: Codable, Equatable {
     var theme: String
     var fallback: String
     /// The theme's first problem.
     var message: String
+    /// Seconds since 1970.
     var date: Double
 
     static let key = "lastThemeFailure"

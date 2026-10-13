@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The Locky window: the dashboard, themes, plugins, the config, and settings. While it is open, Locky shows
+/// The Locky window: the dashboard, themes, plugins, the config, settings, and the first launch's Welcome. While it is open, Locky shows
 /// in the Dock and the app switcher like any app; when it closes, Locky goes back to the menu bar only.
 @MainActor
 final class LockyWindowController: NSWindowController, NSWindowDelegate {
@@ -79,7 +79,7 @@ struct MainView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(AppModel.Section.allCases, selection: Binding(get: { model.section }, set: { if let section = $0 { model.section = section } })) { section in
+            List(AppModel.Section.allCases.filter { $0 != .welcome }, selection: Binding(get: { model.section }, set: { if let section = $0 { model.section = section } })) { section in
                 Label(section.title, systemImage: section.symbol)
                     .badge(badge(for: section))
                     .tag(section)
@@ -99,10 +99,36 @@ struct MainView: View {
         case .plugins: PluginsPage(model: model)
         case .config: ConfigPage(model: model)
         case .settings: SettingsPage(model: model)
+        case .welcome: WelcomeView(model: model)
         }
     }
 
     private func badge(for section: AppModel.Section) -> Int {
         section == .config ? model.inspection.problems.count : 0
+    }
+}
+
+extension View {
+    /// The width of the pages that read from top to bottom (the Dashboard, Plugins, Settings, and the Welcome),
+    /// from the leading edge. Pages that are a gallery or an editor (Themes, Widgets, Lua Config) use the whole
+    /// window.
+    func pageWidth() -> some View {
+        frame(maxWidth: 760).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The same width for a page that scrolls by itself, such as a grouped form: its scroll view still fills the
+    /// window, so the page scrolls wherever the pointer is.
+    func scrollingPageWidth() -> some View {
+        modifier(ScrollingPageWidth())
+    }
+}
+
+private struct ScrollingPageWidth: ViewModifier {
+    @State private var width: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .contentMargins(.trailing, max(0, width - 760), for: .scrollContent)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }

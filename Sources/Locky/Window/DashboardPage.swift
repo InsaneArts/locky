@@ -4,6 +4,8 @@ import SwiftUI
 /// attention or is worth knowing, each opening its page.
 struct DashboardPage: View {
     @Bindable var model: AppModel
+    /// The theme that did not load on the last lock, until a file of it changes or Dismiss.
+    @State private var failure: ThemeFailure?
 
     private var settings: Settings { model.store.settings }
 
@@ -11,9 +13,10 @@ struct DashboardPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 hero
+                if let failure { failureNote(failure) }
                 // Screenshots never show someone's photo.
                 if !model.screenshots { IntruderPhotos(revision: model.revision) }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14)], spacing: 14) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14, alignment: .top)], spacing: 14) {
                     configCard
                     pluginsCard
                     startCard
@@ -23,9 +26,34 @@ struct DashboardPage: View {
                 }
             }
             .padding(24)
-            .frame(maxWidth: 1100)
-            .frame(maxWidth: .infinity)
+            .pageWidth()
         }
+        .task(id: model.revision) {
+            failure = ThemeFailure.current(.standard, inspection: model.inspection, config: model.store.config)
+        }
+    }
+
+    private func failureNote(_ failure: ThemeFailure) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(failure.summary(model.inspection), systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text(failure.message)
+                .font(.callout.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+                .textSelection(.enabled)
+            HStack {
+                Button("Open Lua Config") { model.section = .config }
+                Button("Dismiss") {
+                    UserDefaults.standard.removeObject(forKey: ThemeFailure.key)
+                    self.failure = nil
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     // MARK: The theme
@@ -37,7 +65,8 @@ struct DashboardPage: View {
             ThemePreview(theme: id, settings: model.store.settings, sources: model.inspection.sources, config: model.store.config,
                          alwaysLive: model.screenshots)
                 .aspectRatio(1.6, contentMode: .fit)
-                .frame(width: 400)
+                // It gives way first, so the buttons beside it never shorten.
+                .frame(minWidth: 220, maxWidth: 400)
                 .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Locks with").font(.callout).foregroundStyle(.secondary)
@@ -61,6 +90,7 @@ struct DashboardPage: View {
                     Button("Themes…") { model.section = .themes }
                         .controlSize(.large)
                 }
+                .fixedSize()
                 .padding(.top, 6)
             }
             Spacer(minLength: 0)
@@ -71,10 +101,12 @@ struct DashboardPage: View {
 
     // MARK: Cards
 
+    // A card's color is its state: green is fine, orange needs you, gray is off.
+
     private var configCard: some View {
         let problems = model.inspection.problems
         return StatusCard(symbol: problems.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
-                          tint: problems.isEmpty ? .green : .orange, title: "Config",
+                          tint: problems.isEmpty ? .green : .orange, title: "Lua Config",
                           value: problems.isEmpty ? "No problems" : problems.count == 1 ? "1 problem" : "\(problems.count) problems",
                           detail: problems.first.map { LuaError($0).summary } ?? "init.lua, plugins, and settings.json load cleanly.") {
             model.section = .config
@@ -88,7 +120,7 @@ struct DashboardPage: View {
         let detail = missing > 0 ? "\(missing) not installed yet"
             : updates > 0 ? (updates == 1 ? "1 update available" : "\(updates) updates available")
             : "\(model.inspection.themes.count) themes, \(model.inspection.widgets.count) widgets"
-        return StatusCard(symbol: "puzzlepiece.extension.fill", tint: missing > 0 ? .orange : .blue, title: "Plugins",
+        return StatusCard(symbol: "puzzlepiece.extension.fill", tint: missing + updates > 0 ? .orange : packs.isEmpty ? .gray : .green, title: "Plugins",
                           value: packs.isEmpty ? "None added" : packs.count == 1 ? "1 plugin" : "\(packs.count) plugins", detail: detail) {
             model.section = .plugins
         }
@@ -117,7 +149,7 @@ struct DashboardPage: View {
         if auto["display_sleep"].bool == true { triggers.append("display sleep") }
         if auto["system_sleep"].bool == true { triggers.append("Mac sleep") }
         if auto["screen_saver"].bool == true { triggers.append("screen saver") }
-        return StatusCard(symbol: "timer", tint: triggers.isEmpty ? .gray : .purple, title: "Lock Automatically",
+        return StatusCard(symbol: "timer", tint: triggers.isEmpty ? .gray : .green, title: "Lock Automatically",
                           value: triggers.isEmpty ? "Off" : "On",
                           detail: triggers.isEmpty ? "Locky locks only when you ask." : triggers.joined(separator: ", ").capitalizedFirst) {
             model.section = .settings
@@ -126,11 +158,9 @@ struct DashboardPage: View {
 
     private var unlockCard: some View {
         let touchID = settings["touch_id"].bool != false
-        let safety = (settings["auto_unlock"].isNil ? model.inspection.base["auto_unlock"] : settings["auto_unlock"]).number ?? 60
-        let duration = SettingsPage.duration(safety)
-        return StatusCard(symbol: touchID ? "touchid" : "key.fill", tint: .pink, title: "Unlock",
+        return StatusCard(symbol: touchID ? "touchid" : "key.fill", tint: .green, title: "Unlock",
                           value: touchID ? "Touch ID or password" : "Password",
-                          detail: duration != "Off" ? "Prototype: opens by itself after \(duration)." : "The safety timer is off.") {
+                          detail: "The macOS lock takes over if Locky stops.") {
             model.section = .settings
         }
     }
@@ -144,7 +174,7 @@ struct DashboardPage: View {
             notes.append("message “\(message)”")
         }
         if let hour24 = config["hour24"].bool { notes.append(hour24 ? "24-hour clock" : "12-hour clock") }
-        return StatusCard(symbol: "rectangle.on.rectangle", tint: .teal, title: "Lock Screen",
+        return StatusCard(symbol: "rectangle.on.rectangle", tint: notes.isEmpty ? .gray : .green, title: "Lock Screen",
                           value: notes.isEmpty ? "As the theme has it" : notes.count == 1 ? "1 change" : "\(notes.count) changes",
                           detail: notes.isEmpty ? "No message, privacy mode off." : notes.joined(separator: ", ").capitalizedFirst) {
             model.section = .settings

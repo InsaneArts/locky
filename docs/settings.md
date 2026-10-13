@@ -74,11 +74,16 @@ the field stays the theme's.
 ## The window
 
 Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
-`Locky window [dashboard|themes|plugins|config|settings]`. While it is open, Locky shows in the Dock.
+`Locky window [dashboard|themes|widgets|plugins|config|settings|welcome]`. While it is open, Locky shows in the Dock.
 
-- **Dashboard:** the theme a lock uses now, live, with Lock Now; the config's problems, plugins and
-  updates, auto-lock, unlock, and the lock screen's changes at a glance; and any photos taken after wrong
-  passwords.
+- **Welcome:** opens by itself on the first launch, and from the menu's Welcome… after that. Three steps: pick a
+  theme, try it (Preview, or Lock Now to Test), and turn on auto-lock and Open at Login. Skip or Finish goes to
+  the Dashboard.
+
+- **Dashboard:** the theme a lock uses now, live, with Lock Now; a theme that failed to load on the last lock
+  (also the first line of the menu bar menu) until its files or init.lua change or you dismiss it; the config's
+  problems, plugins and updates, auto-lock, unlock, and the lock screen's changes at a glance; and any photos
+  taken after wrong passwords.
 - **Themes:** every theme in a list you can search, and the selected one in the editor. The panel's top says
   whether a lock uses the selected theme, with Use This Theme when it does not. Its live preview is a canvas:
   click a widget or the password field (or the Password Field button below it) to select it, and drag it to move
@@ -95,5 +100,7 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
 - **Plugins:** install from git; Update All… shows each update's commits and diffstat and installs exactly those
   commits; Run programs and Change files allow a plugin added here to do that; More › Remove Unused… lists the
   folders it deletes and asks first. Each plugin shows the themes and widgets it adds.
-- **Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
+- **Lua Config:** init.lua and settings.json, read-only, with problems on their lines and Open in your editor.
+  What the window changes is saved to settings.json and overrides init.lua; a setting's Reset goes back to
+  init.lua's value.
 - **Settings:** everything in the table above.

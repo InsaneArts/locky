@@ -71,6 +71,7 @@ struct PluginsPage: View {
             }
         }
         .formStyle(.grouped)
+        .scrollingPageWidth()
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Check for Updates", systemImage: "arrow.clockwise") { model.checkForUpdates() }
