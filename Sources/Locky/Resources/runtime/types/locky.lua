@@ -223,9 +223,9 @@ function Widget:log(...) end
 locky = {}
 ---@type string
 locky.version = ""
----@type { theme: string, auto_unlock: number, background: table?, palette: table, widgets: table, hour24: boolean?, privacy: boolean, message: string? }
+---@type { theme: string, background: table?, palette: table, widgets: table, hour24: boolean?, privacy: boolean, message: string? }
 locky.config = {}
----@param opts { theme: string?, auto_unlock: number?, background: table?, palette: table<string, string>?, widgets: table<string, table>?, hour24: boolean?, privacy: boolean?, message: string? }
+---@param opts { theme: string?, background: table?, palette: table<string, string>?, widgets: table<string, table>?, hour24: boolean?, privacy: boolean?, message: string? }
 function locky.setup(opts) end
 locky.ui = locky_ui
 

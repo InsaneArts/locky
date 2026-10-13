@@ -14,7 +14,7 @@ import Testing
 
     @Test func settingsWinOverInitLuaKeyByKey() throws {
         let sandbox = try Sandbox()
-        try sandbox.write("init.lua", "locky.setup({ theme = 'from-init', auto_unlock = 30, privacy = false })")
+        try sandbox.write("init.lua", "locky.setup({ theme = 'from-init', message = 'from init', privacy = false })")
         try Settings(["theme": .string("from-settings"), "privacy": .bool(true)]).save(config: sandbox.config)
         let runtime = runtime(sandbox)
         #expect(runtime.bootForTest().isEmpty)
@@ -22,7 +22,7 @@ import Testing
         #expect(config["theme"] == .string("from-settings"))
         #expect(config["privacy"] == .bool(true))
         // A key settings.json leaves out keeps init.lua's value.
-        #expect(config["auto_unlock"] == .int(30))
+        #expect(config["message"] == .string("from init"))
     }
 
     /// A module init.lua requires may read the user's name as it loads: privacy must be on by then.
@@ -49,8 +49,7 @@ import Testing
 
     @Test func setupChecksItsTypes() throws {
         for (option, expected) in [
-            ("theme = 5", "opts.theme: expected string, got number"), ("auto_unlock = '60'", "opts.auto_unlock: expected number, got string"),
-            ("hour24 = 1", "opts.hour24: expected boolean, got number"), ("privacy = 'yes'", "opts.privacy: expected boolean, got string"),
+            ("theme = 5", "opts.theme: expected string, got number"), ("hour24 = 1", "opts.hour24: expected boolean, got number"), ("privacy = 'yes'", "opts.privacy: expected boolean, got string"),
             ("message = {}", "opts.message: expected string, got table"), ("background = 'x'", "opts.background: expected table, got string"),
             ("palette = 5", "opts.palette: expected table, got number"), ("widgets = true", "opts.widgets: expected table, got boolean"),
         ] {
@@ -59,6 +58,23 @@ import Testing
             let problems = runtime(sandbox).bootForTest()
             #expect(problems.count == 1 && problems[0].contains("init.lua:1: \(expected)"), "\(problems)")
         }
+    }
+
+    /// auto_unlock is gone: a config that sets it, with any value, still loads, and hears so once.
+    @Test func autoUnlockIsReportedOnceAndIgnored() async throws {
+        for (initLua, settings) in [("locky.setup({ auto_unlock = 30 })", "{}"), ("locky.setup({ auto_unlock = '60' })", #"{ "auto_unlock": 0 }"#),
+                                    ("", #"{ "auto_unlock": 60 }"#)] {
+            let sandbox = try Sandbox()
+            try sandbox.write("init.lua", initLua)
+            try sandbox.write("settings.json", settings)
+            let runtime = runtime(sandbox)
+            let started = await runtime.start(theme: "default")
+            runtime.stop()
+            #expect(started.problems == [LuaRuntime.autoUnlockRemoved], "\(initLua) \(settings)")
+        }
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'default' })")
+        #expect(runtime(sandbox).bootForTest().isEmpty)
     }
 
     /// Lua and the host read privacy and hour24 alike: only true turns privacy on, and only true or false forces
@@ -77,14 +93,14 @@ import Testing
         #expect(lua == [.string(NSUserName()), .string(SystemInfo.format(date, "time")), SystemInfo.locale()["hour24"]])
     }
 
-    /// A function in hour24 failed config(), and the lock lost auto_unlock and privacy with it.
+    /// A function in hour24 failed config(), and the lock lost the message and privacy with it.
     @Test func anOddHour24CostsNothingElse() async throws {
         let sandbox = try Sandbox()
-        try sandbox.write("init.lua", "locky.setup({ auto_unlock = 0, privacy = true }) locky.config.hour24 = function() end")
+        try sandbox.write("init.lua", "locky.setup({ message = 'hi', privacy = true }) locky.config.hour24 = function() end")
         let runtime = runtime(sandbox)
         let started = await runtime.start(theme: "default")
         runtime.stop()
-        #expect(started.autoUnlock == 0)
+        #expect(started.message == "hi")
         #expect(started.privacy)
         #expect(started.hour24 == nil)
     }
@@ -709,8 +725,8 @@ import Testing
         let store = SettingsStore(config: sandbox.config)
         var changes = 0
         store.onChange = { changes += 1 }
-        // A whole number as a double, as the safety timer's picker saves it, comes back as an integer.
-        store.update { $0["auto_unlock"] = .double(60) }
+        // A whole number as a double comes back as an integer.
+        store.update { $0["display_off"] = .double(60) }
         store.reload()
         #expect(changes == 1)
     }
@@ -800,14 +816,13 @@ import Testing
         let sandbox = try Sandbox()
         // A module of the user's that shadows the core's and fails stops the core from starting.
         try sandbox.write("lua/locky/ui.lua", "error('shadowed')")
-        let settings = Settings(["privacy": .bool(true), "message": .string("If found, call 555"), "auto_unlock": .int(0)])
+        let settings = Settings(["privacy": .bool(true), "message": .string("If found, call 555")])
         let runtime = LuaRuntime(path: sandbox.path(), settings: settings, delegate: Recorder().delegate)
         let started = await runtime.start(theme: nil)
         runtime.stop()
         #expect(started.problems.first?.contains("core failed") == true)
         #expect(started.privacy)
         #expect(started.message == "If found, call 555")
-        #expect(started.autoUnlock == 0)
     }
 
     @Test func aPaletteThatRefersToItselfManyTimesStillLists() throws {

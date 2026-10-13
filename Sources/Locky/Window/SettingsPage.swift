@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The app's settings. Each change saves to settings.json at once. Settings Lua also reads (the safety
-/// timer, the clock, privacy, the message) show init.lua's value until changed here, then offer a Reset.
+/// The app's settings. Each change saves to settings.json at once. Settings Lua also reads (the clock, privacy,
+/// the message) show init.lua's value until changed here, then offer a Reset.
 struct SettingsPage: View {
     @Bindable var model: AppModel
 
@@ -65,26 +65,9 @@ struct SettingsPage: View {
     private var unlock: some View {
         Section {
             Toggle("Unlock with Touch ID", isOn: store.bool("touch_id", default: true))
-            LabeledContent {
-                Picker("Safety timer", selection: Binding(get: { safetySeconds }, set: { value in store.update { $0["auto_unlock"] = .double(value) } })) {
-                    ForEach(safetyChoices, id: \.self) { seconds in
-                        Text(seconds == 0 ? "Off" : Self.duration(seconds)).tag(seconds)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
-            } label: {
-                Text("Safety timer")
-                Text("Prototype: the lock opens by itself after this time.")
-                LuaNote(model: model, key: "auto_unlock") { $0.number.map { $0 == 0 ? "off" : Self.duration($0) } }
-            }
             Toggle(isOn: store.bool("emergency_exit", default: true)) {
                 Text("Switch to the macOS lock screen with ⌃⌥⌘Q")
                 Text("Ends Locky's lock and locks the Mac with the macOS lock screen: for when something goes wrong.")
-            }
-            if safetySeconds == 0, store.settings["emergency_exit"].bool == false {
-                Label("With both off, a bug in Locky could keep you locked out until you restart the Mac.", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
             }
         } header: {
             Text("Unlock")
@@ -164,18 +147,6 @@ struct SettingsPage: View {
     }
 
     // MARK: Helpers
-
-    private var safetyChoices: [Double] {
-        let choices: [Double] = [0, 30, 60, 120, 300, 600]
-        let current = safetySeconds
-        return choices.contains(current) ? choices : (choices + [current]).sorted()
-    }
-
-    /// The safety timer as the runtime reads it: not a number, or infinite, is off; at most a day.
-    private var safetySeconds: Double {
-        guard let seconds = effective("auto_unlock").number else { return effective("auto_unlock").isNil ? 60 : 0 }
-        return seconds.isFinite ? min(max(seconds, 0), 86_400) : 0
-    }
 
     /// settings.json's value, else init.lua's (or the default).
     private func effective(_ key: String) -> LuaValue {

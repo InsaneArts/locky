@@ -31,7 +31,6 @@ has an error, Locky says so in the window and in `locky check`, and does not ove
 | `message` | A line under the password field | Settings › Lock Screen |
 | `hour24` | `true` or `false`: a 24- or 12-hour clock in every theme | Settings › Lock Screen |
 | `privacy` | `true`: no agent titles or workspaces, no name, picture, or computer name | Settings › Lock Screen |
-| `auto_unlock` | Seconds until the prototype's lock opens by itself; `0` turns it off | Settings › Unlock |
 | `touch_id` | `false` turns Touch ID off (default `true`) | Settings › Unlock |
 | `emergency_exit` | `false` stops ⌃⌥⌘Q from switching to the macOS lock screen (default `true`) | Settings › Unlock |
 | `shortcut` | `{ "key": 37, "modifiers": ["control", "option", "command"] }`: a virtual key code (37 is L) and modifiers | Settings › General |

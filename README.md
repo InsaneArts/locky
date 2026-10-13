@@ -4,7 +4,7 @@ A lock screen for macOS that you build like a Neovim config: themes and widgets 
 natively with SwiftUI and Metal.
 
 > Prototype. While the screen is locked, the system lock is off; Locky unlocks with Touch ID or your login
-> password. For now the lock opens by itself after 60 seconds (`auto_unlock`), and ⌃⌥⌘Q switches to the macOS lock screen.
+> password. ⌃⌥⌘Q switches to the macOS lock screen.
 
 ## Build
 

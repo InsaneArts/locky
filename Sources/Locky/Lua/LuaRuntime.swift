@@ -72,7 +72,6 @@ final class LuaRuntime: @unchecked Sendable {
         var theme: Theme
         /// Instance ids for theme.widgets, in order; nil where the widget is unknown or failed to start.
         var instances: [Int?]
-        var autoUnlock: Double
         /// Errors in init.lua, plugin scripts, or the theme: for the preview and `locky check`.
         var problems: [String]
         /// true or false forces a 24- or 12-hour clock; nil follows the system.
@@ -146,14 +145,11 @@ final class LuaRuntime: @unchecked Sendable {
             problems.append("Locky's Lua core failed to start: \(error)")
             // Without Lua, settings.json still says how the lock looks: privacy, the message, the clock.
             let settings = settings ?? Settings.load(config: path.config).settings
-            let seconds = settings["auto_unlock"].number.map { $0.isFinite ? min(max($0, 0), 86_400) : 0 } ?? 60
             let message = settings["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return Started(theme: .fallback, instances: [], autoUnlock: seconds, problems: problems, hour24: settings["hour24"].bool,
+            return Started(theme: .fallback, instances: [], problems: problems, hour24: settings["hour24"].bool,
                            privacy: settings["privacy"].bool ?? false, message: message?.isEmpty == false ? String(message!.prefix(200)) : nil)
         }
         let config = (try? call("config", budget: Budget.callback).first) ?? .nil
-        // Not a number, or infinite: off. Otherwise at most a day; a sleep of an infinite duration traps.
-        let autoUnlock = config["auto_unlock"].isNil ? 60 : config["auto_unlock"].number.map { $0.isFinite ? min(max($0, 0), 86_400) : 0 } ?? 0
         // Read before the theme loads: the bare fallback keeps them too.
         let hour24 = config["hour24"].bool, privacy = config["privacy"].bool ?? false
         let trimmed = config["message"].string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -163,12 +159,12 @@ final class LuaRuntime: @unchecked Sendable {
         var theme = loadTheme(requested)
         if theme == nil, requested != "default" { theme = loadTheme("default") }
         guard let theme else {
-            return Started(theme: .fallback, instances: [], autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
+            return Started(theme: .fallback, instances: [], problems: problems, hour24: hour24, privacy: privacy,
                            message: message)
         }
         let instances = theme.widgets.indices.map { startInstance($0, of: theme) }
         emit("lock")
-        return Started(theme: theme, instances: instances, autoUnlock: autoUnlock, problems: problems, hour24: hour24, privacy: privacy,
+        return Started(theme: theme, instances: instances, problems: problems, hour24: hour24, privacy: privacy,
                        message: message)
     }
 
@@ -228,7 +224,7 @@ final class LuaRuntime: @unchecked Sendable {
         for index in theme.widgets.indices where instances[index] == nil {
             instances[index] = startInstance(index, of: theme)
         }
-        return Started(theme: theme, instances: instances, autoUnlock: previous.autoUnlock,
+        return Started(theme: theme, instances: instances,
                        problems: Array(problems.prefix(bootProblems)) + problems[before...], hour24: previous.hour24, privacy: previous.privacy,
                        message: previous.message)
     }
@@ -271,7 +267,13 @@ final class LuaRuntime: @unchecked Sendable {
             runFile(script, budget: Budget.pluginScript)
         }
         applySettings(settings, reported: reported)
+        // auto_unlock opened the lock by itself. A config that still sets it works, and hears once that it is gone.
+        if !settings["auto_unlock"].isNil || (try? call("config", budget: Budget.callback).first)?["auto_unlock"].bool == true {
+            report(Self.autoUnlockRemoved)
+        }
     }
+
+    static let autoUnlockRemoved = "auto_unlock was removed: the lock never opens by itself; ⌃⌥⌘Q switches to the macOS lock screen."
 
     /// Applies settings.json's values and reports each failure not in `reported`. Returns the failures.
     @discardableResult

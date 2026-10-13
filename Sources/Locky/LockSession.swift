@@ -54,10 +54,6 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var touchIDFallback: Task<Void, Never>?
     /// Lock only: locks the Mac with the macOS lock screen if Locky crashes, hangs, or is killed.
     private var lockGuard: LockGuard?
-    private var safetyExit: DispatchWorkItem?
-    private var autoUnlock: Task<Void, Never>?
-    /// The safety timer's length while it is armed, to arm it again after a sleep.
-    private var safetySeconds: Double?
     private var keyMonitor: Any?
     private var keyboardObserver: NSObjectProtocol?
     private var activityMonitor: Any?
@@ -67,7 +63,6 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var napGuard: NSObjectProtocol?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var ended = false
-    private let banner = SafetyBanner.Model()
     /// The battery saver: on battery or in Low Power Mode, with settings.json's battery_saver on, nothing moves.
     private var still = false
     private var powerObserver: PowerObserver?
@@ -144,7 +139,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             installAuth(look.auth, style: LockyStyle(palette: look.palette, font: look.font, scale: Layout.scale(for: first.bounds.size)))
         }
         if mode == .lock {
-            armSafety(after: 60)
+            installEmergencyExit()
             reclaimKeyboardSoon()
             startDisplayOff()
             // The kiosk options (no app switching, no Force Quit) apply only while Locky is the active app, and a
@@ -209,8 +204,6 @@ final class LockSession: NSObject, NSWindowDelegate {
         runtime?.stop()
         touchID?.stop()
         touchIDFallback?.cancel()
-        safetyExit?.cancel()
-        autoUnlock?.cancel()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
@@ -262,11 +255,6 @@ final class LockSession: NSObject, NSWindowDelegate {
             guard session.windows.first?.isKeyWindow == true, session.authModel.needsClick else { return }
             session.authModel.needsClick = false
             session.authModel.focusRequest += 1
-        }
-        // The safety timer counts time awake; after a sleep it starts again, so a lock made before the sleep
-        // does not open by itself on wake.
-        observe(workspace, NSWorkspace.didWakeNotification) { session in
-            if let seconds = session.safetySeconds { session.armSafety(after: seconds) }
         }
     }
 
@@ -435,8 +423,6 @@ final class LockSession: NSObject, NSWindowDelegate {
             windows.first?.title = "Locky Preview — \(theme.name)"
             for problem in started.problems { LogFile.shared.write(level: "warn", message: problem, source: "preview") }
         }
-        if mode == .lock, started.autoUnlock > 0 { armSafety(after: started.autoUnlock) }
-        else if mode == .lock { banner.opensAt = nil; autoUnlock?.cancel(); safetyExit?.cancel(); safetySeconds = nil }
         if privacy != started.privacy {
             privacy = started.privacy
             // The field may already hold typing: change the name it shows, not the field.
@@ -500,7 +486,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             }
             if main {
                 screen.message = started.message.map { NSHostingController(rootView: LockMessage(text: $0, auth: theme.auth, style: style)) }
-                if mode == .lock { screen.banner = NSHostingView(rootView: SafetyBanner(model: banner)) }
+                if mode == .lock, emergencyExit { screen.banner = NSHostingView(rootView: SafetyBanner()) }
                 if mode != .lock, !started.problems.isEmpty {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
                 }
@@ -692,29 +678,15 @@ final class LockSession: NSObject, NSWindowDelegate {
         return true
     }
 
-    /// Prototype only. The lock opens after `seconds`. If the main thread hangs, a timer on another thread
-    /// ends the process 5 s later, which takes the shield with it. ⌃⌥⌘Q switches to the macOS lock screen,
-    /// unless settings.json's emergency_exit is false.
-    private func armSafety(after seconds: Double) {
-        safetySeconds = seconds
-        banner.quits = options.settings["emergency_exit"].bool != false
-        if keyMonitor == nil, banner.quits {
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard Self.isEmergencyExit(event) else { return event }
-                self?.handOver("⌃⌥⌘Q")
-                return nil
-            }
-        }
-        safetyExit?.cancel()
-        autoUnlock?.cancel()
-        let exitLater = DispatchWorkItem { exit(0) }
-        safetyExit = exitLater
-        DispatchQueue.global().asyncAfter(deadline: .now() + seconds + 5, execute: exitLater)
-        banner.opensAt = Date().addingTimeInterval(seconds)
-        autoUnlock = Task { [weak self] in
-            // The suspending clock stops while the Mac sleeps; the default continuous one does not.
-            try? await Task.sleep(for: .seconds(seconds), clock: .suspending)
-            if !Task.isCancelled { self?.end("auto_unlock") }
+    /// settings.json's emergency_exit, on unless false: ⌃⌥⌘Q switches to the macOS lock screen.
+    private var emergencyExit: Bool { options.settings["emergency_exit"].bool != false }
+
+    private func installEmergencyExit() {
+        guard emergencyExit else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard Self.isEmergencyExit(event) else { return event }
+            self?.handOver("⌃⌥⌘Q")
+            return nil
         }
     }
 }
@@ -974,29 +946,16 @@ final class LockScreenView: NSView {
     }
 }
 
-/// Prototype only: says how the lock opens without a password.
+/// Says the way out that never lets anyone in.
 struct SafetyBanner: View {
-    @MainActor @Observable
-    final class Model {
-        var opensAt: Date?
-        /// Whether ⌃⌥⌘Q switches to the macOS lock screen.
-        var quits = true
-    }
-
-    let model: Model
-
     var body: some View {
-        if let opensAt = model.opensAt {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text("Prototype · opens in \(max(0, Int(opensAt.timeIntervalSince(context.date).rounded()))) s" + (model.quits ? " · ⌃⌥⌘Q switches to the macOS lock screen" : ""))
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(.black.opacity(0.35), in: Capsule())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-        }
+        Text("⌃⌥⌘Q switches to the macOS lock screen")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.white.opacity(0.6))
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(.black.opacity(0.35), in: Capsule())
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
