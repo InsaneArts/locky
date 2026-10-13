@@ -63,13 +63,22 @@ import Testing
         var lines: [String] { ((try? String(contentsOf: file, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init) }
     }
 
-    /// A process to stand in for Locky, which the guard may kill.
-    private func standIn() throws -> Process {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        process.arguments = ["30"]
-        try process.run()
-        return process
+    /// A process to stand in for Locky, which the guard may kill: its pid. posix_spawn and waitpid, not Process,
+    /// whose waitUntilExit can miss the exit.
+    private func standIn() throws -> pid_t {
+        var pid: pid_t = 0
+        let argv = (["/bin/sleep", "30"] as [String]).map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        let spawned = posix_spawn(&pid, "/bin/sleep", nil, nil, argv, environ)
+        try #require(spawned == 0)
+        return pid
+    }
+
+    /// Waits for `pid` to exit; its status.
+    private func status(_ pid: pid_t) -> Int32 {
+        var status: Int32 = 0
+        waitpid(pid, &status, 0)
+        return status
     }
 
     @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: binary)))
@@ -94,27 +103,26 @@ import Testing
     @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: binary)))
     func aHangLocksAndEndsLocky() async throws {
         let locky = try standIn()
-        let run = try Run(parent: locky.processIdentifier, timeout: 1)
+        let run = try Run(parent: locky, timeout: 1)
         defer { close(run.input) }
         #expect(await eventually { run.lines == ["lock: Locky hung"] })
         // The guard killed the frozen Locky.
-        locky.waitUntilExit()
-        #expect(locky.terminationReason == .uncaughtSignal && locky.terminationStatus == SIGKILL)
+        #expect(status(locky) & 0x7f == SIGKILL)
         #expect(run.exitStatus() == 0)
     }
 
     @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: binary)))
     func heartbeatsKeepALockOn() async throws {
         let locky = try standIn()
-        defer { locky.terminate() }
+        defer { kill(locky, SIGKILL); _ = status(locky) }
         // Longer than the timeout, with room for a slow test run.
-        let run = try Run(parent: locky.processIdentifier, timeout: 3)
+        let run = try Run(parent: locky, timeout: 3)
         for _ in 0..<20 {
             run.send(Guard.heartbeat)
             try await Task.sleep(for: .milliseconds(200))
         }
         #expect(run.lines.isEmpty)
-        #expect(locky.isRunning)
+        #expect(waitpid(locky, nil, WNOHANG) == 0)
         run.send(Guard.unlocked)
         close(run.input)
         #expect(run.exitStatus() == 0)
@@ -123,10 +131,11 @@ import Testing
     @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: binary)))
     func lockyExitingLocks() async throws {
         let locky = try standIn()
-        let run = try Run(parent: locky.processIdentifier)
+        let run = try Run(parent: locky)
         defer { close(run.input) }
         run.send(Guard.heartbeat)
-        locky.terminate()
+        kill(locky, SIGKILL)
+        _ = status(locky)
         #expect(await eventually { run.lines == ["lock: Locky exited"] })
         #expect(run.exitStatus() == 0)
     }
