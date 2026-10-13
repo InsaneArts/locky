@@ -88,7 +88,7 @@ locky.widget.define("agents", {
     return ui.vstack {
       align = "leading", spacing = 0,
       o.title and ui.hstack {
-        padding = { 0, 0, 10, 0 },
+        padding = { 0, 0, 10, 0 }, spacing = 16,
         ui.text(o.title, { size = o.size + 2, weight = "bold" }),
         ui.spacer(),
         ui.text(summary, { size = o.size, weight = "medium", color = "muted" }),
