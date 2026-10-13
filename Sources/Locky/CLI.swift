@@ -12,18 +12,20 @@ import Metal
 ///   locky login [on|off]
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
 ///   locky lock [--theme NAME]
-///   locky window [section] [--theme NAME] [--behind]
+///   locky window [section] [--theme NAME] [--behind]   (the old sections dashboard and widgets still work)
 enum CLI {
     static let commands: Set<String> = ["check", "health", "themes", "widgets", "pack", "login", "help", "--help", "-h", "version", "--version"]
 
     /// The GUI's options, for `preview`, `lock`, and `window [section]`.
     struct GUILaunch {
         var mode: LockSession.Mode?
-        /// `window`: open the Locky window at this page.
+        /// `window`: the window or Settings pane to open, the Themes window when the section is missing or unknown.
         @MainActor var window: AppModel.Section? {
             guard arguments.first == "window" else { return nil }
-            return arguments.dropFirst().first.flatMap(AppModel.Section.init(rawValue:)) ?? .dashboard
+            return arguments.dropFirst().first.flatMap(AppModel.Section.init(argument:)) ?? .themes
         }
+        /// `window widgets`: Customize with Add Widget open.
+        var opensWidgetGallery: Bool { arguments.first == "window" && arguments.dropFirst().first == "widgets" }
         var theme: String?
         var size: CGSize?
         var behind = false
@@ -116,7 +118,7 @@ enum CLI {
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
-              window [dashboard|themes|widgets|plugins|config|settings|welcome] [--theme NAME] [--size 1240x780]
+              window [themes|settings|plugins|config|welcome] [--theme NAME] [--size 1240x780]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2
@@ -196,7 +198,7 @@ enum CLI {
         let path = RuntimePath.standard()
         let initFile = path.config.appending(path: "init.lua")
         if FileManager.default.fileExists(atPath: initFile.path) { ok("config: \(LuaError.shortenPaths(initFile.path))") }
-        else { warn("no init.lua", "the Locky window's Lua Config page creates one with examples") }
+        else { warn("no init.lua", "Settings › Lua Config creates one with examples") }
 
         let runtime = LuaRuntime(path: path, delegate: .init(present: { _, _ in }, failed: { _, _, _ in }))
         var pluginSections: LuaValue = .nil
@@ -226,7 +228,7 @@ enum CLI {
         switch LoginItem.status {
         case .enabled: ok("opens at login")
         case .requiresApproval: warn("the login item waits for approval", "allow Locky in System Settings › General › Login Items")
-        case .notRegistered: warn("Locky does not open at login", "Settings › General: Locky locks by itself only while it runs")
+        case .notRegistered: warn("Locky does not open at login", "Settings › General › Open at login: Locky locks by itself only while it runs")
         case .unavailable(let message): lines.append("  INFO    \(message)")
         }
 

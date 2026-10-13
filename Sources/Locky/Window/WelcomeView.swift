@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// The first launch's three steps: pick a theme, try it, and turn on what locks by itself. Skip or Finish
-/// goes to the Dashboard; the menu's Welcome… opens it again.
+/// closes the window; the menu's Welcome… opens it again.
 struct WelcomeView: View {
     @Bindable var model: AppModel
+    let close: () -> Void
     @State private var step = Step.theme
     @State private var login = LoginItem.status
     @State private var loginError: String?
@@ -56,13 +57,13 @@ struct WelcomeView: View {
             case .protect: protect
             }
             HStack {
-                Button("Skip") { model.section = .dashboard }
+                Button("Skip") { close() }
                 Spacer()
                 if step != .theme {
                     Button("Back") { step = Step(rawValue: step.rawValue - 1) ?? .theme }
                 }
                 Button(step == .protect ? "Finish" : "Continue") {
-                    if let next = Step(rawValue: step.rawValue + 1) { step = next } else { model.section = .dashboard }
+                    if let next = Step(rawValue: step.rawValue + 1) { step = next } else { close() }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -70,7 +71,6 @@ struct WelcomeView: View {
             .controlSize(.large)
         }
         .padding(24)
-        .pageWidth()
         .frame(maxHeight: .infinity, alignment: .top)
     }
 

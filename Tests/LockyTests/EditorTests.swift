@@ -69,8 +69,7 @@ import Testing
         _ = NSApplication.shared
         let model = AppModel(store: SettingsStore(config: sandbox.config))
         model.screenshots = true
-        model.selectedTheme = "t"
-        model.section = .themes
+        model.customize("t")
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1240, height: 780), styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = NSHostingView(rootView: ThemesPage(model: model))
         model.refresh()
@@ -187,7 +186,7 @@ import Testing
         #expect(await wait(page.window) { page.model.inspection.theme("u") != nil })
         try await Task.sleep(for: .milliseconds(300))
         #expect(await wait(page.window) { frame(of: .widget(1), page) != nil })
-        page.model.selectedTheme = "u"
+        page.model.customize("u")
         #expect(await wait(page.window) { page.preview.editables.isEmpty })
         #expect(await wait(page.window) { frame(of: .widget(0), page) == CGRect(x: 620, y: 0, width: 200, height: 100) })
     }

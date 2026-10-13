@@ -21,8 +21,8 @@ import Testing
         #expect(WelcomeView.opensAtLaunch(store.defaults, isTool: false) == false)
     }
 
-    /// `locky window welcome` (and window-shot.sh) opens it; the Lua Config page keeps "config" for them.
-    @MainActor @Test func theWelcomeIsAPageOfItsOwn() {
+    /// `locky window welcome` (and window-shot.sh) opens it; the Lua Config pane keeps "config" for them.
+    @MainActor @Test func theWelcomeOpensFromTheCommandLine() {
         #expect(CLI.GUILaunch.parse(["window", "welcome"]).window == .welcome)
         #expect(AppModel.Section.config.title == "Lua Config" && AppModel.Section(rawValue: "config") == .config)
     }

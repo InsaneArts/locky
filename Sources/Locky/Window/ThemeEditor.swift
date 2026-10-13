@@ -11,8 +11,6 @@ struct ThemeEditor: View {
     @Binding var selection: EditorItem?
     /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
     @Binding var draft: Settings?
-    /// The Add Widget sheet, which the page shows.
-    @Binding var adding: Bool
     /// The name Duplicate Theme asks for, while it asks.
     @State private var copyName: String?
     @State private var problem: String?
@@ -97,7 +95,7 @@ struct ThemeEditor: View {
         Task {
             do {
                 try await file.install(as: id, config: model.store.config)
-                model.selectedTheme = id
+                model.customize(id)
                 model.refresh()
             } catch {
                 problem = (error as? LuaError)?.message ?? error.localizedDescription
@@ -158,7 +156,7 @@ struct ThemeEditor: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button("Add Widget…", systemImage: "plus") { adding = true }
+                Button("Add Widget…", systemImage: "plus") { model.addingWidget = true }
             } header: {
                 HStack {
                     Text("Widgets")

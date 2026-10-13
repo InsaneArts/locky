@@ -1,46 +1,62 @@
 import AppKit
 import Foundation
 
-/// The Locky window's state: which page shows, settings.json, and what booting Lua says about the config.
+/// The windows' state: the theme open in Customize, settings.json, and what booting Lua says about the config.
 @MainActor @Observable
 final class AppModel {
+    /// A window, or a pane of the Settings window.
     enum Section: String, CaseIterable, Identifiable {
-        case dashboard, themes, widgets, plugins, config, settings
-        /// The first launch's steps; not in the sidebar.
+        /// The Themes window.
+        case themes
+        /// The Settings window's panes: General, Plugins, Lua Config.
+        case settings, plugins, config
+        /// The Welcome window.
         case welcome
+
+        static let panes: [Section] = [.settings, .plugins, .config]
+
+        /// A `Locky window` argument. The old names keep working.
+        init?(argument: String) {
+            switch argument {
+            case "dashboard", "widgets": self = .themes
+            default: self.init(rawValue: argument)
+            }
+        }
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .dashboard: "Dashboard"
             case .themes: "Themes"
-            case .widgets: "Widgets"
+            case .settings: "General"
             case .plugins: "Plugins"
             case .config: "Lua Config"
-            case .settings: "Settings"
-            case .welcome: "Welcome"
+            case .welcome: "Welcome to Locky"
             }
         }
 
         var symbol: String {
             switch self {
-            case .dashboard: "square.grid.2x2"
             case .themes: "paintpalette"
-            case .widgets: "square.on.square"
+            case .settings: "gearshape"
             case .plugins: "puzzlepiece.extension"
             case .config: "curlybraces"
-            case .settings: "gearshape"
             case .welcome: "hand.wave"
             }
         }
     }
 
-    var section: Section = .dashboard
     /// Opened behind other windows for screenshots: previews keep running although hidden.
     var screenshots = false
-    /// The theme the Themes page shows.
-    var selectedTheme: String?
+    /// The theme open in Customize; nil shows the gallery.
+    private(set) var editingTheme: String?
+    /// Add Widget's sheet: the Customize toolbar, Edit › Add Widget…, and `Locky window widgets` ask for it.
+    var addingWidget = false
+    /// File › Import Theme… asks the gallery to show the file importer.
+    var importing = false
+    /// A Customize command from the main menu that needs the editor; the editor runs it and sets this back to nil.
+    enum EditorRequest: Equatable { case duplicate, export, revert }
+    var editorRequest: EditorRequest?
     let store: SettingsStore
     private(set) var inspection = Inspection()
     /// Bumped whenever the config folder or settings.json changes: views that read files read them again.
@@ -66,12 +82,38 @@ final class AppModel {
     /// Settings records a new shortcut (true) or stops (false).
     @ObservationIgnored var recordingShortcut: (Bool) -> Void = { _ in }
     @ObservationIgnored var preview: (_ theme: String?) -> Void = { _ in }
+    /// Opens a window or a Settings pane (AppDelegate sets it): the gallery's "Open Settings" uses it.
+    @ObservationIgnored var openWindow: (Section) -> Void = { _ in }
 
+    /// A `customizeInUse` that waits for the first read of the config: whether it also opens Add Widget.
+    @ObservationIgnored private var pendingCustomize: Bool?
     @ObservationIgnored private var refreshing: Task<Void, Never>?
     @ObservationIgnored private var watchers: [FolderWatcher] = []
 
     init(store: SettingsStore) {
         self.store = store
+    }
+
+    // MARK: Customize
+
+    /// Opens Customize for `id`. Callers never animate it: Customize swaps at once from any input.
+    func customize(_ id: String) { editingTheme = id }
+
+    func finishEditing() {
+        editingTheme = nil
+        addingWidget = false
+        editorRequest = nil
+    }
+
+    /// Customize for the theme in use, with Add Widget open or not. It waits for the first read of the config: until then
+    /// `activeTheme` cannot know init.lua's theme. `Locky window widgets` uses it.
+    func customizeInUse(addingWidget: Bool) {
+        guard inspection.loaded else {
+            pendingCustomize = addingWidget
+            return
+        }
+        customize(activeTheme)
+        self.addingWidget = addingWidget
     }
 
     /// The theme a lock uses now: the schedule's, else settings.json's, else init.lua's.
@@ -93,7 +135,13 @@ final class AppModel {
             if let problem = store.problem { result.problems.insert(problem, at: 0) }
             inspection = result
             revision += 1
-            if selectedTheme == nil || result.theme(selectedTheme!) == nil { selectedTheme = activeTheme }
+            // The theme open in Customize is gone, such as a file deleted in Finder.
+            if let editingTheme, result.theme(editingTheme) == nil { finishEditing() }
+            if let adding = pendingCustomize {
+                pendingCustomize = nil
+                customize(activeTheme)
+                addingWidget = adding
+            }
         }
     }
 

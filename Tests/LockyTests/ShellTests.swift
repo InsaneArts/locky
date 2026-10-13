@@ -7,6 +7,63 @@ import Testing
 /// The windows' shared API: what the Themes, Settings, and Welcome windows, the menus, and the command line call.
 @MainActor
 @Suite struct ShellTests {
+    /// Polls `condition` on the main actor, where the model lives.
+    private func wait(_ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(10)
+        while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        return condition()
+    }
+
+    // MARK: Windows
+
+    @Test(arguments: [("dashboard", .themes), ("widgets", .themes), ("themes", .themes), ("settings", .settings), ("plugins", .plugins),
+                      ("config", .config), ("welcome", .welcome), ("nope", nil)] as [(String, AppModel.Section?)])
+    func aWindowArgumentNamesAWindowOrAPane(_ argument: String, _ section: AppModel.Section?) {
+        #expect(AppModel.Section(argument: argument) == section)
+    }
+
+    @Test func theSettingsWindowOpensOnGeneral() {
+        #expect(AppModel.Section.settings.title == "General")
+        #expect(AppModel.Section.panes == [.settings, .plugins, .config])
+    }
+
+    @Test func windowWithoutASectionOpensTheThemesWindow() {
+        #expect(CLI.GUILaunch.parse(["window"]).window == .themes)
+        let widgets = CLI.GUILaunch.parse(["window", "widgets"])
+        #expect(widgets.window == .themes && widgets.opensWidgetGallery)
+        #expect(!CLI.GUILaunch.parse(["window", "themes"]).opensWidgetGallery)
+        #expect(CLI.GUILaunch.parse(["window", "config"]).window == .config)
+        #expect(CLI.GUILaunch.parse(["preview"]).window == nil)
+    }
+
+    @Test func aRequestedSizeKeepsTheMinimum() {
+        #expect(LockyWindowController.clamped(CGSize(width: 600, height: 400)) == CGSize(width: 980, height: 640))
+        #expect(LockyWindowController.clamped(CGSize(width: 1600, height: 1000)) == CGSize(width: 1600, height: 1000))
+    }
+
+    @Test func doneEndsCustomizeAndWhatItHadOpen() throws {
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        model.customize("glass")
+        #expect(model.editingTheme == "glass")
+        model.addingWidget = true
+        model.editorRequest = .export
+        model.finishEditing()
+        #expect(model.editingTheme == nil && !model.addingWidget && model.editorRequest == nil)
+    }
+
+    /// `Locky window widgets` at launch: the theme in use is init.lua's, which only the first read of the config knows.
+    @Test func customizingTheThemeInUseWaitsForTheConfig() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        model.customizeInUse(addingWidget: true)
+        #expect(model.editingTheme == nil)
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.editingTheme == "matrix" && model.addingWidget)
+    }
+
     /// Light content takes the dark press overlay, as the lock window's appearance does.
     @Test(arguments: [("#F1EFE8", true), ("#02040a", false), (nil, false)] as [(String?, Bool)])
     func aColorIsLightByTheLockWindowsRule(_ hex: String?, _ light: Bool) {

@@ -213,7 +213,7 @@ enum ThemeUndo {
         undoManager.registerUndo(withTarget: model) { model in
             MainActor.assumeIsolated {
                 // The theme being changed shows, so the step is seen to happen.
-                model.selectedTheme = theme
+                model.customize(theme)
                 restore(back, theme: theme, store: model.store)
                 register(action, theme: theme, back: from, from: back, model: model, undoManager: undoManager)
             }

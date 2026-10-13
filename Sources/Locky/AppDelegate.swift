@@ -21,7 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         return model
     }()
-    private var windowController: LockyWindowController?
+    /// The three windows, each made the first time it opens.
+    private var themesWindow: LockyWindowController?
+    private var settingsWindow: SettingsWindowController?
+    private var welcomeWindow: WelcomeWindowController?
     /// The Lock Now shortcut, and auto-lock's triggers, both from settings.json.
     private lazy var hotkeys = HotkeyCenter { [weak self] in self?.lockNow() }
     private lazy var autoLock = AutoLock(isLocked: { [weak self] in self?.session?.mode == .lock },
@@ -39,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     static let request = Notification.Name("com.tornikegomareli.Locky.request")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // No tabs: the windows are a main window, a settings window, and the Welcome.
+        NSWindow.allowsAutomaticWindowTabbing = false
         try? Settings.createFolder(store.config)
         if !Self.isTool { store.migrateMenuTheme() }
         store.watch()
@@ -46,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.onChange = { [weak self] in
             guard let self else { return }
             if !tool { applyAppSettings() }
-            if windowController?.window?.isVisible == true { model.refresh() }
+            if [themesWindow?.window, settingsWindow?.window, welcomeWindow?.window].contains(where: { $0?.isVisible == true }) { model.refresh() }
         }
         if !tool {
             IntruderLog().prune()
@@ -61,7 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
 
-        refreshThemeNames()
+        model.openWindow = { [weak self] in self?.showWindow($0) }
+        model.refresh()
         // `locky preview` and `locky lock` (main.swift) start here with their options.
         let launch = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst()))
         if let mode = launch.mode {
@@ -69,9 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                      behind: launch.behind, settings: store.settings))
         }
         if let section = launch.window {
-            model.selectedTheme = launch.theme
-            model.screenshots = launch.behind
-            showWindow(section, behind: launch.behind, size: launch.size)
+            open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: launch.behind, size: launch.size)
         } else if launch.mode == nil, WelcomeView.opensAtLaunch(.standard, isTool: tool) {
             showWindow(.welcome)
         }
@@ -105,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Once a day, a minute after launch first, if settings.json's update_check is not off: fetch the plugins
-    /// and compare. It changes nothing; the menu and the window say what is new.
+    /// and compare. It changes nothing; Settings › Plugins says what is new.
     private func scheduleUpdateChecks() {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(60))
@@ -117,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Another launch's arguments: open the window at a page, preview, or lock, as that launch would have.
+    /// Another launch's arguments: open a window, preview, or lock, as that launch would have.
     @objc private func handleRequest(_ notification: Notification) {
         let arguments = notification.userInfo?["arguments"] as? [String] ?? []
         // Any process can post it: during a lock, nothing it asks for (a window, a preview) may come up.
@@ -133,26 +137,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             start(.lock, options: LockSession.Options(theme: launch.theme ?? scheduledTheme(), settings: store.settings))
         case .preview?: preview(theme: launch.theme)
         default:
-            if let theme = launch.theme { model.selectedTheme = theme }
-            showWindow(launch.window ?? .dashboard)
+            open(launch.window ?? .themes, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: launch.behind, size: launch.size)
         }
     }
 
-    /// Opening Locky again (from Finder, Spotlight, or the Dock) opens its window, except during a lock: the
-    /// window would take the keyboard from the lock.
+    /// `Locky window`: a window or a Settings pane. For the Themes window, Customize for `theme`, or for the theme in use
+    /// with Add Widget open (`widgets`); else the gallery.
+    private func open(_ section: AppModel.Section, theme: String?, widgets: Bool, behind: Bool, size: CGSize?) {
+        // Only a launch is behind: a tool run takes no requests.
+        if behind { model.screenshots = true }
+        showWindow(section, behind: behind, size: size)
+        guard section == .themes else { return }
+        if let theme {
+            model.customize(theme)
+            model.addingWidget = widgets
+        } else if widgets {
+            model.customizeInUse(addingWidget: true)
+        } else {
+            model.finishEditing()
+        }
+    }
+
+    /// Opening Locky again (from Finder, Spotlight, or the Dock) brings the Welcome forward while it is open, else opens
+    /// the Themes window; never during a lock: the window would take the keyboard from the lock.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         guard session?.mode != .lock else {
             LogFile.shared.write(level: "warn", message: "ignored a reopen during a lock", source: "locky")
             return false
         }
-        showWindow(nil)
+        showWindow(welcomeWindow?.window?.isVisible == true ? .welcome : .themes)
         return false
     }
 
+    /// The one way a window opens: the Welcome, the Settings window at a pane, or the Themes window (any other section,
+    /// and nil). `behind` keeps it behind other windows and `size` sizes the Themes window: both for screenshots.
     private func showWindow(_ section: AppModel.Section?, behind: Bool = false, size: CGSize? = nil) {
-        let controller = windowController ?? LockyWindowController(model: model)
-        windowController = controller
-        controller.show(section, behind: behind, size: size)
+        // During a lock nothing may come up: a window would take the keyboard from the lock.
+        guard session?.mode != .lock else {
+            LogFile.shared.write(level: "warn", message: "ignored a window during a lock: \(section?.rawValue ?? "themes")", source: "locky")
+            return
+        }
+        // Locky is an accessory app, which has no Dock icon and no menu bar: a window to work in needs both.
+        if !behind { NSApp.setActivationPolicy(.regular) }
+        switch section {
+        case .welcome?:
+            model.refresh()
+            let controller = welcomeWindow ?? WelcomeWindowController(model: model) { [weak self] in self?.closed(self?.welcomeWindow?.window) }
+            welcomeWindow = controller
+            controller.show(behind: behind)
+        case .settings?, .plugins?, .config?:
+            model.startWatching()
+            model.refresh()
+            let controller = settingsWindow ?? SettingsWindowController(model: model) { [weak self] in self?.closed(self?.settingsWindow?.window) }
+            settingsWindow = controller
+            controller.show(section, behind: behind)
+        default:
+            model.startWatching()
+            model.refresh()
+            let controller = themesWindow ?? LockyWindowController(model: model) { [weak self] in self?.closed(self?.themesWindow?.window) }
+            themesWindow = controller
+            controller.show(behind: behind, size: size)
+        }
+    }
+
+    private func closed(_ window: NSWindow?) {
+        if let window { updateActivationPolicy(closing: window) }
+    }
+
+    /// After `closing` closes: Locky goes back to the menu bar only, unless another of its windows stays open, and stops
+    /// following the config once neither the Themes nor the Settings window does. A minimized window counts as open.
+    private func updateActivationPolicy(closing: NSWindow) {
+        func staysOpen(_ window: NSWindow?) -> Bool { window.map { $0 !== closing && ($0.isVisible || $0.isMiniaturized) } ?? false }
+        let themesOrSettings = staysOpen(themesWindow?.window) || staysOpen(settingsWindow?.window)
+        if !themesOrSettings { model.stopWatching() }
+        if !themesOrSettings, !staysOpen(welcomeWindow?.window) { NSApp.setActivationPolicy(.accessory) }
     }
 
     /// Lock Now, a quick theme change, and the window: everything else is in the window.
@@ -200,12 +258,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RuntimePath.standard().findAll("themes", suffix: ".lua").map(\.name).sorted()
     }
 
-    /// The themes for the Theme menu, with their names and the packages' themes: the window's model reads them in the
-    /// background (it runs init.lua).
-    private func refreshThemeNames() {
-        model.refresh()
-    }
-
     @objc private func lockNow() {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
@@ -228,7 +280,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         start(.preview, options: LockSession.Options(theme: theme ?? scheduledTheme(), settings: store.settings))
     }
 
-    @objc private func openSettings() { showWindow(.settings) }
+    /// The Settings window on the pane it showed last.
+    @objc private func openSettings() { showWindow(SettingsWindowController.lastPane) }
     @objc private func openWelcome() { showWindow(.welcome) }
     /// A preview of the theme a lock would use now.
     @objc private func previewTheme() { preview(theme: nil) }
@@ -257,12 +310,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         session.onEnd = { [weak self, weak session] in
             guard let self else { return }
             self.session = nil
-            refreshThemeNames()
+            model.refresh()
             if mode == .lock { autoLock.noteUnlock() }
             // Someone typed wrong passwords and the camera caught them: show the photos.
             if mode == .lock, let session {
                 Task { [weak self] in
-                    if await !session.photosTaken().isEmpty { self?.showWindow(.dashboard) }
+                    if await !session.photosTaken().isEmpty { self?.showWindow(.settings) }
                 }
             }
         }
