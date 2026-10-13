@@ -120,7 +120,8 @@ locky.pack.add({ { src = "someone/locky-git", allow = { "system" } } })   -- "sy
 ```
 
 In settings.json the same entry is `{ "src": "someone/locky-git", "allow": ["system"] }`. `locky check` and
-`locky health` list what each plugin may do. Your config folder, your local `{ dir = ... }` folders, and Locky's
+`locky health` list what each plugin may do. Allowing "Change files" gives as much as "Run programs": a plugin
+that can change files can change your shell's startup files. Your config folder, your local `{ dir = ... }` folders, and Locky's
 own code need no grant.
 
 Locky decides by the call stack: if any Lua function on it comes from a plugin without the grant, or from
