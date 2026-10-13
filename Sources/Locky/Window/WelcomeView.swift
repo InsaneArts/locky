@@ -49,6 +49,8 @@ struct WelcomeView: View {
                 Text(step.subtitle).foregroundStyle(.secondary)
             }
             switch step {
+            // Until the window has read the themes, a moment after it opens.
+            case .theme where !model.inspection.loaded: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .theme: themes
             case .tryIt: tryIt
             case .protect: protect
