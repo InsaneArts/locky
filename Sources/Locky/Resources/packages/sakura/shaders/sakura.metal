@@ -5,6 +5,8 @@
 // silhouettes (branch, mountain, pagoda).
 // Params: 0 how many petals (1), 1 the wind (1).
 
+static float sk_sq(float x) { return x * x; }
+
 static float sk_hash(float2 p) {
     p = fract(p * float2(213.73, 381.29));
     p += dot(p, p + 27.41);
@@ -98,7 +100,7 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
     float lit = 0.75 + 0.25 * smoothstep(-40.0, 40.0, mx);   // the moon lights the right slope
     float3 mountain = mix(rock, locky_color(p, 4) * 0.62 * lit, snow);
     col = mix(col, mountain, smoothstep(peak - 1.0, peak + 1.0, P.y));
-    float hill = 790.0 - 60.0 * exp(-pow((P.x - 400.0) / 260.0, 2.0)) + 8.0 * sk_noise(float2(P.x * 0.02, 1.0));
+    float hill = 790.0 - 60.0 * exp(-sk_sq((P.x - 400.0) / 260.0)) + 8.0 * sk_noise(float2(P.x * 0.02, 1.0));
     float pagoda = 0.0;
     float2 g = P - float2(400.0, 730.0);
     for (int i = 0; i < 5; i++) {
@@ -132,7 +134,7 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
         if (near < 44.0 && h > 0.15 + near / 70.0) {
             float r = 8.0 + 6.0 * sk_hash(c + 5.1);
             float f = sk_flower(P, at, r, h * 6.28);
-            float center = exp(-pow(length(P - at) / (r * 0.3), 2.0));
+            float center = exp(-sk_sq(length(P - at) / (r * 0.3)));
             // Flowers further from the branch are lighter, as if lit by the moon.
             float3 tone = mix(blossom * (0.7 + 0.4 * sk_hash(c + 8.2)), light, center * 0.85 + 0.15 * smoothstep(10.0, 40.0, near));
             col = mix(col, tone, f);

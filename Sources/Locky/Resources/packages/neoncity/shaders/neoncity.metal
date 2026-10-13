@@ -5,6 +5,8 @@
 // Colors: 0 the sky's top, 1 the haze, 2 warm windows, 3 neon pink, 4 neon cyan, 5 the towers.
 // Params: 0 how fast the city drifts (1), 1 how much rain (1).
 
+static float nc_sq(float x) { return x * x; }
+
 static float nc_hash(float2 p) {
     p = fract(p * float2(127.619, 157.231));
     p += dot(p, p + 41.87);
@@ -159,7 +161,7 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
         float spacing = 900.0;
         float x = fract((P.x * dir + t * speed) / spacing) * spacing;
         float d = length(float2(min(x, spacing - x) < 0.0 ? 0.0 : x - spacing * 0.5, P.y - y));
-        float trail = smoothstep(0.0, 80.0, spacing * 0.5 - x) * step(x, spacing * 0.5) * exp(-pow((P.y - y) / 1.2, 2.0));
+        float trail = smoothstep(0.0, 80.0, spacing * 0.5 - x) * step(x, spacing * 0.5) * exp(-nc_sq((P.y - y) / 1.2));
         float3 tint = lane % 2 == 0 ? float3(1.0, 0.85, 0.7) : float3(1.0, 0.25, 0.3);
         col += tint * (exp(-d * d / 5.0) * 1.2 + trail * 0.25 * smoothstep(spacing * 0.5 - 90.0, spacing * 0.5, x));
     }
@@ -173,7 +175,7 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
         float2 f = fract(g);
         float h = nc_hash(cell + layer * 19.0);
         float show = step(1.0 - 0.18 * rain, h);
-        float streak = exp(-pow((f.x - 0.5) * size / 0.6, 2.0)) * smoothstep(0.0, 0.3, f.y) * smoothstep(1.0, 0.5, f.y);
+        float streak = exp(-nc_sq((f.x - 0.5) * size / 0.6)) * smoothstep(0.0, 0.3, f.y) * smoothstep(1.0, 0.5, f.y);
         col += float3(0.7, 0.75, 0.95) * streak * show * (layer == 0 ? 0.12 : 0.22);
     }
 

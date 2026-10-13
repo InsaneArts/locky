@@ -5,6 +5,8 @@
 // Colors: 0 the sky's top at dusk, 1 the sky at the horizon, 2 the far ridges, 3 the near ridges, 4 the sun.
 // Params: 0 the hour to show (-1, the default: the real time), 1 how many birds (1).
 
+static float lo_sq(float x) { return x * x; }
+
 static float lo_hash(float2 p) {
     p = fract(p * float2(127.1, 311.7));
     p += dot(p, p + 19.19);
@@ -34,7 +36,7 @@ static float lo_ridge(float x, int i) {
 // The day's light: 0 night, 1 full day, and a warmth that peaks at sunrise and sunset.
 static float2 lo_light(float hour) {
     float day = smoothstep(5.0, 7.5, hour) * (1.0 - smoothstep(17.0, 19.5, hour));
-    float warm = exp(-pow((hour - 6.6) / 1.1, 2.0)) + exp(-pow((hour - 18.2) / 1.2, 2.0));
+    float warm = exp(-lo_sq((hour - 6.6) / 1.1)) + exp(-lo_sq((hour - 18.2) / 1.2));
     return float2(day, clamp(warm, 0.0, 1.0));
 }
 
@@ -103,7 +105,7 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
         float3 layer = mix(mix(dark, noon, day), dusk, warm * 0.9);
         layer = mix(layer, hazeTint, (1.0 - f) * 0.3);
         // Haze in the valley below each ridge.
-        float valley = exp(-(P.y - y) / 60.0) * (1.0 - f) * 0.25;
+        float valley = exp(-max(P.y - y, 0.0) / 60.0) * (1.0 - f) * 0.25;
         float3 shaded = mix(layer, hazeTint, valley);
         float cover = smoothstep(y - px, y + px, P.y);
         col = mix(col, shaded, cover);

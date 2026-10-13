@@ -5,6 +5,8 @@
 // Colors: 0 space, 1 the disk's hot inner edge, 2 its middle, 3 its cool outer edge.
 // Params: 0 the hole's center, points from the top (470), 1 the shadow's radius (80), 2 how fast the disk turns (1).
 
+static float eh_sq(float x) { return x * x; }
+
 static float eh_hash(float2 p) {
     p = fract(p * float2(123.34, 456.21));
     p += dot(p, p + 45.32);
@@ -101,7 +103,7 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
     }
 
     // The photon ring: a thin bright line at the shadow's edge, then the shadow itself.
-    float ring = exp(-pow((r - Rs * 1.02) / (1.6 * px + Rs * 0.012), 2.0));
+    float ring = exp(-eh_sq((r - Rs * 1.02) / (1.6 * px + Rs * 0.012)));
     col += locky_color(p, 1) * ring * 0.9;
     float shadow = smoothstep(Rs * 0.985, Rs * 0.985 - 1.5 * px, r);
     col = mix(col, float3(0.0), shadow);
@@ -116,7 +118,7 @@ float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) {
     col += disk * (1.0 - behind);
 
     // Bloom: the hot inner disk lights the space around it.
-    float glow = exp(-abs(qr.y) / (Rs * 0.35)) * exp(-pow(qr.x / (Rs * 4.2), 2.0)) * smoothstep(Rs * 0.9, Rs * 1.6, r);
+    float glow = exp(-abs(qr.y) / (Rs * 0.35)) * exp(-eh_sq(qr.x / (Rs * 4.2))) * smoothstep(Rs * 0.9, Rs * 1.6, r);
     col += locky_color(p, 2) * glow * 0.18;
     col += locky_color(p, 1) * exp(-max(r - Rs, 0.0) / (Rs * 0.5)) * 0.12 * (1.0 - shadow);
 

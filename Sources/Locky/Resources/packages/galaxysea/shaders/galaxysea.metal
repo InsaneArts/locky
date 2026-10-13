@@ -4,6 +4,8 @@
 // Colors: 0 the sky's top, 1 the sky at the horizon, 2 the galaxy's violet, 3 its pink core, 4 its blue edge.
 // Params: 0 the horizon, points from the top (610), 1 the boat's x from the center (300; 9999 hides it).
 
+static float gs_sq(float x) { return x * x; }
+
 static float gs_hash(float2 p) {
     p = fract(p * float2(233.34, 851.73));
     p += dot(p, p + 23.45);
@@ -53,7 +55,7 @@ static float3 gs_sky(float2 P, float horizon, float t, constant LockyParams &p) 
     float fine = gs_fbm(g * 3.2 + 11.0);
     // Dust lanes: dark filaments that run along the band's middle.
     float wobble = (gs_fbm(float2(a * 0.003, 5.0)) - 0.5) * 120.0;
-    float lane = exp(-pow((b - wobble) / 38.0, 2.0));
+    float lane = exp(-gs_sq((b - wobble) / 38.0));
     float dust = lane * smoothstep(0.38, 0.7, gs_fbm(float2(a * 0.011, b * 0.035) + 3.0));
     float glow = band * (0.35 + 0.9 * cloud * cloud + 0.35 * fine);
     float breathe = 0.92 + 0.08 * sin(t * 0.25);
