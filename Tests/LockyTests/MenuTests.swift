@@ -62,7 +62,8 @@ import Testing
                                                      "Duplicate Theme…", "Export Theme…", "Revert to Original", "Move to Trash", "—", "Close"])
             #expect(try layout("Edit", in: main) == ["Undo", "Redo", "—", "Cut", "Copy", "Paste", "Delete", "Select All", "—", "Add Widget…"])
             #expect(try layout("View", in: main) == ["Show Grid", "Show Inspector", "—", "Enter Full Screen"])
-            #expect(try layout("Window", in: main) == ["Minimize", "Zoom", "—", "Bring All to Front"])
+            // AppKit lists any titled window on screen after these, at once, so a window from another test may follow.
+            #expect(try layout("Window", in: main).prefix(4) == ["Minimize", "Zoom", "—", "Bring All to Front"])
             #expect(try layout("Help", in: main) == ["Welcome to Locky"])
         }
     }
