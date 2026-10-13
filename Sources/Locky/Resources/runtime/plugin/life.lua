@@ -3,7 +3,13 @@
 --   opts.columns, opts.rows   the board (default 40 by 20); opts.every seconds per generation (default 0.5)
 --   opts.cell    the character for a live cell (default "●"); opts.dead true marks dead cells with "·"
 --   opts.size (default 10), opts.color
+--   Families: small, medium, large: a grid of quiet dots, the live ones lit, sized to the family.
 local ui = locky.ui
+
+-- Each family's board, in cells of `pitch` points: its content area (size less Apple's margins), less a line for
+-- the caption under medium and large.
+local pitch = 9.2
+local boards = { small = { 15, 15 }, medium = { 36, 13 }, large = { 36, 36 } }
 
 --- The next generation of `board` (rows of booleans), on a torus.
 local function step(board, columns, rows)
@@ -53,8 +59,14 @@ end
 locky.widget.define("life", {
   description = "Conway's Game of Life, evolving quietly",
   opts = { columns = 40, rows = 20, every = 0.5, cell = "●", size = 10 },
+  families = { "small", "medium", "large" },
   init = function(self)
     local o = self.opts
+    local board = boards[self.family]
+    if board then
+      -- A copy, so the family's size does not change the opts other placements share.
+      o = setmetatable({ columns = board[1], rows = board[2] }, { __index = self.opts })
+    end
     math.randomseed(os.time())
     self.state.board = soup(o.columns, o.rows)
     self.state.seen = {}
@@ -75,6 +87,43 @@ locky.widget.define("life", {
   end,
   render = function(self)
     local o, board = self.opts, self.state.board
+    local size = boards[self.family]
+    if self.family then
+      if not size then
+        return nil
+      end
+      -- Two layers of the same glyph, so they line up: every cell dim, then the live ones lit. An SF Mono cell is
+      -- 0.618 em wide: the font is a hair under `pitch`, so a row fits without being cut.
+      local font = { size = (pitch - 0.1) / 0.618, design = "monospaced", height = pitch, lines = 1 }
+      local grid, lit, alive = {}, {}, 0
+      local dim = string.rep("•", size[1])
+      for y, row in ipairs(board) do
+        local cells = {}
+        for x, live in ipairs(row) do
+          cells[x] = live and "•" or " "
+          alive = alive + (live and 1 or 0)
+        end
+        grid[y] = ui.text(dim, font)
+        lit[y] = ui.text(table.concat(cells), font)
+      end
+      local dots = ui.zstack {
+        ui.vstack { spacing = 0, opacity = 0.16, grid },
+        ui.vstack { spacing = 0, color = o.color, glow = 3, lit },
+      }
+      if self.family == "small" then
+        return ui.vstack { fill = "both", dots }
+      end
+      return ui.vstack {
+        spacing = 0, fill = "both",
+        dots,
+        ui.spacer(),
+        ui.hstack {
+          ui.text("Generation " .. self.state.generation, ui.font("caption", { weight = "semibold", color = "muted", mono = true })),
+          ui.spacer(),
+          ui.text(alive .. " alive", ui.font("caption", { weight = "semibold", color = "muted", mono = true })),
+        },
+      }
+    end
     local lines = {}
     for y, row in ipairs(board) do
       local cells = {}
