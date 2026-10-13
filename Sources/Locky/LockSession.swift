@@ -60,6 +60,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var touchIDFallback: Task<Void, Never>?
     /// Lock only: locks the Mac with the macOS lock screen if Locky crashes, hangs, or is killed.
     private var lockGuard: LockGuard?
+    /// Lock only: the app in front when the lock started, which gets the keyboard back the moment it ends.
+    private var previousApp: NSRunningApplication?
     private var keyMonitor: Any?
     /// Lock only: takes the keys while another app holds the keyboard (see takeKeyboard).
     private var keyTap: (port: CFMachPort, source: CFRunLoopSource)?
@@ -106,6 +108,8 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     func begin() {
         if mode == .lock {
+            // Before the shield activates Locky.
+            if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != getpid() { previousApp = front }
             lockGuard = LockGuard { [weak self] reason in self?.handOver(reason) }
             // Without its guard, a crash would leave the shield's open session behind: the macOS lock instead.
             if lockGuard == nil { handOver("the guard did not start") }
@@ -247,10 +251,21 @@ final class LockSession: NSObject, NSWindowDelegate {
         observers.forEach { $0.0.removeObserver($0.1) }
         windows.forEach { $0.delegate = nil }
         if mode == .lock {
-            // The lock fades out instead of vanishing.
             let closing = windows
+            // Input passes through at once; the fade is a picture. A click during it reaches the app behind.
+            closing.forEach { $0.ignoresMouseEvents = true }
+            if NSApp.isActive, !handingOver, let previousApp, !previousApp.isTerminated {
+                // The keys typed next land in the app that was in front. The system may refuse.
+                NSApp.yieldActivation(to: previousApp)
+                previousApp.activate(from: .current, options: [])
+            } else if !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain && !closing.contains($0) }) {
+                // After a hand-over, the macOS unlock would leave Locky active with no window: a ⌘Q meant for the app
+                // behind would quit Locky, and auto-lock with it. (The status item's window cannot become main.)
+                NSApp.deactivate()
+            }
             NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.25
+                context.duration = 0.2
+                context.timingFunction = Motion.easeOut
                 closing.forEach { $0.animator().alphaValue = 0 }
             }, completionHandler: {
                 MainActor.assumeIsolated { closing.forEach { $0.orderOut(nil) } }
