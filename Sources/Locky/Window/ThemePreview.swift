@@ -34,6 +34,8 @@ struct ThemePreview: NSViewRepresentable {
         var nudge: (EditorItem, (x: Int, y: Int), Bool) -> Void
         /// Delete: the selected widget goes.
         var remove: (Int) -> Void
+        /// Escape with nothing selected: Customize ends.
+        var exit: () -> Void
     }
 
     func makeNSView(context: Context) -> ThemePreviewView { ThemePreviewView() }
@@ -437,7 +439,7 @@ final class CanvasOverlay: NSView {
     }
 
     /// With the canvas focused: the arrow keys move what is selected, Delete removes a selected widget, and Escape
-    /// clears the selection.
+    /// clears the selection, or with nothing selected ends Customize.
     override func keyDown(with event: NSEvent) {
         guard let canvas, drag == nil else { return super.keyDown(with: event) }
         let byGrid = event.modifierFlags.contains(.shift)
@@ -448,6 +450,7 @@ final class CanvasOverlay: NSView {
         case (.downArrow?, let item?): canvas.nudge(item, (0, 1), byGrid)
         case (.delete?, .widget(let index)?), (.deleteForward?, .widget(let index)?): canvas.remove(index)
         case (_, _?) where event.charactersIgnoringModifiers == "\u{1b}": canvas.select(nil)
+        case (_, nil) where event.charactersIgnoringModifiers == "\u{1b}": canvas.exit()
         default: super.keyDown(with: event)
         }
     }

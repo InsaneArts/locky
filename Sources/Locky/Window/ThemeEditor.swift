@@ -45,6 +45,10 @@ struct ThemeEditorPage: View {
             }
             // A change in progress belongs to what was selected.
             .onChange(of: selection) { draft = nil }
+            // Escape in the inspector does what it does on the canvas: it clears the selection, then ends Customize.
+            .onExitCommand {
+                if selection == nil { model.finishEditing() } else { selection = nil }
+            }
             // File menu commands that need the editor: the More menu's, under its rules.
             .onChange(of: model.editorRequest) {
                 guard let request = model.editorRequest else { return }
@@ -159,7 +163,8 @@ struct ThemeEditorPage: View {
                                        draft = nil
                                        selection = nil
                                        editing.remove(index)
-                                   })
+                                   },
+                                   exit: { model.finishEditing() })
     }
 
     /// This theme with its changes, as a theme named `name`.

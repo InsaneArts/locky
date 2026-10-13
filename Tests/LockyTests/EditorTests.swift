@@ -244,6 +244,18 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
     }
 
+    @Test func escapeClearsTheSelectionThenEndsCustomize() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+        press(0x1B, page)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        #expect(page.model.editingTheme == "t")
+        press(0x1B, page)
+        #expect(page.model.editingTheme == nil)
+    }
+
     private func click(_ page: Page, at point: CGPoint) {
         page.overlay.mouseDown(with: event(.leftMouseDown, at: point, on: page))
         page.overlay.mouseUp(with: event(.leftMouseUp, at: point, on: page))
