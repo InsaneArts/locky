@@ -128,6 +128,33 @@ import Testing
         #expect(run.exitStatus() == 0)
     }
 
+    /// Locky's stderr may be a pipe nobody reads any more (a closed terminal): the guard's note there must not end
+    /// it before it locks.
+    @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: binary)))
+    func aClosedStderrStillLocks() async throws {
+        let file = FileManager.default.temporaryDirectory.appending(path: "locky-guard-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: file) }
+        setenv("LOCKY_SYSTEM_LOCK_FILE", file.path, 1)
+        var input: [Int32] = [0, 0], output: [Int32] = [0, 0]
+        try #require(pipe(&input) == 0 && pipe(&output) == 0)
+        close(output[0])
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_adddup2(&actions, input[0], 0)
+        posix_spawn_file_actions_adddup2(&actions, output[1], 2)
+        posix_spawn_file_actions_addclose(&actions, input[1])
+        let argv = ([Self.binary, String(getpid())] as [String]).map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        var pid: pid_t = 0
+        try #require(posix_spawn(&pid, Self.binary, &actions, nil, argv, environ) == 0)
+        close(input[0])
+        close(output[1])
+        close(input[1])
+        #expect(status(pid) == 0)
+        #expect((try? String(contentsOf: file, encoding: .utf8)) == "lock: the pipe from Locky closed\n")
+    }
+
     @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: binary)))
     func lockyExitingLocks() async throws {
         let locky = try standIn()

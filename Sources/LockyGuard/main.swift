@@ -10,9 +10,11 @@ guard arguments.count >= 2, let parent = pid_t(arguments[1]), parent > 0 else {
 }
 let timeout = arguments.count > 2 ? Double(arguments[2]) ?? Guard.timeout : Guard.timeout
 
-// Signals for a terminal or a session do not concern it: only the pipe and Locky's exit do.
+// Signals for a terminal or a session do not concern it: only the pipe and Locky's exit do. SIGPIPE too: a
+// stderr nobody reads any more must not end it before it locks.
 signal(SIGHUP, SIG_IGN)
 signal(SIGINT, SIG_IGN)
+signal(SIGPIPE, SIG_IGN)
 
 switch Guard.watch(input: 0, parent: parent, timeout: timeout) {
 case .release:
