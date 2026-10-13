@@ -804,8 +804,13 @@ final class LockScreenView: NSView {
         widgets.append(widget)
         widget.alphaValue = 0
         widget.onResize = { [weak self] in self?.needsLayout = true }
-        // Widgets stay under an overlay, if the theme has one.
-        if let overlay { addSubview(widget, positioned: .below, relativeTo: overlay) } else { addSubview(widget) }
+        // Widgets stay under an overlay, if the theme has one, and always under the password field, its message, and
+        // banners: a widget placed where the field is must not cover it.
+        if let above = overlay ?? auth?.view ?? message?.view ?? banner {
+            addSubview(widget, positioned: .below, relativeTo: above)
+        } else {
+            addSubview(widget)
+        }
     }
 
     /// Takes a widget off the screen, fading it out.

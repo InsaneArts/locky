@@ -143,6 +143,18 @@ import Testing
         #expect(path.fingerprint() == after)
     }
 
+    /// A widget placed where the password field is (a dialog drawn around it) stays under it.
+    @Test func widgetsStayUnderThePasswordField() {
+        let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        let field = NSView()
+        screen.auth = (field, Theme.Auth())
+        let placement = Theme.Placement(widget: "w", anchor: .center, offset: .zero, size: nil, align: nil, card: nil, allDisplays: false, known: true)
+        let widget = WidgetHost(placement: placement, theme: .fallback, style: LockyStyle(), showsErrors: true)
+        screen.add(widget)
+        let order = screen.subviews
+        #expect((order.firstIndex(of: widget) ?? 99) < (order.firstIndex(of: field) ?? -1))
+    }
+
     @Test func onlyTheThemesOwnChangesReloadInPlace() {
         let base = ThemePreviewView.Key(theme: "t", settings: Settings(["theme": .string("t")]), sources: 5)
         var edited = base
