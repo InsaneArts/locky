@@ -20,8 +20,9 @@ The menu bar icon has Lock Now, the theme picker, and Settings…, which opens L
 
 ![The built-in themes](docs/gallery.png)
 
-Twenty themes ship with Locky. Each is a package in `Sources/Locky/Resources/packages/<id>/` (Aurora, the
-default, lives in the core runtime) with its own widgets, shaders, and a README with its options.
+Twenty-eight themes ship with Locky. Each is a package in `Sources/Locky/Resources/packages/<id>/` (Aurora, the
+default, lives in the core runtime) with its own widgets, shaders, and a README with its options. The last eight
+are live wallpapers, after the most popular scenes on Wallpaper Engine's Steam Workshop, drawn entirely in Metal.
 
 | Theme | id | Look |
 |---|---|---|
@@ -45,18 +46,26 @@ default, lives in the core runtime) with its own widgets, shaders, and a README 
 | Rainy | `rainy` | Rain sliding down a window over city lights; the time in words. |
 | Matrix | `matrix` | Digital rain, a glowing clock, and "Wake up, Neo…" typed in the corner. |
 | Notebook | `notebook` | A ruled notebook page: your todo.txt by hand, a sticky note, a coffee ring. |
+| Event Horizon | `eventhorizon` | A black hole's turning accretion disk, its light bent around the shadow. |
+| Galaxy Sea | `galaxysea` | The Milky Way mirrored in a calm sea, a small boat on the horizon, meteors. |
+| Liquid | `liquid` | Color folding into color like silk; a big clock and a row of glass widgets. |
+| Neon City | `neoncity` | A rainy city at 2 AM: towers drifting past, neon signs, a neon clock. |
+| Sakura | `sakura` | A cherry branch under the moon, falling petals, the month's old Japanese name. |
+| Deep Blue | `deepblue` | Underwater light rays and plankton, and a humpback gliding past. |
+| Lookout | `lookout` | Firewatch-style ridges and a fire lookout, lit by the real time of day. |
+| Snowfall | `snowfall` | Snow falling on a pine forest at night, a cabin with warm windows. |
 
 Pick one in the menu's Theme submenu, or in `init.lua` with `locky.setup({ theme = "station" })`.
 `Scripts/snapshot.sh <id> out.png [1728x1117]` renders any theme to a PNG.
 
 ## The window
 
-Settings… (⌘,) in the menu opens Locky's window: a live dashboard, a theme editor (drag widgets
-on the live preview, with a grid to snap to; change a widget's options, the background, and where the password
-field sits), plugins (install, update, remove), the config with Open in your editor, and settings such as the
-Lock Now shortcut, auto-lock, Open at Login, a lock screen message, privacy mode, a theme schedule, the
-battery saver, and a photo after wrong passwords. It saves to `~/.config/locky/settings.json`, which wins
-over init.lua key by key: see [settings.md](docs/settings.md).
+Settings… (⌘,) in the menu opens Locky's window: a live dashboard, a theme editor (drag widgets on the live
+preview, with a grid to snap to; change a widget's options, the background, and where the password field sits),
+every widget drawn live with Install Widgets…, plugins (install, update, remove), the config with Open in your
+editor, and settings such as the Lock Now shortcut, auto-lock, Open at Login, a lock screen message, privacy mode,
+a theme schedule, the battery saver, and a photo after wrong passwords. It saves to
+`~/.config/locky/settings.json`, which wins over init.lua key by key: see [settings.md](docs/settings.md).
 
 ## Configure
 
