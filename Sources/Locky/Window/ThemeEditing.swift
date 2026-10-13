@@ -44,8 +44,6 @@ final class ThemeEditing {
         return original.enumerated().map { EditorPlacement(original: $1, ref: $0 + 1) }
     }
 
-    var widgetsChanged: Bool { !store.settings.themeEdit(theme.id, "widgets").isNil }
-
     func info(_ placement: EditorPlacement) -> Inspection.WidgetInfo? { model.inspection.widget(placement.widget) }
 
     /// The options a placement has before settings.json's: the theme's placement's, or, for a widget the window
@@ -113,10 +111,6 @@ final class ThemeEditing {
         return list.count - 1
     }
 
-    func resetWidgets() {
-        record("Reset Layout") { store.update { $0.setThemeEdit(theme.id, "widgets", nil) } }
-    }
-
     private func write(_ list: [EditorPlacement]) {
         guard layout != nil else { return }
         store.update { $0.setThemeEdit(theme.id, "widgets", .array(list.map(\.settingsValue))) }
@@ -136,16 +130,10 @@ final class ThemeEditing {
          EditorPlacement.coordinate(edit["offset"][1].number ?? own["offset"][1].number))
     }
 
-    var authChanged: Bool { !store.settings.themeEdit(theme.id, "auth").isNil }
-
     func setAuth(anchor: String, x: Double, y: Double) {
         guard layout != nil else { return }
         let place: LuaValue = .table(["anchor": .string(anchor), "offset": .array([EditorPlacement.number(x), EditorPlacement.number(y)])])
         record("Move Password Field") { store.update { $0.setThemeEdit(theme.id, "auth", place) } }
-    }
-
-    func resetAuth() {
-        record("Reset Password Field") { store.update { $0.setThemeEdit(theme.id, "auth", nil) } }
     }
 
     // MARK: Changes

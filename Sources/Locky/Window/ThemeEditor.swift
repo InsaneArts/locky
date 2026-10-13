@@ -236,7 +236,7 @@ struct ThemeInspector: View {
                     WidgetInspector(model: model, editing: editing, index: index, selection: $selection, draft: $draft)
                         .id(index)
                 case .passwordField:
-                    PasswordFieldInspector(editing: editing, selection: $selection)
+                    PasswordFieldInspector(editing: editing)
                 default:
                     overview
                 }
@@ -247,73 +247,46 @@ struct ThemeInspector: View {
 
     private var overview: some View {
         Form {
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(theme.description ?? theme.id).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    if let author = theme.author { Text("By \(author)").font(.caption).foregroundStyle(.tertiary) }
-                }
-            }
-            Section {
+            Section("Background") {
                 BackgroundEditor(model: model, editing: editing, draft: $draft)
             }
-            Section {
+            Section("Widgets") {
                 ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
                     Button { selection = .widget(index) } label: {
-                        WidgetRow(placement: placement, info: editing.info(placement))
+                        WidgetRow(placement: placement, missing: editing.info(placement) == nil)
                     }
                     .buttonStyle(.plain)
-                }
-                Button("Add Widget…", systemImage: "plus") { model.addingWidget = true }
-            } header: {
-                HStack {
-                    Text("Widgets")
-                    Spacer()
-                    if editing.widgetsChanged {
-                        Button("Reset Layout") { editing.resetWidgets() }
-                            .buttonStyle(.link)
-                            .font(.callout)
-                    }
                 }
             }
             Section {
                 Button { selection = .passwordField } label: {
-                    HStack {
+                    HStack(spacing: 8) {
                         Text("Password Field")
                         Spacer()
-                        Text(editing.authPlace.anchor.replacingOccurrences(of: "-", with: " ").capitalizedFirst).foregroundStyle(.secondary)
+                        Text(AnchorPicker.name(editing.authPlace.anchor)).foregroundStyle(.secondary)
                         Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-            } footer: {
-                Text("Click a widget in the preview to change it, and drag it to move it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
     }
 }
 
-/// A widget in the theme's list: its name and what it shows.
+/// A widget in the theme's list, by name.
 private struct WidgetRow: View {
     let placement: EditorPlacement
-    let info: Inspection.WidgetInfo?
+    /// Locky has no widget of its name, such as one from a plugin that is not installed.
+    let missing: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(EditorPlacement.title(placement.widget)).font(.body.weight(.medium)).lineLimit(1)
-                    if info == nil {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                            .help("No widget has this name. Is its plugin installed?")
-                    }
-                }
-                if let description = info?.description {
-                    Text(description).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-                }
+        HStack(spacing: 8) {
+            Text(EditorPlacement.title(placement.widget)).lineLimit(1)
+            if missing {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    .help("No widget has this name. Is its plugin installed?")
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
@@ -322,14 +295,22 @@ private struct WidgetRow: View {
     }
 }
 
-/// Back to the theme's panel.
-private struct BackButton: View {
+/// A section's header with a trailing Reset, shown while there is something to reset.
+private struct ResetHeader: View {
     let title: String
-    let action: () -> Void
+    let shown: Bool
+    let reset: () -> Void
 
     var body: some View {
-        Button(action: action) { Label(title, systemImage: "chevron.left") }
-            .buttonStyle(.link)
+        HStack {
+            Text(title)
+            Spacer()
+            if shown {
+                Button("Reset", action: reset)
+                    .buttonStyle(.link)
+                    .font(.callout)
+            }
+        }
     }
 }
 
@@ -354,21 +335,21 @@ private struct WidgetInspector: View {
         let info = editing.info(placement)
         let inherited = editing.inherited(placement)
         let keys = OptionRow.keys(inherited: inherited, overrides: placement.opts, choices: info?.choices ?? [:])
+        let families = info?.families ?? []
+        let cards = editing.layout?.cardStyle != "none"
         Form {
             Section {
-                BackButton(title: editing.theme.name) { selection = nil }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(EditorPlacement.title(placement.widget)).font(.title3.weight(.semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(EditorPlacement.title(placement.widget)).font(.headline)
                     if let info {
-                        if let description = info.description { Text(description).foregroundStyle(.secondary) }
-                        if let source = info.source { Text(source).font(.caption).foregroundStyle(.tertiary) }
+                        if let description = info.description { Text(description).font(.callout).foregroundStyle(.secondary) }
+                        if let source = info.source { Text(source).font(.caption).foregroundStyle(.secondary) }
                     } else {
-                        Label("No widget has this name. Is its plugin installed?", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                        WarningLabel("No widget has this name. Is its plugin installed?")
                     }
                 }
             }
-            Section("Position") {
+            Section {
                 PositionEditor(anchor: placement.anchor, x: placement.x, y: placement.y) { anchor, x, y in
                     change("Move") {
                         $0.anchor = anchor
@@ -376,22 +357,28 @@ private struct WidgetInspector: View {
                         $0.y = y
                     }
                 }
-            }
-            if let families = info?.families, !families.isEmpty {
-                Section("Size") {
-                    let options = (editing.themeFamily(placement) == nil ? [String?.none] : []) + families.map(Optional.some)
-                    Picker("Size", selection: Binding(get: { editing.family(placement) }, set: { value in
-                        change("Resize") { $0.rest["family"] = value.map(LuaValue.string) }
-                    })) {
-                        ForEach(options, id: \.self) { family in
-                            Text(family.map(FamilyPicker.name) ?? "Its Own Size").tag(family)
-                        }
-                    }
+            } header: {
+                ResetHeader(title: "Position", shown: editing.isMoved(.widget(index))) {
+                    // Colors being picked save first, as before any change.
+                    if !picked.isEmpty { change() }
+                    editing.resetPlace(.widget(index))
                 }
             }
-            if editing.layout?.cardStyle != "none" {
+            if !families.isEmpty || cards {
                 Section {
-                    Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
+                    if !families.isEmpty {
+                        let options = (editing.themeFamily(placement) == nil ? [String?.none] : []) + families.map(Optional.some)
+                        Picker("Size", selection: Binding(get: { editing.family(placement) }, set: { value in
+                            change("Resize") { $0.rest["family"] = value.map(LuaValue.string) }
+                        })) {
+                            ForEach(options, id: \.self) { family in
+                                Text(family.map(FamilyPicker.name) ?? "Original").tag(family)
+                            }
+                        }
+                    }
+                    if cards {
+                        Toggle("Show Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
+                    }
                 }
             }
             if !keys.isEmpty {
@@ -404,15 +391,7 @@ private struct WidgetInspector: View {
                                   commit: { value in change { $0.opts[key] = value == inherited[key] ? nil : value } })
                     }
                 } header: {
-                    HStack {
-                        Text("Options")
-                        Spacer()
-                        if !placement.opts.isEmpty {
-                            Button("Reset Options") { change("Reset Options of") { $0.opts = [:] } }
-                                .buttonStyle(.link)
-                                .font(.callout)
-                        }
-                    }
+                    ResetHeader(title: "Options", shown: !placement.opts.isEmpty) { change("Reset Options of") { $0.opts = [:] } }
                 }
             }
             Section {
@@ -468,25 +447,17 @@ private struct WidgetInspector: View {
 /// The password field: where it sits. The theme sets its look.
 private struct PasswordFieldInspector: View {
     let editing: ThemeEditing
-    @Binding var selection: EditorItem?
 
     var body: some View {
         let place = editing.authPlace
         Form {
             Section {
-                BackButton(title: editing.theme.name) { selection = nil }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Password Field").font(.title3.weight(.semibold))
-                    Text("Where the password is typed. Its look is the theme's.").foregroundStyle(.secondary)
-                }
+                Text("Password Field").font(.headline)
             }
-            Section("Position") {
+            Section {
                 PositionEditor(anchor: place.anchor, x: place.x, y: place.y) { editing.setAuth(anchor: $0, x: $1, y: $2) }
-            }
-            if editing.authChanged {
-                Section {
-                    Button("Put It Back Where the Theme Has It") { editing.resetAuth() }
-                }
+            } header: {
+                ResetHeader(title: "Position", shown: editing.isMoved(.passwordField)) { editing.resetPlace(.passwordField) }
             }
         }
         .formStyle(.grouped)
@@ -501,7 +472,7 @@ private struct PositionEditor: View {
     let set: (_ anchor: String, _ x: Double, _ y: Double) -> Void
 
     var body: some View {
-        LabeledContent("Place") {
+        LabeledContent("Pinned To") {
             AnchorPicker(anchor: anchor) { picked in
                 let margin = EditorPlacement.margin(for: picked)
                 set(picked, margin.x, margin.y)
@@ -513,9 +484,6 @@ private struct PositionEditor: View {
                 NumberField(label: "Y", value: y) { set(anchor, x, $0) }
             }
         }
-        Text("In points \(Self.describe(anchor)), on a 1440 × 900 screen; y grows downwards.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 
     /// "top-right" → "from the top right corner".
@@ -747,6 +715,11 @@ private struct AnchorPicker: View {
 
     private static let grid = [["top-left", "top", "top-right"], ["left", "center", "right"], ["bottom-left", "bottom", "bottom-right"]]
 
+    /// "top-left" → "Top Left": a place's name, as the password field's row shows it.
+    static func name(_ anchor: String) -> String {
+        anchor.split(separator: "-").map(\.capitalized).joined(separator: " ")
+    }
+
     var body: some View {
         VStack(spacing: 3) {
             ForEach(Self.grid, id: \.self) { row in
@@ -787,7 +760,7 @@ private struct BackgroundEditor: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .theme: "Theme's Own"
+            case .theme: "Original"
             case .wallpaper: "Desktop Picture"
             case .image: "Image"
             case .video: "Video"
@@ -799,7 +772,6 @@ private struct BackgroundEditor: View {
 
     private var store: SettingsStore { model.store }
     private var theme: Inspection.ThemeInfo { editing.theme }
-    private var layout: ThemeLayout? { editing.layout }
     private var edit: LuaValue { store.settings.themeEdit(theme.id, "background") }
 
     private var kind: Kind {
@@ -818,7 +790,7 @@ private struct BackgroundEditor: View {
         .onDisappear { if !picked.isEmpty { save([:]) } }
         switch kind {
         case .theme:
-            LabeledContent("Shows", value: summary(layout?.background ?? .nil))
+            EmptyView()
         case .wallpaper:
             slider("Blur", key: "blur", range: 0...60, fallback: 30)
             slider("Dim", key: "dim", range: 0...0.8, fallback: 0.25)
@@ -923,17 +895,6 @@ private struct BackgroundEditor: View {
 
     private func color(_ title: String, get: @escaping () -> String?, fields: @escaping (String) -> [String: LuaValue]) -> some View {
         ColorWell(title: title, hex: get() ?? "#000000", pick: { pick(fields($0)) })
-    }
-
-    /// What the theme's own background is, in a few plain words.
-    private func summary(_ background: LuaValue) -> String {
-        if background["shader"].string != nil { return "An animated scene" }
-        if background["wallpaper"].bool == true { return "Your desktop picture" }
-        if background["image"].string != nil { return "A picture" }
-        if background["video"].string != nil { return "A video" }
-        if background["gradient"].array != nil { return "A gradient" }
-        if background["color"].string != nil { return "One color" }
-        return "Nothing"
     }
 
     @MainActor
