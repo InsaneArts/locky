@@ -29,7 +29,7 @@ struct Node: Sendable, Equatable {
     enum Kind: Sendable, Equatable {
         case vstack([Node]), hstack([Node]), zstack([Node]), grid([Node])
         case text(String), time(String), symbol(String), image(String)
-        case progress(Double), ring(Double), chart([Double])
+        case progress(Double), ring(Double), gauge(Double), chart([Double])
         case shape(String)
         case dot, spacer, divider
     }
@@ -39,7 +39,7 @@ struct Node: Sendable, Equatable {
                                           "border_width", "shadow", "glow", "blur", "stroke_width", "tracking", "line_spacing"]
 
     static let kinds = ["vstack", "hstack", "zstack", "grid", "text", "time", "symbol", "image", "progress", "ring",
-                        "chart", "shape", "dot", "spacer", "divider"]
+                        "gauge", "chart", "shape", "dot", "spacer", "divider"]
 
     var kind: Kind
     var id: String?
@@ -106,6 +106,13 @@ struct Node: Sendable, Equatable {
     var slots: Int?
     var style: String?
 
+    // Gauges
+    var icon: String?
+    var label: String?
+    var valueLabel: String?
+    var minLabel: String?
+    var maxLabel: String?
+
     // Images and symbols
     var fit: String?
     var tint: Bool = false
@@ -171,7 +178,9 @@ struct Node: Sendable, Equatable {
             try number(key).map { Int(min(max($0, range.lowerBound), range.upperBound)) }
         }
 
-        if fields["vstack"] != nil { kind = .vstack(try children("vstack")) }
+        // First: a gauge's value is a number, and its labels must not read as a text or symbol view.
+        if fields["gauge"] != nil { kind = .gauge(try number("gauge") ?? 0) }
+        else if fields["vstack"] != nil { kind = .vstack(try children("vstack")) }
         else if fields["hstack"] != nil { kind = .hstack(try children("hstack")) }
         else if fields["zstack"] != nil { kind = .zstack(try children("zstack")) }
         else if fields["grid"] != nil { kind = .grid(try children("grid")) }
@@ -259,6 +268,13 @@ struct Node: Sendable, Equatable {
         }
         slots = try count("slots", 2...10_000)
         style = try string("style")
+        if case .gauge = kind {
+            icon = try string("icon")
+            label = try string("label")
+            valueLabel = try string("value_label")
+            minLabel = try string("min_label")
+            maxLabel = try string("max_label")
+        }
         fit = try string("fit")
         tint = fields["tint"]?.bool ?? false
         symbolMode = try string("mode")

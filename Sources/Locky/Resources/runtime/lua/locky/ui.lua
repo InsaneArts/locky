@@ -17,7 +17,7 @@ local ui = {}
 
 local kinds = {
   "vstack", "hstack", "zstack", "grid", "text", "time", "symbol", "image",
-  "progress", "ring", "chart", "shape", "dot", "spacer", "divider",
+  "progress", "ring", "gauge", "chart", "shape", "dot", "spacer", "divider",
 }
 local is_kind = {}
 for _, kind in ipairs(kinds) do
@@ -130,6 +130,12 @@ end
 ui.progress = leaf("progress", "number")
 --- A ring filled to `value` (0 to 1).
 ui.ring = leaf("ring", "number")
+--- A gauge, as on the Lock Screen: `value` between props.min (default 0) and props.max (default 1).
+--- props.style: "circular" (an open arc with a marker; default), "capacity" (a ring filled to the value),
+--- "linear" (a track with a marker), or "linear-capacity" (a filled bar). props.value_label is the text in
+--- the middle; props.icon (an SF Symbol) or props.min_label and props.max_label sit in the arc's gap;
+--- props.label names a linear gauge. props.color tints it, and takes a gradient.
+ui.gauge = leaf("gauge", "number")
 --- A chart of numbers, newest last. props.style: "line" (default), "area", or "bar".
 ui.chart = leaf("chart", "table")
 

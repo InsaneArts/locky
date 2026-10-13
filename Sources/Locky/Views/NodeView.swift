@@ -232,6 +232,13 @@ struct NodeView: View, Equatable {
                     .rotationEffect(.degrees(-90))
             }
             .frame(width: style.s(node.size ?? 40), height: style.s(node.size ?? 40))
+        case .gauge(let value):
+            let low = node.minValue ?? 0, high = node.maxValue ?? 1
+            GaugeView(fraction: (value - low) / max(high - low, .ulpOfOne), style: node.style ?? "circular",
+                      size: node.size ?? (node.style?.hasPrefix("linear") == true ? 140 : 58),
+                      tint: node.color.map(style.paint) ?? AnyShapeStyle(style.color("fg")),
+                      valueLabel: node.valueLabel, icon: node.icon, label: node.label, minLabel: node.minLabel,
+                      maxLabel: node.maxLabel, weight: LockyStyle.weights[node.weight ?? "semibold"] ?? .semibold)
         case .chart(let values):
             Chart(values: values, minimum: node.minValue ?? 0, maximum: node.maxValue ?? max(values.max() ?? 1, 1),
                   slots: node.slots ?? max(values.count, 2), style: node.style ?? "line", paint: foreground,
