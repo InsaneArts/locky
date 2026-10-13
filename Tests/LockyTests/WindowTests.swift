@@ -4,6 +4,35 @@ import Testing
 @testable import Locky
 
 @Suite struct WindowTests {
+    @Test func widgetsGroupByWhereTheyComeFrom() {
+        func widget(_ name: String, _ file: URL) -> Inspection.WidgetInfo { Inspection.WidgetInfo(name: name, file: file) }
+        let packages = RuntimePath.resources.appending(path: "packages")
+        let groups = WidgetGroup.groups([
+            widget("sakura.month", packages.appending(path: "sakura/plugin/sakura.lua")),
+            widget("clock", RuntimePath.builtInRuntime.appending(path: "plugin/clock.lua")),
+            widget("weather.big", RuntimePath.defaultPacks.appending(path: "locky-weather/plugin/big.lua")),
+            widget("matrix.whisper", packages.appending(path: "matrix/plugin/matrix.lua")),
+            widget("mine", RuntimePath.defaultConfig.appending(path: "plugin/mine.lua")),
+        ])
+        #expect(groups.map(\.title) == ["Locky", "Your Config", "Installed", "Matrix Theme", "Sakura Theme"])
+        #expect(groups.map { $0.widgets.map(\.name) } == [["clock"], ["mine"], ["weather.big"], ["matrix.whisper"], ["sakura.month"]])
+    }
+
+    /// The gallery runs every widget in one runtime and hands each card its widget's live view.
+    @MainActor @Test func theGalleryDrawsEachWidget() async throws {
+        let sandbox = try Sandbox()
+        let gallery = WidgetGallery()
+        gallery.start(widgets: ["date", "nerdclock", "no.such.widget"], settings: Settings(), config: sandbox.config, revision: 1)
+        defer { gallery.stop() }
+        func drawn(_ name: String) -> Bool { if case .node = gallery.shown(name) { true } else { false } }
+        let deadline = Date().addingTimeInterval(5)
+        while !(drawn("date") && drawn("nerdclock")), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(drawn("date") && drawn("nerdclock"))
+        if case .failed = gallery.shown("no.such.widget") {} else { Issue.record("an unknown widget should show as failed") }
+    }
+
     @Test func aPlacementSurvivesTheTripThroughSettings() {
         let entry: LuaValue = .table([
             "ref": .int(2), "widget": .string("clock"), "anchor": .string("top-left"),
