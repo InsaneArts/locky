@@ -189,6 +189,10 @@ final class AppModel {
     /// `remove` moves the file (tests pass one that deletes).
     func trash(_ id: String, using remove: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) throws {
         guard canTrash(id) else { throw TrashError(errorDescription: "Only your own themes can move to the Trash.") }
+        // Nothing can save settings.json while it has an error, so it would still name a theme that is gone.
+        guard Settings.load(config: store.config).problem == nil else {
+            throw TrashError(errorDescription: "settings.json has an error. Fix it in Settings › General first.")
+        }
         try remove(ThemeFile.file(id, config: store.config))
         store.update { settings in
             if settings["theme"].string == id { settings["theme"] = .nil }

@@ -167,6 +167,16 @@ import Testing
         #expect(model.editingTheme == nil)
     }
 
+    /// While settings.json has an error nothing saves it, so the theme stays: settings.json would still name it.
+    @Test func aThemeStaysWhileSettingsJSONHasAnError() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        try sandbox.write("settings.json", "{ \"theme\": \"mine\",")
+        #expect(throws: AppModel.TrashError.self) { try model.trash("mine", using: { try FileManager.default.removeItem(at: $0) }) }
+        #expect(FileManager.default.fileExists(atPath: sandbox.config.appending(path: "themes/mine.lua").path))
+    }
+
     /// An id from a request names no file outside themes/: only a theme the config's read lists can go.
     @Test func anIDThatIsAPathGoesNowhere() async throws {
         let sandbox = try Sandbox()
