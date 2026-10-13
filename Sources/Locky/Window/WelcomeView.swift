@@ -60,9 +60,21 @@ struct WelcomeView: View {
                 Section {
                     Toggle(isOn: autoLock) {
                         Text("Lock automatically")
-                        // While it is off: what turning it on stores.
-                        Text(Self.autoLockSummary(stored != AutoLockSettings() ? stored : turnedOff ?? Self.defaultAutoLock))
+                        if model.store.problem != nil {
+                            // The store saves nothing while the file has an error. The switch shows what Locky still uses.
+                            HStack(spacing: 4) {
+                                WarningLabel("settings.json has an error, so this can't change.")
+                                Button("Open Settings") { model.openWindow(.settings) }
+                                    .buttonStyle(.link)
+                                    // The row is disabled, but not the way out of it.
+                                    .environment(\.isEnabled, true)
+                            }
+                        } else {
+                            // While it is off: what turning it on stores.
+                            Text(Self.autoLockSummary(stored != AutoLockSettings() ? stored : turnedOff ?? Self.defaultAutoLock))
+                        }
                     }
+                    .disabled(model.store.problem != nil)
                     OpenAtLoginToggle(model: model, subtitle: "Locky locks by itself only while it's open.")
                 }
             }
