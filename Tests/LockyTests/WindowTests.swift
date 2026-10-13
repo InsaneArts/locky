@@ -185,3 +185,31 @@ import Testing
         #expect(InstanceLock.acquire(file))
     }
 }
+
+/// A click on a widget card on the Widgets page adds the widget to a theme.
+@MainActor
+@Suite struct AddToThemeTests {
+    @Test func addingWritesThePlacementAndShowsTheTheme() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'clock', anchor = 'top' } } }")
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        let index = await AddToTheme.add("date", to: Inspection.ThemeInfo(id: "t", name: "T"), model: model)
+        #expect(index == 1)
+        let widgets = model.store.settings.themeEdit("t", "widgets").array ?? []
+        #expect(widgets.map { $0["widget"] } == [.string("clock"), .string("date")])
+        #expect(widgets.first?["ref"] == .int(1))
+        #expect(model.selectedTheme == "t")
+        #expect(model.section == .themes)
+        // The settings file says the same.
+        #expect(Settings.load(config: sandbox.config).settings.themeEdit("t", "widgets") == model.store.settings.themeEdit("t", "widgets"))
+    }
+
+    @Test func aThemeThatDoesNotLoadIsLeftAlone() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "error('broken')")
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        #expect(await AddToTheme.add("date", to: Inspection.ThemeInfo(id: "t", name: "T"), model: model) == nil)
+        #expect(model.store.settings.themeEdit("t", "widgets").isNil)
+        #expect(model.section == .dashboard)
+    }
+}

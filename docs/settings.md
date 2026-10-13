@@ -85,6 +85,8 @@ Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
   grid and snaps what you drag to it. The panel beside the canvas shows what is selected: its place, its card,
   and its options (a menu where the widget lists the values an option takes). With nothing selected, it shows
   the background, the widget list, Add Widget, and Reset Layout.
+- **Widgets:** every widget, live. Click one to add it to the active theme, or under Add to, to another; the
+  Themes page then opens on that theme. Install Plugin… adds more.
 - **Plugins:** install from git; Update All… shows each update's commits and diffstat and installs exactly those
   commits; Run programs and Change files allow a plugin added here to do that; More › Remove Unused… lists the
   folders it deletes and asks first. Each plugin shows the themes and widgets it adds.

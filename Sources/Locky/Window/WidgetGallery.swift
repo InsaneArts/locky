@@ -124,6 +124,8 @@ struct WidgetCard: View {
     let gallery: WidgetGallery
     let widget: Inspection.WidgetInfo
     var highlighted = false
+    /// Where it comes from, in the corner; the Locky group leaves it out, since every one there is built in.
+    var showsSource = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -137,7 +139,9 @@ struct WidgetCard: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(EditorPlacement.title(widget.name)).font(.body.weight(.semibold)).lineLimit(1)
                     Spacer(minLength: 4)
-                    Text(AddWidgetSheet.source(of: widget)).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                    if showsSource {
+                        Text(AddWidgetSheet.source(of: widget)).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                    }
                 }
                 Text(widget.description ?? "")
                     .font(.callout)

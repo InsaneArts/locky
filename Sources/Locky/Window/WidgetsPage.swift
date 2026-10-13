@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Every widget Locky has, live: its own, the user's config's, installed plugins', and each theme's. Install adds a
-/// plugin from git, as on the Plugins page.
+/// Every widget Locky has, live: its own, the user's config's, installed plugins', and each theme's. A click on a
+/// card adds the widget to a theme. Install adds a plugin from git, as on the Plugins page.
 struct WidgetsPage: View {
     @Bindable var model: AppModel
     @State private var gallery = WidgetGallery()
@@ -18,14 +18,15 @@ struct WidgetsPage: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                Text("Add a widget to a theme from the theme editor. Install more from a plugin's git repository.")
+                Text("Click a widget to add it to a theme. Install Plugin… adds more.")
                     .foregroundStyle(.secondary)
                 ForEach(WidgetGroup.groups(shown)) { group in
                     VStack(alignment: .leading, spacing: 12) {
                         Text(group.title).font(.title3.weight(.semibold))
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 18)], spacing: 20) {
                             ForEach(group.widgets) { widget in
-                                WidgetCard(gallery: gallery, widget: widget)
+                                WidgetCard(gallery: gallery, widget: widget, showsSource: group.title != "Locky")
+                                    .onTapGesture { AddToTheme.menu(widget.name, model: model) }
                                     .contextMenu {
                                         if let file = widget.file {
                                             Button("Open in Editor") { model.open(file) }
@@ -52,4 +53,53 @@ struct WidgetsPage: View {
         }
         .onDisappear { gallery.stop() }
     }
+}
+
+/// A click on a widget card: a menu to add the widget to the active theme, or, under Add to, to another one.
+@MainActor
+enum AddToTheme {
+    static func menu(_ widget: String, model: AppModel) {
+        let themes = model.inspection.themes.filter { $0.error == nil }
+        let menu = NSMenu()
+        if let active = themes.first(where: { $0.id == model.activeTheme }) {
+            menu.addItem(ActionItem("Add to \(active.name)") { Task { await add(widget, to: active, model: model) } })
+        }
+        let others = NSMenu()
+        for theme in themes where theme.id != model.activeTheme {
+            others.addItem(ActionItem(theme.name) { Task { await add(widget, to: theme, model: model) } })
+        }
+        let item = NSMenuItem(title: "Add to", action: nil, keyEquivalent: "")
+        item.submenu = others
+        menu.addItem(item)
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    /// Adds the widget to `theme` as the theme editor's Add Widget does (settings.json's themes.<id>.widgets), then
+    /// shows that theme on the Themes page. Returns the widget's place in the list, or nil when the theme's layout
+    /// does not load.
+    @discardableResult
+    static func add(_ widget: String, to theme: Inspection.ThemeInfo, model: AppModel) async -> Int? {
+        let editing = ThemeEditing(theme: theme, model: model)
+        await editing.load()
+        guard editing.layout != nil else { return nil }
+        let index = editing.add(widget)
+        model.selectedTheme = theme.id
+        model.section = .themes
+        return index
+    }
+}
+
+/// A menu item that runs a closure.
+private final class ActionItem: NSMenuItem {
+    private let action_: () -> Void
+
+    init(_ title: String, _ action: @escaping () -> Void) {
+        action_ = action
+        super.init(title: title, action: #selector(run), keyEquivalent: "")
+        target = self
+    }
+
+    required init(coder: NSCoder) { fatalError("not used") }
+
+    @objc private func run() { action_() }
 }
