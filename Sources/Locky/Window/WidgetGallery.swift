@@ -12,7 +12,8 @@ final class WidgetGallery {
     /// Each placement's instance and card style, by key (see `key`).
     private var instances: [String: (id: Int, card: String?)] = [:]
     private var nodes: [Int: Node] = [:]
-    /// The instances that have drawn, nothing included. Until an instance draws, its tile shows the tile alone.
+    /// The instances that have drawn at least once, a drawing of nothing included. A tile shows its background alone
+    /// until its instance draws.
     private var drawn: Set<Int> = []
     private var errors: [Int: String] = [:]
     @ObservationIgnored private var runtime: LuaRuntime?
