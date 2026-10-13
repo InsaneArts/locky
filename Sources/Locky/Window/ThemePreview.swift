@@ -17,6 +17,8 @@ struct ThemePreview: NSViewRepresentable {
     var alwaysLive = false
     /// The theme editor's canvas: widgets to select and drag, and the grid. nil for a plain preview.
     var canvas: Canvas?
+    /// The theme's info, for the placeholder shown until the live screen is ready.
+    var info: Inspection.ThemeInfo? = nil
 
     /// What the theme editor's canvas shows, and what it reports.
     struct Canvas {
