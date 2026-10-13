@@ -126,7 +126,7 @@ struct WelcomeView: View {
         let auto = store.settings.autoLock
         return VStack(alignment: .leading, spacing: 12) {
             Text("Lock automatically").font(.headline)
-            autoLockToggle("When the Mac is idle for \(Int(auto.idleMinutes ?? 5)) minutes", auto.idleMinutes != nil) { $0.idleMinutes = $1 ? 5 : nil }
+            autoLockToggle("When the Mac is idle for \(Int(auto.idleMinutes ?? 5)) min", auto.idleMinutes != nil) { $0.idleMinutes = $1 ? 5 : nil }
             autoLockToggle("When the display sleeps", auto.displaySleep) { $0.displaySleep = $1 }
             autoLockToggle("Before the Mac sleeps, as when you close the lid", auto.systemSleep) { $0.systemSleep = $1 }
             autoLockToggle("When the screen saver starts", auto.screenSaver) { $0.screenSaver = $1 }
@@ -145,10 +145,17 @@ struct WelcomeView: View {
                 Label(loginError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             } else if case .unavailable(let message) = login {
                 Label(message, systemImage: "info.circle").foregroundStyle(.secondary)
+            } else if login == .requiresApproval {
+                HStack {
+                    Label("Allow Locky in System Settings › Login Items", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Button("Open Login Items") { LoginItem.openSystemSettings() }
+                }
             }
             Text("Settings has these, the Lock Now shortcut, and more.").foregroundStyle(.secondary).padding(.top, 8)
         }
         .frame(maxHeight: .infinity, alignment: .top)
+        // Back from System Settings, where Login Items may have changed.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in login = LoginItem.status }
     }
 
     private func autoLockToggle(_ title: String, _ on: Bool, _ set: @escaping (inout AutoLockSettings, Bool) -> Void) -> some View {
