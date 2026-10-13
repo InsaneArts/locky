@@ -378,6 +378,16 @@ import Testing
         #expect(hit?.isDescendant(of: field) == true, "the click reaches \(String(describing: hit))")
     }
 
+    /// A key or the mouse brings the field and takes the hint away at once: neither animates.
+    @Test func aKeyBringsTheFieldAtOnce() async throws {
+        let (session, screen) = try await screen(reveal: "activity")
+        defer { session.end("test") }
+        let hint = try #require(screen.glanceHint?.layer), field = try #require(screen.auth?.view.layer)
+        screen.setAuthVisible(true, dim: 0.25, animated: true)
+        #expect(field.opacity == 1 && hint.opacity == 0)
+        #expect(field.animationKeys() == nil && hint.animationKeys() == nil)
+    }
+
     @Test func aFieldThatAlwaysShowsHasNoHint() async throws {
         let (session, screen) = try await screen(reveal: "always")
         defer { session.end("test") }

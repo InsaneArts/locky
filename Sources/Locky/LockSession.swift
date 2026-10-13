@@ -986,16 +986,33 @@ final class LockScreenView: NSView {
     }
     private let dimLayer = CALayer()
 
-    /// Shows or hides the password field. Hidden, it keeps the keyboard focus, so the first key counts.
+    /// Shows or hides the password field. Hidden, it keeps the keyboard focus, so the first key counts. The key or
+    /// the mouse that shows it gets the field at once, and only the dim eases in; hiding after idle, when nobody
+    /// watches, fades.
     func setAuthVisible(_ visible: Bool, dim: Double, animated: Bool) {
         authVisible = visible
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = animated ? 0.35 : 0
-            context.allowsImplicitAnimation = true
-            auth?.view.animator().alphaValue = visible ? 1 : 0.011
-            glanceHint?.animator().alphaValue = visible ? 0 : 1
-            dimLayer.opacity = visible ? Float(dim) : 0
+        let (field, hint): (CGFloat, CGFloat) = visible ? (1, 0) : (0.011, 1)
+        if animated, !visible {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                auth?.view.animator().alphaValue = field
+                glanceHint?.animator().alphaValue = hint
+            }
+        } else {
+            auth?.view.alphaValue = field
+            glanceHint?.alphaValue = hint
         }
+        // A brightness change eases, also when the field came at once.
+        CATransaction.begin()
+        if animated {
+            CATransaction.setAnimationDuration(visible ? 0.2 : 0.35)
+            CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: visible ? .easeOut : .easeInEaseOut))
+        } else {
+            CATransaction.setDisableActions(true)
+        }
+        dimLayer.opacity = visible ? Float(dim) : 0
+        CATransaction.commit()
     }
     var banner: NSView? {
         didSet {
