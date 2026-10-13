@@ -36,6 +36,34 @@ import Testing
         #expect(CLI.GUILaunch.parse(["preview"]).window == nil)
     }
 
+    /// Minimize and zoom are dimmed in the Settings window and hidden in the Welcome; a pane change gives the window the
+    /// pane's title and size, with the top edge where it was, and is remembered.
+    @Test func theSettingsWindowFollowsItsPanes() throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        let settings = try #require(SettingsWindowController(model: model, onClose: {}).window)
+        #expect(settings.standardWindowButton(.miniaturizeButton)?.isEnabled == false)
+        #expect(settings.standardWindowButton(.zoomButton)?.isEnabled == false)
+        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 680))
+        let items = try #require(settings.toolbar?.items)
+        #expect(items.map(\.label) == ["General", "Plugins", "Lua Config"])
+        let top = settings.frame.maxY
+        let config = try #require(items.last)
+        NSApp.sendAction(try #require(config.action), to: config.target, from: config)
+        #expect(settings.title == "Lua Config" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 360))
+        #expect(settings.frame.maxY == top)
+        #expect(SettingsWindowController.lastPane == .config)
+        // Only a pane comes back.
+        defaults.set("welcome", forKey: SettingsTabViewController.paneKey)
+        #expect(SettingsWindowController.lastPane == .settings)
+
+        let welcome = try #require(WelcomeWindowController(model: model, onClose: {}).window)
+        #expect(welcome.standardWindowButton(.miniaturizeButton)?.isHidden == true && welcome.standardWindowButton(.zoomButton)?.isHidden == true)
+        #expect(welcome.title == "Welcome to Locky" && !welcome.styleMask.contains(.resizable))
+    }
+
     @Test func aRequestedSizeKeepsTheMinimum() {
         #expect(LockyWindowController.clamped(CGSize(width: 600, height: 400)) == CGSize(width: 980, height: 640))
         #expect(LockyWindowController.clamped(CGSize(width: 1600, height: 1000)) == CGSize(width: 1600, height: 1000))
