@@ -74,7 +74,7 @@ the field stays the theme's.
 ## The window
 
 Open it from the menu (Settings… ⌘,), by opening Locky.app again, or with
-`Locky window [dashboard|themes|plugins|config|settings|welcome]`. While it is open, Locky shows in the Dock.
+`Locky window [dashboard|themes|widgets|plugins|config|settings|welcome]`. While it is open, Locky shows in the Dock.
 
 - **Welcome:** opens by itself on the first launch, and from the menu's Welcome… after that. Three steps: pick a
   theme, try it (Preview, or Lock Now to Test), and turn on auto-lock and Open at Login. Skip or Finish goes to
