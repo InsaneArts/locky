@@ -84,3 +84,12 @@ struct MainView: View {
         section == .config ? model.inspection.problems.count : 0
     }
 }
+
+extension View {
+    /// The width of the pages that read from top to bottom (the Dashboard, Plugins, and Settings), from the
+    /// leading edge. A grouped form grows no wider than about this by itself. Pages that are a gallery or an
+    /// editor (Themes, Widgets, Lua Config) use the whole window.
+    func pageWidth() -> some View {
+        frame(maxWidth: 760).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}

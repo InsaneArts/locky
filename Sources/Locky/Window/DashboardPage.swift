@@ -23,8 +23,7 @@ struct DashboardPage: View {
                 }
             }
             .padding(24)
-            .frame(maxWidth: 1100)
-            .frame(maxWidth: .infinity)
+            .pageWidth()
         }
     }
 
