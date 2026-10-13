@@ -41,7 +41,8 @@ local function family(f)
       ui.text(city, ui.font("headline", { lines = 1 })),
       ui.time("EEEE", ui.font("subheadline", { color = "muted" })),
       ui.spacer(),
-      time({ weight = "medium" }, 50),
+      -- Small enough for a rounded theme font, and for AM or PM beside it.
+      time({ weight = "medium", tracking = -1 }, locky.date.locale().hour24 and 44 or 36),
     }
   end
   return ui.vstack {
