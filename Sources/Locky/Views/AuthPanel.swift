@@ -43,9 +43,6 @@ final class AuthModel {
     var password = ""
     /// Bumped to put the keyboard focus back in the field.
     var focusRequest = 0
-    /// The lock could not take the keyboard (macOS refused it): the field asks for a click instead of looking
-    /// ready for typing, so nobody types the password into the app behind the lock.
-    var needsClick = false
     /// Wrong passwords in this lock, and whether a check runs. Here and not in the field, so a rebuilt field (a
     /// display added, the power changed) keeps them.
     var wrong = 0
@@ -300,10 +297,10 @@ struct AuthPanel: View {
             secureField(placeholder: "")
                 .frame(width: 1, height: 1)
                 .opacity(0.011)
-            if showsGlyph, !checking, !(wrong > 0 && password.isEmpty), !model.needsClick, waitText == nil {
+            if showsGlyph, !checking, !(wrong > 0 && password.isEmpty), waitText == nil {
                 glyph.offset(y: diameter * 0.34)
-            } else if auth.hint || model.needsClick || waitText != nil {
-                Text(model.needsClick ? "Click to unlock" : waitText ?? (checking ? "Verifying…" : wrong > 0 && password.isEmpty ? "Wrong password" : ""))
+            } else if auth.hint || waitText != nil {
+                Text(waitText ?? (checking ? "Verifying…" : wrong > 0 && password.isEmpty ? "Wrong password" : ""))
                     .font(font(12, "medium"))
                     .foregroundStyle(wrong > 0 && password.isEmpty && waitText == nil ? style.color("danger") : quiet(onField: true))
                     .offset(y: diameter * 0.36)
@@ -415,7 +412,7 @@ struct AuthPanel: View {
     /// The native secure field, with Locky's own placeholder: SwiftUI draws a field's prompt in the system's
     /// gray, which disappears on light themes. Locky draws it in the palette's muted color instead.
     private func secureField(placeholder: String? = nil, alignment: Alignment = .leading) -> some View {
-        let text = model.needsClick ? "Click to unlock" : waitText ?? placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
+        let text = waitText ?? placeholder ?? auth.placeholder ?? (auth.style == "minimal" ? "" : "Enter Password")
         return ZStack(alignment: alignment) {
             if password.isEmpty, !text.isEmpty {
                 Text(text).font(font(14, "regular")).foregroundStyle(quiet(onField: true)).allowsHitTesting(false)
@@ -470,8 +467,7 @@ struct AuthPanel: View {
     }
 
     private var hint: some View {
-        let text = model.needsClick ? "Click to unlock"
-            : auth.style == "minimal" ? "Type your password to unlock"
+        let text = auth.style == "minimal" ? "Type your password to unlock"
             : !showsGlyph || auth.style == "terminal" ? "Enter your password" : "Touch ID or enter your password"
         return Text(wrong > 0 ? "Wrong password" : text)
             .font(font(12, "medium"))
