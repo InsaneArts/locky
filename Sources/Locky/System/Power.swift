@@ -1,7 +1,7 @@
-import Foundation
+import AppKit
 import IOKit.ps
 
-/// The Mac's power source and Low Power Mode, for settings.json's battery_saver, and a way to turn the displays off.
+/// The Mac's power source and Low Power Mode, for still lock screens, and a way to turn the displays off.
 enum Power {
     /// True while the Mac runs on its battery, or a UPS's. A Mac without a battery reports AC power.
     static var onBattery: Bool {
@@ -32,8 +32,8 @@ enum Power {
 }
 
 extension Settings {
-    /// settings.json's battery_saver: whether the lock screen saves power on battery or in Low Power Mode. Off when
-    /// missing.
+    /// settings.json's battery_saver: whether the lock screen is also still on battery. In Low Power Mode or with
+    /// Reduce Motion on, it is still anyway. Off when missing.
     var batterySaver: Bool {
         get { self["battery_saver"].bool ?? false }
         set { self["battery_saver"] = newValue ? .bool(true) : .nil }
@@ -47,18 +47,23 @@ extension Settings {
     }
 }
 
-/// Calls `onChange` when the Mac moves between its battery and a power adapter, or Low Power Mode turns on or off.
-/// `Power.onBattery` and `Power.lowPowerMode` then say which.
+/// Calls `onChange` when the Mac moves between its battery and a power adapter, Low Power Mode turns on or off, or
+/// Reduce Motion does. `Power.onBattery`, `Power.lowPowerMode`, and NSWorkspace then say which.
 @MainActor
 final class PowerObserver {
     private let onChange: () -> Void
-    private var last: (Bool, Bool)
+    private var last: (Bool, Bool, Bool)
     nonisolated(unsafe) private var source: CFRunLoopSource?
     nonisolated(unsafe) private var token: NSObjectProtocol?
+    nonisolated(unsafe) private var motionToken: NSObjectProtocol?
+
+    private static var now: (Bool, Bool, Bool) {
+        (Power.onBattery, Power.lowPowerMode, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+    }
 
     init(onChange: @escaping () -> Void) {
         self.onChange = onChange
-        last = (Power.onBattery, Power.lowPowerMode)
+        last = Self.now
         // Only for a switch between limited power (a battery or UPS) and AC. IOPSNotificationCreateRunLoopSource also
         // fires for every change in charge, and Apple's header points here for this.
         source = IOPSCreateLimitedPowerNotification({ context in
@@ -71,15 +76,20 @@ final class PowerObserver {
         token = NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
+        motionToken = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                                                        object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.check() }
+        }
     }
 
     deinit {
         if let source { CFRunLoopSourceInvalidate(source) }
         if let token { NotificationCenter.default.removeObserver(token) }
+        if let motionToken { NSWorkspace.shared.notificationCenter.removeObserver(motionToken) }
     }
 
     private func check() {
-        let now = (Power.onBattery, Power.lowPowerMode)
+        let now = Self.now
         guard now != last else { return }
         last = now
         onChange()

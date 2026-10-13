@@ -73,7 +73,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var napGuard: NSObjectProtocol?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var ended = false
-    /// The battery saver: on battery or in Low Power Mode, with settings.json's battery_saver on, nothing moves.
+    /// Nothing moves in Low Power Mode, with Reduce Motion on, or on battery with settings.json's battery_saver on.
     private var still = false
     private var powerObserver: PowerObserver?
     /// settings.json's display_off: the displays go dark after that many seconds without input.
@@ -112,8 +112,9 @@ final class LockSession: NSObject, NSWindowDelegate {
             napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
         }
         observeSystem()
-        still = Self.saving(options.settings)
-        if mode != .embedded, options.settings.batterySaver {
+        // In every mode: the windows' previews are still under Reduce Motion too.
+        still = stillNow
+        if mode != .embedded {
             powerObserver = PowerObserver { [weak self] in self?.powerChanged() }
         }
 
@@ -752,17 +753,24 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     // MARK: Power
 
-    private static func saving(_ settings: Settings) -> Bool {
-        settings.batterySaver && (Power.onBattery || Power.lowPowerMode)
+    /// Whether every lock screen is still: shaders draw once, videos stay on their first frame, and numbers do not
+    /// roll. Low Power Mode and Reduce Motion already ask for less; battery_saver asks for it on battery too.
+    static func still(lowPower: Bool, reduceMotion: Bool, onBattery: Bool, batterySaver: Bool) -> Bool {
+        lowPower || reduceMotion || (batterySaver && onBattery)
     }
 
-    /// The Mac went on battery or off it, or into Low Power Mode or out of it: the lock is drawn again, still or
-    /// moving, with each widget's latest view and what was typed.
+    private var stillNow: Bool {
+        Self.still(lowPower: Power.lowPowerMode, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                   onBattery: Power.onBattery, batterySaver: options.settings.batterySaver)
+    }
+
+    /// The Mac went on battery or off it, into Low Power Mode or out of it, or Reduce Motion changed: the lock is
+    /// drawn again, still or moving, with each widget's latest view and what was typed.
     private func powerChanged() {
-        let now = Self.saving(options.settings)
+        let now = stillNow
         guard now != still else { return }
         still = now
-        LogFile.shared.write(level: "info", message: now ? "battery saver on" : "battery saver off", source: "locky")
+        LogFile.shared.write(level: "info", message: now ? "still on" : "still off", source: "locky")
         if mode == .lock { rebuildForDisplays() }
     }
 
