@@ -62,6 +62,9 @@ import Testing
         let welcome = try #require(WelcomeWindowController(model: model, onClose: {}).window)
         #expect(welcome.standardWindowButton(.miniaturizeButton)?.isHidden == true && welcome.standardWindowButton(.zoomButton)?.isHidden == true)
         #expect(welcome.title == "Welcome to Locky" && !welcome.styleMask.contains(.resizable))
+        // Centered at its own size, not as an empty window that the hosting controller grows later.
+        let screen = try #require(welcome.screen ?? NSScreen.main)
+        #expect(welcome.frame.width > 0 && abs(welcome.frame.midX - screen.visibleFrame.midX) < 1)
     }
 
     @Test func aRequestedSizeKeepsTheMinimum() {

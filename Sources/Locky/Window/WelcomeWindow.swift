@@ -24,6 +24,11 @@ final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
         hosting.sizingOptions = .preferredContentSize
         window.contentViewController = hosting
         window.delegate = self
+        // The hosting controller sizes the window only on its next layout, after center() would run on a 0×0 window.
+        // So the window takes its size here. The first size gives the view its title-bar inset, and the second size
+        // includes that inset.
+        window.setContentSize(hosting.preferredContentSize)
+        window.setContentSize(hosting.preferredContentSize)
         window.center()
     }
 
