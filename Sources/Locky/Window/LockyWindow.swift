@@ -61,7 +61,9 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuI
         onClose()
     }
 
-    // MARK: Menu commands. Their menu items have no target, so they reach this controller while the window is key.
+    // MARK: Menu commands
+
+    // The main menu's items for these have no target: they reach this controller while the Themes window is key.
 
     @objc func importTheme(_ sender: Any?) {
         model.finishEditing()

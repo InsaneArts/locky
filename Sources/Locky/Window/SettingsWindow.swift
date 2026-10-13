@@ -58,7 +58,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-/// The panes, as the window's toolbar: the tab view controller fills the toolbar and keeps it.
+/// The Settings window's panes. With the toolbar style, the tab view controller puts them in the window's toolbar.
 final class SettingsTabViewController: NSTabViewController {
     static let paneKey = "settingsPane"
 
