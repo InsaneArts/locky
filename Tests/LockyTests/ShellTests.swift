@@ -163,6 +163,16 @@ import Testing
         #expect(controller.validateMenuItem(inspector) && inspector.title == "Hide Inspector")
     }
 
+    // MARK: Plugins
+
+    /// Updating one plugin keeps every other plugin's Update….
+    @Test func anUpdateLeavesTheOtherPluginsUpdates() {
+        let updates = [PackUpdate(name: "a", current: "1", latest: "2"), PackUpdate(name: "b", current: "3", latest: "4")]
+        #expect(AppModel.remaining(updates, after: ["a"]) == [updates[1]])
+        // A run that named no plugin updated them all.
+        #expect(AppModel.remaining(updates, after: []).isEmpty)
+    }
+
     /// Light content takes the dark press overlay, as the lock window's appearance does.
     @Test(arguments: [("#F1EFE8", true), ("#02040a", false), (nil, false)] as [(String?, Bool)])
     func aColorIsLightByTheLockWindowsRule(_ hex: String?, _ light: Bool) {

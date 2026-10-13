@@ -65,6 +65,8 @@ final class AppModel {
     /// A package run in progress, and the last one's report.
     private(set) var packRunning: PackManager.Action?
     private(set) var packReport: (action: PackManager.Action, report: PackManager.Report)?
+    /// The plugins a run in progress works on, so each row knows its own spinner.
+    private(set) var packTargets: Set<String> = []
     /// The last update check's results, and when it ran.
     private(set) var updates: [PackUpdate] = []
     private(set) var lastUpdateCheck: Date?
@@ -194,22 +196,22 @@ final class AppModel {
 
     /// Runs `locky pack <action>` (or `work`, which reports as `action`) in the background, one run at a time, then
     /// reads the config again, unless it was a check: that changes nothing, and reading the config runs plugin code.
-    func runPack(_ action: PackManager.Action, work: (@Sendable (PackManager) -> PackManager.Report)? = nil,
+    /// `targets` names the plugins the run works on; none means all of them.
+    func runPack(_ action: PackManager.Action, targets: Set<String> = [], work: (@Sendable (PackManager) -> PackManager.Report)? = nil,
                  then done: ((PackManager.Report) -> Void)? = nil) {
         guard packRunning == nil else { return }
         packRunning = action
+        packTargets = targets
         let config = store.config
         Task {
-            let report = await Task.detached {
-                let manager = PackManager(path: .standard(config: config))
-                return work?(manager) ?? manager.run(action)
-            }.value
+            let report = await Self.run(action, config: config, work: work)
             packRunning = nil
+            packTargets = []
             packReport = (action, report)
-            // What was checked no longer holds: Update All brought every plugin up to date, and a removed one has
+            // What was checked no longer holds: the plugins an update moved are up to date, and a removed one has
             // no update. A new check gives the rest again.
             switch action {
-            case .update where report.ok: updates = []
+            case .update where report.ok: updates = Self.remaining(updates, after: targets)
             case .clean: updates.removeAll { !FileManager.default.fileExists(atPath: RuntimePath.defaultPacks.appending(path: $0.name).path) }
             default: break
             }
@@ -218,9 +220,21 @@ final class AppModel {
         }
     }
 
+    /// The run itself, off the main actor: git and the file system take seconds.
+    @concurrent nonisolated private static func run(_ action: PackManager.Action, config: URL,
+                                                    work: (@Sendable (PackManager) -> PackManager.Report)?) async -> PackManager.Report {
+        let manager = PackManager(path: .standard(config: config))
+        return work?(manager) ?? manager.run(action)
+    }
+
+    /// The updates an update run leaves: none when it named no plugin (it updated them all), else the plugins it did not name.
+    nonisolated static func remaining(_ updates: [PackUpdate], after targets: Set<String>) -> [PackUpdate] {
+        targets.isEmpty ? [] : updates.filter { !targets.contains($0.name) }
+    }
+
     /// Moves each plugin to the commit the user reviewed in `updates`.
     func applyUpdates(_ updates: [PackUpdate]) {
-        runPack(.update, work: { $0.apply(updates) })
+        runPack(.update, targets: Set(updates.map(\.name)), work: { $0.apply(updates) })
     }
 
     /// Fetches every plugin the lockfile pins and compares it with the pinned commit; changes nothing and runs no Lua.
