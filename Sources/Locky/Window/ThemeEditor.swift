@@ -2,118 +2,225 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The theme editor's panel. On top: the theme, and whether a lock uses it. With nothing selected: its background,
-/// and its widgets and password field to select. With a widget selected: where it sits, its card, and its options. With the password field selected:
-/// where it sits. Changes save to settings.json at once, and the preview shows them as they are made.
-struct ThemeEditor: View {
-    @Bindable var model: AppModel
-    let editing: ThemeEditing
-    @Binding var selection: EditorItem?
-    /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
-    @Binding var draft: Settings?
+/// Customize: one theme's live lock screen as a canvas, where widgets are clicked to change them and dragged to move
+/// them, the inspector beside it, and the theme's commands in the toolbar. Changes save to settings.json at once, and
+/// the canvas follows.
+struct ThemeEditorPage: View {
+    let model: AppModel
+    let info: Inspection.ThemeInfo
+    /// The theme being edited; a new one per theme, so one theme's layout is never saved as another's.
+    @State private var editing: ThemeEditing?
+    @State private var selection: EditorItem?
+    /// settings.json with a change still being made, such as a slider being dragged: the canvas shows it first.
+    @State private var draft: Settings?
     /// The name Duplicate Theme asks for, while it asks.
     @State private var copyName: String?
-    @State private var problem: String?
+    /// A command that failed: its alert's title and message.
+    @State private var problem: (title: String, message: String)?
+    @AppStorage("themeEditorGrid") private var grid = false
+    @AppStorage("customizeInspector") private var inspectorShown = true
+    @Environment(\.undoManager) private var undoManager
+
+    /// The editor of this theme, once it is made: right after a change of theme, `editing` is still the last one's.
+    private var current: ThemeEditing? { editing?.theme.id == info.id ? editing : nil }
+    /// The editor once it has the theme's layout, which every change starts from.
+    private var loaded: ThemeEditing? { current?.layout == nil ? nil : current }
+
+    var body: some View {
+        content
+            .navigationTitle(info.name)
+            .toolbar { toolbar }
+            // Read again when Lua files change: init.lua may give the theme other widgets or options.
+            .task(id: "\(info.id)-\(model.inspection.sources)") {
+                let next = ThemeEditing(theme: info, model: model)
+                next.undoManager = undoManager
+                await next.load()
+                // A newer load replaced this one.
+                guard !Task.isCancelled else { return }
+                editing = next
+            }
+            .onChange(of: info.id) {
+                selection = nil
+                draft = nil
+            }
+            // A change in progress belongs to what was selected.
+            .onChange(of: selection) { draft = nil }
+            // File menu commands that need the editor: the More menu's, under its rules.
+            .onChange(of: model.editorRequest) {
+                guard let request = model.editorRequest else { return }
+                model.editorRequest = nil
+                guard allows(request) else { return }
+                switch request {
+                case .duplicate: copyName = "\(info.name) Copy"
+                case .export: export()
+                case .revert: current?.revertToOriginal()
+                }
+            }
+            .sheet(isPresented: Binding(get: { model.addingWidget && loaded != nil }, set: { model.addingWidget = $0 })) {
+                WidgetGallerySheet(model: model, theme: info) { name, family in
+                    if let loaded { selection = .widget(loaded.add(name, family: family)) }
+                }
+            }
+            .alert("Duplicate Theme", isPresented: Binding(get: { copyName != nil }, set: { if !$0 { copyName = nil } })) {
+                TextField("Name", text: Binding(get: { copyName ?? "" }, set: { copyName = $0 }))
+                Button("Duplicate") { duplicate(named: copyName ?? "") }
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert(problem?.title ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
+                Button("OK") {}
+            } message: {
+                Text(problem?.message ?? "")
+            }
+    }
+
+    /// The canvas, in the space the inspector leaves; for a theme that does not load, why.
+    @ViewBuilder private var content: some View {
+        if let error = info.error {
+            ContentUnavailableView("Can't Edit This Theme", systemImage: "exclamationmark.triangle", description: Text(error))
+        } else {
+            ThemePreview(theme: info.id, settings: draft ?? model.store.settings, sources: model.inspection.sources,
+                         config: model.store.config, alwaysLive: model.screenshots, canvas: canvas, info: info)
+                .aspectRatio(1.6, contentMode: .fit)
+                .previewFrame()
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .inspector(isPresented: $inspectorShown) {
+                    Group {
+                        if let current {
+                            ThemeInspector(model: model, editing: current, selection: $selection, draft: $draft)
+                        } else {
+                            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                    .inspectorColumnWidth(min: 280, ideal: 300, max: 400)
+                }
+        }
+    }
+
+    /// Three groups: the theme's tools, Use Theme, and Done. Use Theme stays when it does not apply, dimmed, so a click
+    /// never takes a button from under the pointer.
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button("Add Widget…", systemImage: "plus") { model.addingWidget = true }
+                .help("Add a widget to this theme")
+                .disabled(loaded == nil)
+            Button("Preview", systemImage: "play.rectangle") { model.preview(info.id) }
+                .help("Show this theme full size")
+                .disabled(info.error != nil)
+            Menu {
+                Button("Duplicate Theme…") { copyName = "\(info.name) Copy" }
+                    .disabled(!allows(.duplicate))
+                Button("Export Theme…", action: export)
+                    .disabled(!allows(.export))
+                Divider()
+                Button("Revert to Original") { current?.revertToOriginal() }
+                    .disabled(!allows(.revert))
+                if model.canTrash(info.id) {
+                    Button("Move to Trash", action: moveToTrash)
+                }
+            } label: {
+                Label("More", systemImage: "ellipsis")
+            }
+            .menuIndicator(.hidden)
+            .help("Duplicate, export, or revert this theme")
+            .disabled(info.error != nil && !model.canTrash(info.id))
+        }
+        if #available(macOS 26, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
+        ToolbarItem(placement: .primaryAction) {
+            Button("Use Theme") { model.use(info.id) }
+                .disabled(info.id == model.activeTheme || info.error != nil)
+        }
+        if #available(macOS 26, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
+        ToolbarItem(placement: .primaryAction) {
+            Button("Done") { model.finishEditing() }
+                .buttonStyle(.borderedProminent)
+        }
+    }
+
+    /// Whether a More menu command applies: none to a theme that does not load, Export only to a theme another Mac can
+    /// load, and Revert only to a theme with changes.
+    private func allows(_ command: AppModel.EditorRequest) -> Bool {
+        guard info.error == nil else { return false }
+        switch command {
+        case .duplicate: return true
+        case .export: return model.canExport(info.id)
+        case .revert: return current?.isChanged == true
+        }
+    }
+
+    /// What the canvas shows and reports, once the theme's layout is in: the selection, the grid, and where clicks,
+    /// drags, and keys go.
+    private var canvas: ThemePreview.Canvas? {
+        guard let editing = loaded else { return nil }
+        return ThemePreview.Canvas(selection: selection, grid: grid, name: { editing.name(of: $0) }, select: { selection = $0 },
+                                   move: { editing.move($0, anchor: $1, offset: $2) },
+                                   nudge: { editing.nudge($0, by: $1, byGrid: $2) },
+                                   remove: { index in
+                                       draft = nil
+                                       selection = nil
+                                       editing.remove(index)
+                                   })
+    }
+
+    /// This theme with its changes, as a theme named `name`.
+    private func made(name: String) -> ThemeFile {
+        ThemeFile.made(from: info.id, edit: model.store.settings["themes"][info.id], name: name, config: model.store.config)
+    }
+
+    /// Writes the copy to the config's themes folder, and opens it in Customize.
+    private func duplicate(named name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard ThemeFile.isName(name) else {
+            problem = ("Can't Duplicate the Theme", "Use a name of 1 to 80 characters on one line.")
+            return
+        }
+        let file = made(name: name)
+        Task {
+            do {
+                model.customize(try await model.install(file))
+            } catch {
+                problem = ("Can't Duplicate the Theme", (error as? LuaError)?.message ?? error.localizedDescription)
+            }
+        }
+    }
+
+    /// Saves the theme, with its changes, as one file to share; Import Theme adds it on another Mac.
+    private func export() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(info.id).lua"
+        panel.allowedContentTypes = [ThemeFile.type]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try made(name: info.name).source().write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            problem = ("Can't Export the Theme", (error as? LuaError)?.message ?? error.localizedDescription)
+        }
+    }
+
+    /// The person's own theme goes to the Trash, which is the undo, and Customize ends with it.
+    private func moveToTrash() {
+        do {
+            try model.trash(info.id)
+        } catch {
+            problem = ("Can't Move the Theme to the Trash", error.localizedDescription)
+        }
+    }
+}
+
+/// Customize's inspector, which follows the selection. With nothing selected: the theme's background, and its widgets
+/// and password field to select. With a widget selected: where it sits, its card, and its options. With the password
+/// field selected: where it sits. Changes save to settings.json at once, and the canvas shows them as they are made.
+struct ThemeInspector: View {
+    let model: AppModel
+    let editing: ThemeEditing
+    @Binding var selection: EditorItem?
+    /// settings.json with a change still being made, such as a slider being dragged: the canvas shows it first.
+    @Binding var draft: Settings?
 
     private var theme: Inspection.ThemeInfo { editing.theme }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            content
-        }
-    }
-
-    /// The theme being edited, and whether a lock uses it: the theme selected here is not always the one that locks.
-    private var header: some View {
-        let active = model.activeTheme
-        let scheduled = model.store.settings.schedule != nil
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(theme.name).font(.title3.weight(.semibold)).lineLimit(1)
-                Spacer(minLength: 0)
-                Menu {
-                    Button("Duplicate Theme…") { copyName = "\(theme.name) Copy" }
-                    Button("Export Theme…", action: export)
-                        .disabled(!ThemeFile.isBuiltIn(made(name: theme.name).base))
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .disabled(editing.layout == nil)
-                .help("Duplicate this theme with your changes, or export it to share")
-            }
-            if theme.id != active {
-                let name = model.inspection.theme(active)?.name ?? active
-                Text(scheduled ? "Not in use: the theme schedule shows \(name) now." : "Not in use: your lock shows \(name).")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !scheduled {
-                    Button { model.store.update { $0["theme"] = .string(theme.id) } } label: {
-                        Text("Use This Theme").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(theme.error != nil)
-                    .help("Lock with this theme from now on")
-                }
-            }
-        }
-        .padding(16)
-        .alert("Duplicate Theme", isPresented: Binding(get: { copyName != nil }, set: { if !$0 { copyName = nil } })) {
-            TextField("Name", text: Binding(get: { copyName ?? "" }, set: { copyName = $0 }))
-            Button("Duplicate") { duplicate(named: copyName ?? "") }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("A theme of your own, with this theme's look and your changes to it, in your config folder's themes.")
-        }
-        .alert("Can't Save the Theme", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
-            Button("OK") {}
-        } message: {
-            Text(problem ?? "")
-        }
-    }
-
-    /// This theme with the editor's changes, as a theme named `name`.
-    private func made(name: String) -> ThemeFile {
-        ThemeFile.made(from: theme.id, edit: model.store.settings["themes"][theme.id], name: name, config: model.store.config)
-    }
-
-    /// Writes the copy to the config's themes folder, and opens it in the editor.
-    private func duplicate(named name: String) {
-        let name = name.trimmingCharacters(in: .whitespaces)
-        guard ThemeFile.isName(name) else {
-            problem = "A theme's name has 1 to 80 characters, on one line."
-            return
-        }
-        let id = ThemeFile.id(for: name, taken: ThemeFile.takenIDs(model.inspection.themes, settings: model.store.settings, config: model.store.config))
-        let file = made(name: name)
-        Task {
-            do {
-                try await file.install(as: id, config: model.store.config)
-                model.customize(id)
-                model.refresh()
-            } catch {
-                problem = (error as? LuaError)?.message ?? error.localizedDescription
-            }
-        }
-    }
-
-    /// Saves the theme, with the editor's changes, as one file to share; Import Theme adds it on another Mac.
-    private func export() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(theme.id).lua"
-        panel.allowedContentTypes = [ThemeFile.type]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try made(name: theme.name).source().write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            problem = (error as? LuaError)?.message ?? error.localizedDescription
-        }
+        content
     }
 
     private var content: some View {
