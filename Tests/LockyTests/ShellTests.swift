@@ -115,4 +115,11 @@ import Testing
         // A menu cannot show Space.
         #expect(Shortcut(keyCode: UInt16(kVK_Space), modifiers: [.command]).menuKeyEquivalent == nil)
     }
+
+    @Test func aFailedThemeNamesItselfInTheMenu() {
+        var inspection = Inspection()
+        inspection.themes = [Inspection.ThemeInfo(id: "tokyonight", name: "Tokyo Night")]
+        #expect(ThemeFailure(theme: "tokyonight", fallback: "default", message: "", date: 0).menuTitle(inspection) == "Tokyo Night Didn't Load")
+        #expect(ThemeFailure(theme: "gone", fallback: "default", message: "", date: 0).menuTitle(inspection) == "gone Didn't Load")
+    }
 }
