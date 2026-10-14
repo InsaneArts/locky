@@ -176,8 +176,8 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
     }
 
-    /// After a switch to another theme, the old theme's screen stays until the new one is ready: its widgets are not
-    /// the new theme's to drag.
+    /// After a switch to another theme, the old theme's screen ends at once, and the canvas has nothing to drag until
+    /// the new theme's screen is ready.
     @Test func theCanvasWaitsForTheNextThemesScreen() async throws {
         let page = try await open()
         try page.sandbox.write("themes/u.lua", "return { background = { color = '#402020' }, widgets = { { 'box', anchor = 'top' } } }")
@@ -205,6 +205,18 @@ import Testing
         #expect(await wait(page.window) { frame(of: .widget(0), page) == box })
         undo.redo()
         #expect(saved(page).themeEdit("t", "widgets")[0]["anchor"] == .string("top-left"))
+    }
+
+    /// File › Revert to Original reaches the page as a request, which runs the More menu's command and is used up.
+    @Test func aFileMenuRevertTakesTheChangesBack() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(0), page))
+        drag(page, from: CGPoint(x: box.midX, y: box.midY), by: CGPoint(x: -560, y: -330))
+        #expect(!saved(page)["themes"].isNil)
+        page.model.editorRequest = .revert
+        #expect(await wait(page.window) { saved(page)["themes"].isNil })
+        #expect(page.model.editorRequest == nil)
+        #expect(page.window.undoManager?.undoMenuItemTitle == "Undo Revert to Original")
     }
 
     private func press(_ key: Int, shift: Bool = false, _ page: Page) {
@@ -242,6 +254,190 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(0) })
         press(0x1B, page)
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+    }
+
+    @Test func escapeClearsTheSelectionThenEndsCustomize() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+        press(0x1B, page)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        #expect(page.model.editingTheme == "t")
+        press(0x1B, page)
+        #expect(page.model.editingTheme == nil)
+    }
+
+    /// Escape typed in the inspector's text field stays in the field: the selection under it stays.
+    @Test func escapeInATextFieldStaysInTheField() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        // The widget's X offset, once its inspector shows.
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("-30", in: page.window.contentView!)
+            return found != nil
+        })
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        // SwiftUI sees the field's focus on its next updates.
+        for _ in 0..<20 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        page.window.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: page.window.windowNumber,
+                                               context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
+                                               keyCode: 53)!)
+        try await Task.sleep(for: .milliseconds(200))
+        page.window.contentView?.layoutSubtreeIfNeeded()
+        #expect(page.preview.canvas?.selection == .widget(1))
+        #expect(page.model.editingTheme == "t")
+    }
+
+    /// Escape as a key press sends it: to whatever has the keyboard in the window.
+    private func escape(_ page: Page) {
+        page.window.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: page.window.windowNumber,
+                                               context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
+                                               keyCode: 53)!)
+    }
+
+    /// Esc needs no click first: the canvas has the keyboard as soon as Customize opens.
+    @Test func escapeEndsCustomizeRightAfterItOpens() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.window.firstResponder === page.overlay })
+        escape(page)
+        #expect(page.model.editingTheme == nil)
+    }
+
+    /// After an inspector row selects an item, the keys reach the canvas, here from the page itself, which has the
+    /// keyboard after the gallery's grid had it.
+    @Test func escapeWorksAfterAnInspectorRowSelects() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.window.firstResponder === page.overlay })
+        #expect(page.window.makeFirstResponder(page.window.contentView))
+        page.preview.canvas?.select(.widget(1))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) && page.window.firstResponder === page.overlay })
+        escape(page)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        escape(page)
+        #expect(page.model.editingTheme == nil)
+    }
+
+    /// A text field that goes with its item, as after Remove Widget, leaves the keyboard to the canvas.
+    @Test func theCanvasTakesTheKeyboardFromAFieldThatGoes() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("-30", in: page.window.contentView!)
+            return found != nil
+        })
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        for _ in 0..<10 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        page.preview.canvas?.select(nil)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil && page.window.firstResponder === page.overlay })
+        escape(page)
+        #expect(page.model.editingTheme == nil)
+    }
+
+    /// A drag ends only where the mouse goes up: Escape during one changes nothing.
+    @Test func escapeDuringADragChangesNothing() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(0), page))
+        let start = CGPoint(x: box.midX, y: box.midY)
+        page.overlay.mouseDown(with: event(.leftMouseDown, at: start, on: page))
+        page.overlay.mouseDragged(with: event(.leftMouseDragged, at: CGPoint(x: start.x - 100, y: start.y - 100), on: page))
+        for _ in 0..<3 {
+            press(0x1B, page)
+            try await Task.sleep(for: .milliseconds(100))
+            page.window.contentView?.layoutSubtreeIfNeeded()
+        }
+        #expect(page.preview.canvas?.selection == .widget(0))
+        #expect(page.model.editingTheme == "t")
+        page.overlay.mouseUp(with: event(.leftMouseUp, at: CGPoint(x: start.x - 100, y: start.y - 100), on: page))
+        #expect(saved(page).themeEdit("t", "widgets")[0]["offset"] == .array([.int(-100), .int(-100)]))
+    }
+
+    private static func textField(_ value: String, in view: NSView) -> NSTextField? {
+        if let field = view as? NSTextField, field.isEditable, field.stringValue == value { return field }
+        for child in view.subviews { if let match = textField(value, in: child) { return match } }
+        return nil
+    }
+
+    private func click(_ page: Page, at point: CGPoint) {
+        page.overlay.mouseDown(with: event(.leftMouseDown, at: point, on: page))
+        page.overlay.mouseUp(with: event(.leftMouseUp, at: point, on: page))
+    }
+
+    @Test func voiceOverSeesAGroupOfButtonsThatSelect() async throws {
+        let page = try await open()
+        let overlay = page.overlay
+        // Both widgets and the password field, laid out.
+        #expect(await wait(page.window) { page.preview.editables.count == 3 })
+        #expect(overlay.isAccessibilityElement() && overlay.accessibilityRole() == .group && overlay.accessibilityLabel() == "Lock Screen")
+        let elements = try #require(overlay.accessibilityChildren() as? [CanvasItemElement])
+        let again = try #require(overlay.accessibilityChildren() as? [CanvasItemElement])
+        // The same objects while nothing changes: AppKit leaves them to the view that made them.
+        #expect(elements.count == 3 && zip(elements, again).allSatisfy { $0 === $1 })
+        #expect(elements.allSatisfy { ($0.accessibilityParent() as? CanvasOverlay) === overlay && $0.accessibilityRole() == .button })
+        #expect(elements.map { $0.accessibilityLabel() ?? "" }.sorted() == ["Box", "Box", "Password Field"])
+        // Buttons that work, none of them selected yet.
+        #expect(elements.allSatisfy { $0.isAccessibilityEnabled() && !$0.isAccessibilitySelected() })
+        let box = try #require(elements.first { $0.item == .widget(1) })
+        #expect(box.accessibilityPerformPress())
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+        #expect(elements.filter { $0.isAccessibilitySelected() }.map(\.item) == [.widget(1)])
+    }
+
+    /// VoiceOver outlines each item where it is drawn, and finds it there: the canvas is flipped, the screen is not.
+    @Test func voiceOverFindsEachItemWhereItIsDrawn() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.preview.editables.count == 3 })
+        let elements = try #require(page.overlay.accessibilityChildren() as? [CanvasItemElement])
+        let scale = page.overlay.bounds.width / ThemePreviewView.layoutSize.width
+        for element in elements {
+            let layout = try #require(frame(of: element.item, page))
+            let drawn = CGRect(x: layout.minX * scale, y: layout.minY * scale, width: layout.width * scale, height: layout.height * scale)
+            let onScreen = page.window.convertToScreen(page.overlay.convert(drawn, to: nil))
+            #expect(element.accessibilityFrame().contains(onScreen), "\(element.item)")
+            #expect(page.overlay.accessibilityHitTest(CGPoint(x: onScreen.midX, y: onScreen.midY)) as? CanvasItemElement === element, "\(element.item)")
+        }
+    }
+
+    /// While it is a canvas, VoiceOver finds only the canvas's buttons there, top to bottom: the live screen under them
+    /// has a password field that takes nothing.
+    @Test func voiceOverReadsOnlyTheCanvasTopToBottom() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.preview.editables.count == 3 })
+        let children = try #require(page.preview.accessibilityChildren())
+        #expect(children.count == 1 && children.first as? CanvasOverlay === page.overlay)
+        let elements = try #require(page.overlay.accessibilityChildren() as? [CanvasItemElement])
+        // The box at the top right, the one in the center, and the password field at the bottom.
+        #expect(elements.map(\.item) == [.widget(1), .widget(0), .passwordField])
+    }
+
+    @Test func editDeleteRemovesTheSelectedWidgetOnly() async throws {
+        let page = try await open()
+        let delete = NSMenuItem(title: "Delete", action: #selector(CanvasOverlay.delete(_:)), keyEquivalent: "")
+        #expect(!page.overlay.validateMenuItem(delete))
+        #expect(await wait(page.window) { frame(of: .passwordField, page) != nil })
+        let field = try #require(frame(of: .passwordField, page))
+        click(page, at: CGPoint(x: field.midX, y: field.midY))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .passwordField })
+        #expect(!page.overlay.validateMenuItem(delete))
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+        #expect(page.overlay.validateMenuItem(delete))
+        page.overlay.delete(nil)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        #expect(saved(page).themeEdit("t", "widgets").array?.count == 1)
     }
 
     @Test func thePasswordFieldMovesToo() async throws {
@@ -349,6 +545,88 @@ import Testing
         undo.redo()
         undo.redo()
         #expect(model.store.settings == changed)
+    }
+
+    /// Theme t from `source`, in the editor, with Edit ▸ Undo steps made one at a time.
+    @MainActor
+    private struct Fixture {
+        let sandbox: Sandbox
+        let model: AppModel
+        let editing: ThemeEditing
+        let undo = UndoManager()
+
+        init(_ source: String) async throws {
+            sandbox = try Sandbox()
+            try sandbox.write("themes/t.lua", source)
+            try sandbox.write("plugin/w.lua", "locky.widget.define('w', { render = function() end })")
+            _ = NSApplication.shared
+            model = AppModel(store: SettingsStore(config: sandbox.config))
+            editing = ThemeEditing(theme: Inspection.ThemeInfo(id: "t", name: "t"), model: model)
+            await editing.load()
+            undo.groupsByEvent = false
+            editing.undoManager = undo
+        }
+
+        func step(_ change: () -> Void) {
+            undo.beginUndoGrouping()
+            change()
+            undo.endUndoGrouping()
+        }
+
+        var edit: LuaValue { model.store.settings["themes"]["t"] }
+    }
+
+    @Test func revertToOriginalTakesEveryChangeBackInOneStep() async throws {
+        let editor = try await Fixture("return { widgets = { { 'w', anchor = 'top' } } }")
+        let (editing, undo) = (editor.editing, editor.undo)
+        #expect(!editing.isChanged)
+        editor.step { editing.move(.widget(0), anchor: .topLeft, offset: CGPoint(x: 30, y: 30)) }
+        #expect(editing.isChanged)
+        editor.step { editing.setAuth(anchor: "top", x: 0, y: 60) }
+        let changed = editor.edit
+
+        editor.step { editing.revertToOriginal() }
+        #expect(!editing.isChanged && editor.edit.isNil)
+        #expect(undo.undoMenuItemTitle == "Undo Revert to Original")
+        undo.undo()
+        // One step: the move and the password field's place are both back.
+        #expect(editor.edit == changed)
+        #expect(undo.undoMenuItemTitle == "Undo Move Password Field")
+        undo.redo()
+        #expect(editor.edit.isNil)
+        undo.undo()
+        #expect(editor.edit == changed)
+    }
+
+    @Test func resetPutsAnItemBackWhereTheThemeHasIt() async throws {
+        let editor = try await Fixture("""
+        return { auth = { anchor = 'bottom', offset = { 0, -60 } }, widgets = { { 'w', anchor = 'top-right', offset = { -30, 30 } } } }
+        """)
+        let (editing, undo) = (editor.editing, editor.undo)
+        #expect(!editing.isMoved(.widget(0)) && !editing.isMoved(.passwordField))
+        editor.step { editing.move(.widget(0), anchor: .center, offset: CGPoint(x: 10, y: 20)) }
+        #expect(editing.isMoved(.widget(0)))
+        editor.step { editing.resetPlace(.widget(0)) }
+        let placement = try #require(editing.placements.first)
+        #expect(placement.anchor == "top-right" && placement.x == -30 && placement.y == 30)
+        #expect(!editing.isMoved(.widget(0)))
+        #expect(undo.undoMenuItemTitle == "Undo Reset Position")
+        undo.undo()
+        #expect(editing.isMoved(.widget(0)) && editing.placements.first?.anchor == "center")
+        undo.redo()
+
+        // A widget the window added has no place of the theme's to go back to.
+        var added = 0
+        editor.step { added = editing.add("w") }
+        #expect(editing.themePlace(editing.placements[added]) == nil && !editing.isMoved(.widget(added)))
+
+        editor.step { editing.setAuth(anchor: "top", x: 0, y: 90) }
+        #expect(editing.isMoved(.passwordField))
+        editor.step { editing.resetPlace(.passwordField) }
+        #expect(editor.edit["auth"].isNil && !editing.isMoved(.passwordField))
+        let place = editing.authPlace
+        #expect(place.anchor == "bottom" && place.x == 0 && place.y == -60)
+        #expect(undo.undoMenuItemTitle == "Undo Reset Position")
     }
 
     /// Off and on again, a widget goes back to the theme's card, in the theme's style: the switch saves only a change.

@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// A theme's lock screen, live: laid out at 1440×900 like a real screen and scaled down to fit. A change to the
-/// theme itself (the editor's) shows in place. Any other change builds the new screen out of sight and fades it in
-/// over the old one, so the preview never goes blank. It stops while its window is hidden, so a forgotten window
-/// costs nothing.
+/// A theme's lock screen, live: laid out at 1440×900 like a real screen and scaled down to fit. Until the live screen
+/// is ready, the theme's thumbnail (or its background color) stands in for it. A change to the theme itself (the
+/// editor's) shows in place. Another theme shows its own thumbnail at once; any other change builds the new screen
+/// out of sight and fades it in over the old one, so the preview never goes blank. It stops while its window is
+/// hidden, so a forgotten window costs nothing.
 struct ThemePreview: NSViewRepresentable {
     var theme: String
     /// The app's copy of settings.json, which the preview applies as a lock would.
@@ -24,7 +25,7 @@ struct ThemePreview: NSViewRepresentable {
     struct Canvas {
         var selection: EditorItem?
         var grid = false
-        /// The name on a selected item.
+        /// The name VoiceOver reads for an item, as the inspector names it.
         var name: (EditorItem) -> String
         var select: (EditorItem?) -> Void
         /// A drag ended: the item's new anchor and offset, in layout points.
@@ -33,6 +34,8 @@ struct ThemePreview: NSViewRepresentable {
         var nudge: (EditorItem, (x: Int, y: Int), Bool) -> Void
         /// Delete: the selected widget goes.
         var remove: (Int) -> Void
+        /// Escape with nothing selected: Customize ends.
+        var exit: () -> Void
     }
 
     func makeNSView(context: Context) -> ThemePreviewView { ThemePreviewView() }
@@ -41,6 +44,7 @@ struct ThemePreview: NSViewRepresentable {
         view.alwaysLive = alwaysLive
         view.config = config
         view.canvas = canvas
+        view.info = info
         view.show(ThemePreviewView.Key(theme: theme, settings: settings, sources: sources))
     }
 
@@ -81,9 +85,15 @@ final class ThemePreviewView: NSView {
         didSet {
             overlay.isHidden = canvas == nil
             overlay.needsDisplay = true
+            // When the canvas shows, and when another item is selected (an inspector row selects too), the keys go to it.
+            if canvas != nil, oldValue == nil || oldValue?.selection != canvas?.selection { overlay.takeKeyboardIfFree() }
         }
     }
-    /// Rounds the corners, in screen points.
+    /// The shown theme's info, for the placeholder.
+    var info: Inspection.ThemeInfo?
+    /// The theme whose placeholder the stage shows; nil for black.
+    private var placeholder: Inspection.ThemeInfo?
+    /// Rounds the corners, in screen points. Its own layer shows the placeholder, under the screens.
     private let clip = NSView()
     /// Holds each session's screen at the layout size; its frame is the scaled-down size.
     private let stage = NSView()
@@ -112,6 +122,7 @@ final class ThemePreviewView: NSView {
         clip.layer?.cornerRadius = 10
         clip.layer?.cornerCurve = .continuous
         clip.layer?.masksToBounds = true
+        clip.layer?.contentsGravity = .resizeAspectFill
         stage.wantsLayer = true
         clip.addSubview(stage)
         addSubview(clip)
@@ -124,7 +135,18 @@ final class ThemePreviewView: NSView {
 
     func show(_ key: Key) {
         wanted = key
+        showPlaceholder(for: key.theme)
         advance()
+    }
+
+    /// What the stage shows under the screens, so it is never black while a theme's screen loads: the theme's
+    /// thumbnail, else its background color, else black.
+    private func showPlaceholder(for theme: String) {
+        let info = info?.id == theme ? info : nil
+        guard info != placeholder else { return }
+        placeholder = info
+        clip.layer?.contents = info.flatMap(ThemeThumbnails.image(for:))
+        clip.layer?.backgroundColor = (info.flatMap { NSColor(hex: $0.palette["bg"] ?? "") } ?? .black).cgColor
     }
 
     func stop() {
@@ -135,8 +157,8 @@ final class ThemePreviewView: NSView {
     }
 
     /// The current screen's items the editor can select, with their frames in layout points: none while the screen
-    /// shows another theme (one the editor left, waiting for its replacement to load, or the one Locky fell back to),
-    /// or the theme without the window's changes.
+    /// waits for a new one (other Lua files, or other settings.json values it shows), shows the theme Locky fell back
+    /// to, or shows the theme without the window's changes.
     var editables: [(item: EditorItem, frame: CGRect)] {
         guard let current, let wanted, !current.key.needsRestart(for: wanted), current.session.shows(theme: wanted.theme) else { return [] }
         return current.session.editables
@@ -152,6 +174,14 @@ final class ThemePreviewView: NSView {
     /// Moves toward the wanted key: starts a session, reloads the current one in place, or replaces it.
     private func advance() {
         guard let wanted, visible else { return }
+        // Another theme ends this one's screen at once: the new theme's placeholder shows until its own screen is
+        // ready, so a name never sits over another theme's picture.
+        if let current, current.key.theme != wanted.theme {
+            current.session.end("replaced")
+            current.container.removeFromSuperview()
+            self.current = nil
+            overlay.needsDisplay = true
+        }
         if let incoming {
             // One that is loading shows the theme's changes once it is in front.
             if incoming.key.needsRestart(for: wanted) { begin(wanted) }
@@ -207,14 +237,16 @@ final class ThemePreviewView: NSView {
         session.begin()
     }
 
-    /// Fades a ready session in over the current one, which ends once it is covered.
+    /// Fades a ready session in over the current one, or over the placeholder, and the old one ends once it is
+    /// covered. Opacity only, so it stays with Reduce Motion.
     private func promote(_ session: LockSession) {
         guard let incoming, incoming.session === session else { return }
         let old = current
         current = incoming
         self.incoming = nil
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.3
+            context.duration = 0.2
+            context.timingFunction = Motion.easeOut
             incoming.container.animator().alphaValue = 1
         }, completionHandler: {
             MainActor.assumeIsolated {
@@ -253,6 +285,12 @@ final class ThemePreviewView: NSView {
         if visible { advance() } else { endSessions() }
     }
 
+    /// While it is a canvas, VoiceOver finds the canvas's buttons here, not the live screen under them, whose password
+    /// field takes nothing.
+    override func accessibilityChildren() -> [Any]? {
+        canvas == nil ? super.accessibilityChildren() : [overlay]
+    }
+
     override func layout() {
         super.layout()
         let size = Self.layoutSize
@@ -263,22 +301,31 @@ final class ThemePreviewView: NSView {
                             width: fitted.width, height: fitted.height)
         stage.frame = clip.bounds
         stage.setBoundsSize(size)
-        // Each screen fills the stage at the layout size, whatever size the stage had when the screen was made.
+        // Each screen fills the stage at the layout size, whatever size the stage had when the screen was made. The size
+        // itself, not the stage's bounds: AppKit works those out from the scaled frame, a hair off (900.0000000000001),
+        // and a centered widget's frame then rounds out a point too tall.
         for container in stage.subviews {
-            container.frame = stage.bounds
+            container.frame = CGRect(origin: .zero, size: size)
             for screen in container.subviews { screen.frame = container.bounds }
         }
         overlay.frame = clip.frame
     }
 }
 
-/// The theme editor's layer over the preview: the grid, and outlines on the hovered and the selected item. A click
-/// selects an item, and a drag moves it (onto the grid while the grid shows); a click elsewhere clears the
-/// selection.
+/// The theme editor's layer over the preview: the grid, and outlines. While the pointer is over the canvas, every
+/// item it can select has a faint outline and the one under the pointer a stronger one; the selected item has the
+/// accent color. A click selects an item, and a drag moves it (onto the grid while the grid shows); a click elsewhere
+/// clears the selection.
 @MainActor
 final class CanvasOverlay: NSView {
     weak var preview: ThemePreviewView?
+    private var pointerInside = false
     private var hovered: EditorItem?
+    /// Hover follows the pointer only in the key window: another window's turn clears it.
+    private var resignKey: NSObjectProtocol?
+    /// VoiceOver's button for each item. AppKit leaves elements to the view that makes them, so they stay the same
+    /// objects while the items stay the same.
+    private var elements: [CanvasItemElement] = []
     private struct Drag {
         var item: EditorItem
         var start: CGPoint
@@ -314,9 +361,31 @@ final class CanvasOverlay: NSView {
                                        owner: self))
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let resignKey { NotificationCenter.default.removeObserver(resignKey) }
+        resignKey = window.map { window in
+            NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pointerLeft() }
+            }
+        }
+    }
+
+    /// A hidden canvas hears no pointer: it starts without hover when it shows again.
+    override func viewDidHide() {
+        super.viewDidHide()
+        pointerLeft()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        pointerInside = true
+        needsDisplay = true
+    }
+
     override func mouseMoved(with event: NSEvent) {
         let found = item(at: layoutPoint(event))?.item
-        if found != hovered {
+        if found != hovered || !pointerInside {
+            pointerInside = true
             hovered = found
             needsDisplay = true
         }
@@ -324,9 +393,14 @@ final class CanvasOverlay: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        pointerLeft()
+        NSCursor.arrow.set()
+    }
+
+    private func pointerLeft() {
+        pointerInside = false
         hovered = nil
         needsDisplay = true
-        NSCursor.arrow.set()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -339,6 +413,7 @@ final class CanvasOverlay: NSView {
         }
         if canvas.selection != hit.item { canvas.select(hit.item) }
         drag = Drag(item: hit.item, start: point, frame: hit.frame)
+        needsDisplay = true
         NSCursor.closedHand.set()
     }
 
@@ -359,15 +434,37 @@ final class CanvasOverlay: NSView {
     override func mouseUp(with event: NSEvent) {
         defer {
             drag = nil
-            NSCursor.openHand.set()
+            (item(at: layoutPoint(event)) == nil ? NSCursor.arrow : NSCursor.openHand).set()
+            needsDisplay = true
         }
         guard let drag, let placed = drag.placed else { return }
         canvas?.move(drag.item, placed.anchor, placed.offset)
     }
 
+    /// Gives the canvas the keyboard while no control has it, so Escape, the arrows, and Delete work without a click
+    /// first. The window itself, or a view around the canvas (the page, after the gallery's grid had the keys), holds it
+    /// for nobody; a text field keeps it. On the next turn of the run loop, once the views that this change adds or
+    /// removes are in place.
+    func takeKeyboardIfFree() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, canvas != nil, !isHiddenOrHasHiddenAncestor, let window else { return }
+            let responder = window.firstResponder
+            if responder == nil || responder === window || (responder as? NSView).map({ isDescendant(of: $0) }) == true {
+                window.makeFirstResponder(self)
+            }
+        }
+    }
+
+    /// Edit ▸ Delete: the selected widget goes.
+    @objc func delete(_ sender: Any?) {
+        if case .widget(let index)? = canvas?.selection { canvas?.remove(index) }
+    }
+
     /// With the canvas focused: the arrow keys move what is selected, Delete removes a selected widget, and Escape
-    /// clears the selection.
+    /// clears the selection, or with nothing selected ends Customize.
     override func keyDown(with event: NSEvent) {
+        // A drag ends only where the mouse goes up: Escape during one does nothing.
+        if drag != nil, event.charactersIgnoringModifiers == "\u{1b}" { return }
         guard let canvas, drag == nil else { return super.keyDown(with: event) }
         let byGrid = event.modifierFlags.contains(.shift)
         switch (event.specialKey, canvas.selection) {
@@ -377,6 +474,7 @@ final class CanvasOverlay: NSView {
         case (.downArrow?, let item?): canvas.nudge(item, (0, 1), byGrid)
         case (.delete?, .widget(let index)?), (.deleteForward?, .widget(let index)?): canvas.remove(index)
         case (_, _?) where event.charactersIgnoringModifiers == "\u{1b}": canvas.select(nil)
+        case (_, nil) where event.charactersIgnoringModifiers == "\u{1b}": canvas.exit()
         default: super.keyDown(with: event)
         }
     }
@@ -385,12 +483,19 @@ final class CanvasOverlay: NSView {
         guard let canvas else { return }
         if canvas.grid { drawGrid() }
         let items = preview?.editables ?? []
-        if let hovered, hovered != canvas.selection, let frame = items.first(where: { $0.item == hovered })?.frame {
-            outline(frame, color: .white.withAlphaComponent(0.75), width: 1)
+        // The item being dragged shows as selected from the first frame, before the selection reaches the page.
+        let selected = drag?.item ?? canvas.selection
+        if pointerInside {
+            let strong = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+            for (item, frame) in items where item != selected && item != hovered {
+                outline(frame, dark: (2, strong ? 0.35 : 0.15), light: (1, .white.withAlphaComponent(strong ? 0.6 : 0.25)))
+            }
         }
-        if let selection = canvas.selection, let frame = items.first(where: { $0.item == selection })?.frame {
-            outline(frame, color: .controlAccentColor, width: 2)
-            label(canvas.name(selection), on: frame)
+        if let hovered, hovered != selected, let frame = items.first(where: { $0.item == hovered })?.frame {
+            outline(frame, dark: (3, 0.25), light: (1, .white.withAlphaComponent(0.9)))
+        }
+        if let selected, let frame = items.first(where: { $0.item == selected })?.frame {
+            outline(frame, dark: (4, 0.25), light: (2, .controlAccentColor))
         }
     }
 
@@ -406,43 +511,105 @@ final class CanvasOverlay: NSView {
             lines.line(to: CGPoint(x: bounds.width, y: y * scale))
         }
         lines.lineWidth = 1 / (window?.backingScaleFactor ?? 2)
-        // Dark and light at once, so the lines show on any background.
-        NSColor.black.withAlphaComponent(0.22).setStroke()
-        lines.stroke()
-        NSColor.white.withAlphaComponent(0.22).setStroke()
-        lines.stroke()
+        // The center lines are a point wide, in the same colors.
         let center = NSBezierPath()
         center.move(to: CGPoint(x: bounds.midX, y: 0))
         center.line(to: CGPoint(x: bounds.midX, y: bounds.height))
         center.move(to: CGPoint(x: 0, y: bounds.midY))
         center.line(to: CGPoint(x: bounds.width, y: bounds.midY))
         center.lineWidth = 1
-        NSColor.controlAccentColor.withAlphaComponent(0.7).setStroke()
-        center.stroke()
+        // Dark and light at once, so the lines show on any background.
+        for path in [lines, center] {
+            NSColor.black.withAlphaComponent(0.22).setStroke()
+            path.stroke()
+            NSColor.white.withAlphaComponent(0.22).setStroke()
+            path.stroke()
+        }
     }
 
     private func viewRect(_ frame: CGRect) -> CGRect {
         CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale).insetBy(dx: -3, dy: -3)
     }
 
-    private func outline(_ frame: CGRect, color: NSColor, width: CGFloat) {
-        let path = NSBezierPath(roundedRect: viewRect(frame), xRadius: 4, yRadius: 4)
-        path.lineWidth = width
-        color.setStroke()
-        path.stroke()
+    // MARK: VoiceOver
+
+    // The canvas is a group named "Lock Screen" with a button per item, named as the inspector names it.
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Lock Screen" }
+
+    override func accessibilityChildren() -> [Any]? {
+        let items = canvas == nil ? [] : preview?.editables ?? []
+        if elements.map(\.item) != items.map(\.item) {
+            elements = items.map { CanvasItemElement(item: $0.item, parent: self) }
+        }
+        for (element, editable) in zip(elements, items) {
+            element.setAccessibilityLabel(canvas?.name(editable.item))
+            // The parent's space starts at its bottom left, as the screen does, and this view is flipped.
+            let rect = viewRect(editable.frame)
+            element.setAccessibilityFrameInParentSpace(CGRect(x: rect.minX, y: bounds.height - rect.maxY, width: rect.width, height: rect.height))
+        }
+        // As people read the screen: top to bottom, then left to right.
+        return zip(elements, items).sorted { ($0.1.frame.minY, $0.1.frame.minX) < ($1.1.frame.minY, $1.1.frame.minX) }.map(\.0)
     }
 
-    /// The item's name in a tag above it, or below it at the top edge.
-    private func label(_ text: String, on frame: CGRect) {
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white]
-        let size = (text as NSString).size(withAttributes: attributes)
-        let rect = viewRect(frame)
-        let tag = CGSize(width: size.width + 12, height: size.height + 4)
-        let y = rect.minY - tag.height - 3 >= 0 ? rect.minY - tag.height - 3 : rect.maxY + 3
-        let x = min(max(rect.minX, 0), max(bounds.width - tag.width, 0))
-        let box = CGRect(x: x, y: y, width: tag.width, height: tag.height)
-        NSColor.controlAccentColor.setFill()
-        NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
-        (text as NSString).draw(at: CGPoint(x: box.minX + 6, y: box.minY + 2), withAttributes: attributes)
+    /// VoiceOver pressed an item's button.
+    fileprivate func press(_ item: EditorItem) {
+        canvas?.select(item)
+    }
+
+    /// Whether VoiceOver's button for `item` is the selected one.
+    fileprivate func isSelected(_ item: EditorItem) -> Bool {
+        canvas?.selection == item
+    }
+
+    /// A rounded line 3 points around an item: a wide dark stroke under a narrow light one, so one of the two reads on
+    /// any background.
+    private func outline(_ frame: CGRect, dark: (width: CGFloat, alpha: CGFloat), light: (width: CGFloat, color: NSColor)) {
+        let path = NSBezierPath(roundedRect: viewRect(frame), xRadius: 4, yRadius: 4)
+        path.lineWidth = dark.width
+        NSColor.black.withAlphaComponent(dark.alpha).setStroke()
+        path.stroke()
+        path.lineWidth = light.width
+        light.color.setStroke()
+        path.stroke()
+    }
+}
+
+extension CanvasOverlay: NSMenuItemValidation {
+    /// Edit ▸ Delete works while a widget is selected; the password field stays.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(delete(_:)) else { return true }
+        if case .widget? = canvas?.selection { return true }
+        return false
+    }
+}
+
+/// One item on the canvas, for VoiceOver: a button that selects it.
+final class CanvasItemElement: NSAccessibilityElement {
+    let item: EditorItem
+
+    init(item: EditorItem, parent: CanvasOverlay) {
+        self.item = item
+        super.init()
+        setAccessibilityParent(parent)
+        setAccessibilityRole(.button)
+        // An element starts disabled, and VoiceOver reads a disabled button as dimmed.
+        setAccessibilityEnabled(true)
+    }
+
+    /// The selected item's button reads as selected, as the current Pinned To cell does. AppKit asks on the main thread.
+    override func isAccessibilitySelected() -> Bool {
+        guard let overlay = accessibilityParent() as? CanvasOverlay else { return false }
+        let item = item
+        return MainActor.assumeIsolated { overlay.isSelected(item) }
+    }
+
+    /// AppKit asks on the main thread.
+    override func accessibilityPerformPress() -> Bool {
+        guard let overlay = accessibilityParent() as? CanvasOverlay else { return false }
+        let item = item
+        MainActor.assumeIsolated { overlay.press(item) }
+        return true
     }
 }
