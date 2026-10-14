@@ -10,7 +10,7 @@ struct LockyStyle: Equatable, Sendable {
     var scale: CGFloat = 1
     /// true or false forces a 24- or 12-hour "time"; nil follows the system.
     var hour24: Bool?
-    /// The battery saver: nothing animates, digits included.
+    /// A still lock screen (Low Power Mode, Reduce Motion, or battery_saver on battery): nothing animates, digits included.
     var still = false
 
     /// A palette role, a color name, or "#rrggbb[aa]".

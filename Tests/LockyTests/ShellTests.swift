@@ -1,0 +1,699 @@
+import AppKit
+import Carbon
+import Foundation
+import Testing
+@testable import Locky
+
+/// The windows' shared API: what the Themes, Settings, and Welcome windows, the menus, and the command line call.
+@MainActor
+@Suite struct ShellTests {
+    /// Polls `condition` on the main actor, where the model lives.
+    private func wait(_ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(10)
+        while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        return condition()
+    }
+
+    // MARK: Windows
+
+    @Test(arguments: [("dashboard", .themes), ("widgets", .themes), ("themes", .themes), ("settings", .settings), ("plugins", .plugins),
+                      ("config", .config), ("welcome", .welcome), ("nope", nil)] as [(String, AppModel.Section?)])
+    func aWindowArgumentNamesAWindowOrAPane(_ argument: String, _ section: AppModel.Section?) {
+        #expect(AppModel.Section(argument: argument) == section)
+    }
+
+    @Test func theSettingsWindowOpensOnGeneral() {
+        #expect(AppModel.Section.settings.title == "General")
+        #expect(AppModel.Section.panes == [.settings, .plugins, .config])
+    }
+
+    @Test func windowWithoutASectionOpensTheThemesWindow() {
+        #expect(CLI.GUILaunch.parse(["window"]).window == .themes)
+        let widgets = CLI.GUILaunch.parse(["window", "widgets"])
+        #expect(widgets.window == .themes && widgets.opensWidgetGallery)
+        #expect(!CLI.GUILaunch.parse(["window", "themes"]).opensWidgetGallery)
+        #expect(CLI.GUILaunch.parse(["window", "config"]).window == .config)
+        #expect(CLI.GUILaunch.parse(["preview"]).window == nil)
+    }
+
+    /// Minimize and zoom are dimmed in the Settings window and hidden in the Welcome; a pane change gives the window the
+    /// pane's title and size, with the top edge where it was, and is remembered.
+    @Test func theSettingsWindowFollowsItsPanes() throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        let settings = try #require(SettingsWindowController(model: model, onClose: {}).window)
+        #expect(settings.standardWindowButton(.miniaturizeButton)?.isEnabled == false)
+        #expect(settings.standardWindowButton(.zoomButton)?.isEnabled == false)
+        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 745))
+        let items = try #require(settings.toolbar?.items)
+        #expect(items.map(\.label) == ["General", "Plugins", "Lua Config"])
+        let top = settings.frame.maxY
+        let config = try #require(items.last)
+        NSApp.sendAction(try #require(config.action), to: config.target, from: config)
+        #expect(settings.title == "Lua Config" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 360))
+        #expect(settings.frame.maxY == top)
+        #expect(SettingsWindowController.lastPane == .config)
+        // Only a pane comes back.
+        defaults.set("welcome", forKey: SettingsTabViewController.paneKey)
+        #expect(SettingsWindowController.lastPane == .settings)
+
+        let welcome = try #require(WelcomeWindowController(model: model, onClose: {}).window)
+        #expect(welcome.standardWindowButton(.miniaturizeButton)?.isHidden == true && welcome.standardWindowButton(.zoomButton)?.isHidden == true)
+        #expect(welcome.title == "Welcome to Locky" && !welcome.styleMask.contains(.resizable))
+        // Centered at its own size, not as an empty window that the hosting controller grows later.
+        let screen = try #require(welcome.screen ?? NSScreen.main)
+        #expect(welcome.frame.width > 0 && abs(welcome.frame.midX - screen.visibleFrame.midX) < 1)
+    }
+
+    /// A pane change keeps the window's top edge only while the window then fits: else it moves up, and on a screen
+    /// shorter than the pane it takes the screen's height, so the pane scrolls.
+    @Test func aPaneChangeKeepsTheWindowOnScreen() throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        let controller = SettingsWindowController(model: model, onClose: {})
+        let settings = try #require(controller.window)
+        let visible = try #require((settings.screen ?? NSScreen.main)?.visibleFrame)
+        controller.show(.config, behind: true)
+        defer { settings.close() }
+        // Lua Config low on the screen: General's height no longer fits under its top edge.
+        settings.setFrameTopLeftPoint(CGPoint(x: visible.minX + 40, y: visible.minY + 500))
+        let items = try #require(settings.toolbar?.items)
+        let general = try #require(items.first)
+        NSApp.sendAction(try #require(general.action), to: general.target, from: general)
+        #expect(settings.title == "General")
+        #expect(settings.frame.minY >= visible.minY && settings.frame.maxY <= visible.maxY, "\(settings.frame) in \(visible)")
+
+        let short = CGRect(x: 0, y: 40, width: 1440, height: 600)
+        let tall = CGRect(x: 100, y: 0, width: 640, height: 833)
+        #expect(SettingsTabViewController.fitted(tall, in: short) == CGRect(x: 100, y: 40, width: 640, height: 600))
+        let low = CGRect(x: 100, y: 10, width: 640, height: 400)
+        #expect(SettingsTabViewController.fitted(low, in: short) == CGRect(x: 100, y: 40, width: 640, height: 400))
+        let fits = CGRect(x: 100, y: 100, width: 640, height: 400)
+        #expect(SettingsTabViewController.fitted(fits, in: short) == fits)
+    }
+
+    /// On a screen shorter than General, the window takes the screen's height and General scrolls, so its last rows
+    /// can be reached. A later pane change on a taller screen gives General its full height again.
+    @Test func onAShortScreenGeneralScrolls() async throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        let controller = SettingsWindowController(model: AppModel(store: SettingsStore(config: sandbox.config)), onClose: {})
+        let settings = try #require(controller.window)
+        let tabs = try #require(settings.contentViewController as? SettingsTabViewController)
+        controller.show(.settings, behind: true)
+        defer { settings.close() }
+        tabs.place(settings, settings.frame, in: CGRect(x: 0, y: 40, width: 1440, height: 600), animate: false)
+        func scrollViews(in view: NSView) -> [NSScrollView] {
+            ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews(in:))
+        }
+        func scrolls() -> Bool {
+            settings.contentView?.layoutSubtreeIfNeeded()
+            return scrollViews(in: settings.contentView!).contains { ($0.documentView?.frame.height ?? 0) > $0.contentView.bounds.height }
+        }
+        #expect(await wait(scrolls))
+        #expect(settings.frame.height == 600, "\(settings.frame)")
+        #expect(settings.frame.minY == 40)
+
+        let tall = CGRect(x: 0, y: 0, width: 1440, height: 2000)
+        tabs.place(settings, settings.frameRect(forContentRect: CGRect(origin: .zero, size: SettingsTabViewController.size(of: .settings))),
+                   in: tall, animate: false)
+        settings.contentView?.layoutSubtreeIfNeeded()
+        #expect(settings.contentRect(forFrameRect: settings.frame).height == 745)
+    }
+
+    /// A window fitted to a short screen gets General's full height again when it opens again on a tall one.
+    @Test func reopeningOnATallScreenGivesGeneralItsHeight() async throws {
+        _ = NSApplication.shared
+        defer { UserDefaults.standard.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        let controller = SettingsWindowController(model: AppModel(store: SettingsStore(config: sandbox.config)), onClose: {})
+        let settings = try #require(controller.window)
+        let tabs = try #require(settings.contentViewController as? SettingsTabViewController)
+        controller.show(.settings, behind: true)
+        defer { settings.close() }
+        let full = settings.frameRect(forContentRect: CGRect(origin: .zero, size: SettingsTabViewController.size(of: .settings)))
+        // The real screen is the tall one, so it must hold the whole window.
+        try #require((settings.screen ?? NSScreen.main).map { $0.visibleFrame.height >= full.height } == true)
+        tabs.place(settings, settings.frame, in: CGRect(x: 0, y: 40, width: 1440, height: 600), animate: false)
+        #expect(settings.frame.height == 600)
+        settings.close()
+        controller.show(nil, behind: true)
+        settings.contentView?.layoutSubtreeIfNeeded()
+        #expect(settings.contentRect(forFrameRect: settings.frame).height == 745)
+    }
+
+    /// The Message field saves when focus leaves it, and closing the window is one way focus leaves.
+    @Test func theMessageSavesWhenTheSettingsWindowCloses() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        // AppDelegate keeps the controller, the window's delegate.
+        let controller = SettingsWindowController(model: model, onClose: {})
+        let window = try #require(controller.window)
+        func field(in view: NSView) -> NSTextField? {
+            if let field = view as? NSTextField, field.isEditable { return field }
+            return view.subviews.lazy.compactMap(field(in:)).first
+        }
+        var message: NSTextField?
+        #expect(await wait {
+            window.contentView?.layoutSubtreeIfNeeded()
+            message = field(in: window.contentView!)
+            return message != nil
+        })
+        let editing = try #require(message)
+        #expect(window.makeFirstResponder(editing))
+        let editor = try #require(editing.currentEditor() as? NSTextView)
+        editor.insertText("Call 555", replacementRange: NSRange(location: 0, length: 0))
+        // As a person types: the text reaches the page before the window closes.
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.store.settings["message"].isNil)
+        window.performClose(nil)
+        #expect(await wait { model.store.settings["message"] == .string("Call 555") })
+    }
+
+    /// Any process can send a size with a request: NaN or infinity would reach AppKit, which traps on it, and a frame
+    /// past Int32's range raises an exception that quits Locky.
+    @Test(arguments: [("1300x800", CGSize(width: 1300, height: 800)), ("nanxinf", nil), ("0x640", nil), ("-980x640", nil), ("980", nil),
+                      ("3000000000x800", nil)] as [(String, CGSize?)])
+    func aSizeIsTwoPositiveNumbers(_ text: String, _ size: CGSize?) {
+        #expect(CLI.GUILaunch.parse(["window", "--size", text]).size == size)
+    }
+
+    @Test func aRequestedSizeKeepsTheMinimum() {
+        #expect(LockyWindowController.clamped(CGSize(width: 600, height: 400)) == CGSize(width: 980, height: 640))
+        #expect(LockyWindowController.clamped(CGSize(width: 1600, height: 1000)) == CGSize(width: 1600, height: 1000))
+    }
+
+    @Test func doneEndsCustomizeAndWhatItHadOpen() throws {
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        model.customize("glass")
+        #expect(model.editingTheme == "glass")
+        model.addingWidget = true
+        model.editorRequest = .export
+        model.finishEditing()
+        #expect(model.editingTheme == nil && !model.addingWidget && model.editorRequest == nil)
+    }
+
+    /// `Locky window widgets` at launch: the theme in use is init.lua's, which only the first read of the config knows.
+    @Test func customizingTheThemeInUseWaitsForTheConfig() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        model.customizeInUse(addingWidget: true)
+        #expect(model.editingTheme == nil)
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.editingTheme == "matrix" && model.addingWidget)
+    }
+
+    /// A `Locky window widgets` that waits for the first read gives way to what came after it: closing the window, or
+    /// Customize for another theme.
+    @Test func aWaitingCustomizeGivesWayToALaterOne() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        _ = NSApplication.shared
+        func waiting(then change: (AppModel) -> Void) async -> AppModel {
+            let model = AppModel(store: SettingsStore(config: sandbox.config))
+            model.refresh()
+            model.customizeInUse(addingWidget: true)
+            change(model)
+            _ = await wait { model.inspection.loaded }
+            return model
+        }
+        let closed = await waiting { $0.finishEditing() }
+        #expect(closed.editingTheme == nil && !closed.addingWidget)
+        let other = await waiting { $0.customize("glass") }
+        #expect(other.editingTheme == "glass" && !other.addingWidget)
+    }
+
+    /// Nothing opens during a lock: the waiting Customize comes after the unlock, whose refresh reads the config again.
+    @Test func aWaitingCustomizeWaitsForTheUnlock() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.locked = true
+        model.refresh()
+        model.customizeInUse(addingWidget: true)
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.editingTheme == nil && !model.addingWidget)
+        let read = model.revision
+        model.locked = false
+        model.refresh()
+        #expect(await wait { model.revision > read })
+        #expect(model.editingTheme == "matrix" && model.addingWidget)
+    }
+
+    /// `Locky window widgets --theme glass`, then a lock before the config's read lands: the read shows Customize, and
+    /// Add Widget's sheet waits for the unlock.
+    @Test func addWidgetNeverComesUpDuringALock() async throws {
+        let sandbox = try Sandbox()
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        model.customize("glass")
+        model.addingWidget = true
+        model.locked = true
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.inspection.theme("glass") != nil && model.editingTheme == "glass" && !model.addingWidget)
+        model.locked = false
+        #expect(model.addingWidget)
+    }
+
+    /// A theme in use that is gone, such as a file deleted in Finder, leaves the gallery and no endless spinner.
+    @Test func aWaitingCustomizeOfAMissingThemeShowsTheGallery() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "theme": "gone" }"#)
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        model.customizeInUse(addingWidget: true)
+        #expect(await wait { model.inspection.loaded })
+        #expect(model.editingTheme == nil && !model.addingWidget)
+    }
+
+    // MARK: Themes
+
+    /// A model of a sandbox whose config has been read.
+    private func loaded(_ sandbox: Sandbox) async -> AppModel {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        _ = await wait { model.inspection.loaded }
+        return model
+    }
+
+    /// Choosing init.lua's own theme is its own reset.
+    @Test func usingAThemeStoresItUnlessInitLuaGivesIt() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ theme = 'matrix' })")
+        let model = await loaded(sandbox)
+        #expect(model.activeTheme == "matrix")
+        model.use("glass")
+        #expect(model.store.settings["theme"] == .string("glass") && model.activeTheme == "glass")
+        model.use("matrix")
+        #expect(model.store.settings["theme"].isNil && model.activeTheme == "matrix")
+    }
+
+    @Test func underAScheduleTheSlotThatShowsNowChanges() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "glass"
+        schedule.night = "matrix"
+        model.store.update { $0.schedule = schedule }
+        let other = schedule.theme(at: .now, dark: false) == "glass" ? "matrix" : "glass"
+        model.use("poster")
+        let changed = try #require(model.store.settings.schedule)
+        #expect(changed.theme(at: .now, dark: false) == "poster" && Set([changed.day, changed.night]) == ["poster", other])
+        #expect(model.store.settings["theme"].isNil && model.activeTheme == "poster")
+        // A schedule with nothing for now leaves the choice to settings.json's theme.
+        model.store.update { $0.schedule = ThemeSchedule(mode: .appearance) }
+        model.use("poster")
+        #expect(model.store.settings["theme"] == .string("poster"))
+        #expect(model.store.settings.schedule?.light == nil && model.store.settings.schedule?.dark == nil)
+    }
+
+    @Test func onlyYourOwnThemeGoesToTheTrash() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        #expect(model.canTrash("mine") && !model.canTrash("default"))
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "mine"
+        schedule.night = "matrix"
+        model.store.update { settings in
+            settings["theme"] = .string("mine")
+            settings.schedule = schedule
+            settings.setThemeEdit("mine", "background", .table(["color": .string("#000000")]))
+        }
+        model.customize("mine")
+        try model.trash("mine", using: { try FileManager.default.removeItem(at: $0) })
+        #expect(!FileManager.default.fileExists(atPath: sandbox.config.appending(path: "themes/mine.lua").path))
+        let settings = model.store.settings
+        #expect(settings["theme"].isNil && settings.schedule?.day == nil && settings.schedule?.night == "matrix")
+        // Put Back in the Finder brings the theme back with its changes.
+        #expect(!settings["themes"]["mine"].isNil)
+        #expect(model.editingTheme == nil)
+    }
+
+    /// A schedule that never named the theme stays as written, with a newer Locky's keys and no times added.
+    @Test func aScheduleWithoutTheThemeStaysAsWritten() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        let schedule = LuaValue.table(["mode": .string("time"), "day": .string("glass"), "later": .string("kept")])
+        model.store.update { $0["schedule"] = schedule }
+        try model.trash("mine", using: { try FileManager.default.removeItem(at: $0) })
+        #expect(model.store.settings["schedule"] == schedule)
+    }
+
+    /// While settings.json has an error nothing saves it, so the theme stays: settings.json would still name it.
+    @Test func aThemeStaysWhileSettingsJSONHasAnError() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        try sandbox.write("settings.json", "{ \"theme\": \"mine\",")
+        #expect(throws: AppModel.TrashError.self) { try model.trash("mine", using: { try FileManager.default.removeItem(at: $0) }) }
+        #expect(FileManager.default.fileExists(atPath: sandbox.config.appending(path: "themes/mine.lua").path))
+    }
+
+    /// An id from a request names no file outside themes/: only a theme the config's read lists can go.
+    @Test func anIDThatIsAPathGoesNowhere() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "")
+        // themes/../init.lua is the config's init.lua once the themes folder exists.
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        #expect(!model.canTrash("../init"))
+        var removed = false
+        #expect(throws: AppModel.TrashError.self) { try model.trash("../init", using: { _ in removed = true }) }
+        #expect(!removed && FileManager.default.fileExists(atPath: sandbox.config.appending(path: "init.lua").path))
+    }
+
+    /// A plugin can change the theme list, so a listed id can be a path too: it still names no file outside themes/.
+    @Test func aListedIDThatIsAPathGoesNowhere() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "")
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        // A plugin script runs in the Lua state that the config's read asks for the theme list.
+        try sandbox.write("plugin/list.lua", """
+            local list = locky.theme.list
+            locky.theme.list = function() local names = list(); names[#names + 1] = "../init"; return names end
+            """)
+        let model = await loaded(sandbox)
+        #expect(model.inspection.theme("../init") != nil)
+        #expect(!model.canTrash("../init"))
+        var removed = false
+        #expect(throws: AppModel.TrashError.self) { try model.trash("../init", using: { _ in removed = true }) }
+        #expect(!removed && FileManager.default.fileExists(atPath: sandbox.config.appending(path: "init.lua").path))
+    }
+
+    @Test func anInstalledThemeTakesAFreeID() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        let file = ThemeFile(base: "tokyonight", name: "Tokyo Night Copy", edits: [])
+        #expect(try await model.install(file) == "tokyo-night-copy")
+        #expect(try await model.install(file) == "tokyo-night-copy-2")
+        #expect(FileManager.default.fileExists(atPath: sandbox.config.appending(path: "themes/tokyo-night-copy-2.lua").path))
+    }
+
+    /// The theme commands the main menu sends, as the Themes window answers them.
+    @Test func theMenuCommandsFollowCustomize() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "return { name = 'Mine' }")
+        let model = await loaded(sandbox)
+        let controller = LockyWindowController(model: model, onClose: {})
+        func item(_ action: Selector) -> NSMenuItem { NSMenuItem(title: "", action: action, keyEquivalent: "") }
+        func enabled(_ action: Selector) -> Bool { controller.validateMenuItem(item(action)) }
+        typealias Commands = LockyWindowController
+        // The gallery: Import, Customize, and Schedule, nothing that needs a theme in Customize.
+        #expect(enabled(#selector(Commands.importTheme(_:))) && enabled(#selector(Commands.customizeTheme(_:))))
+        #expect(enabled(#selector(Commands.scheduleThemes(_:))))
+        #expect(!enabled(#selector(Commands.useTheme(_:))) && !enabled(#selector(Commands.addWidget(_:))) && !enabled(#selector(Commands.trashTheme(_:))))
+        controller.scheduleThemes(nil)
+        #expect(model.scheduling)
+        model.customize("mine")
+        #expect(!enabled(#selector(Commands.customizeTheme(_:))) && !enabled(#selector(Commands.scheduleThemes(_:))))
+        #expect(enabled(#selector(Commands.useTheme(_:))) && enabled(#selector(Commands.trashTheme(_:))) && enabled(#selector(Commands.duplicateTheme(_:))))
+        // A theme written in Lua cannot be exported, and nothing has changed it yet.
+        #expect(!enabled(#selector(Commands.exportTheme(_:))) && !enabled(#selector(Commands.revertTheme(_:))))
+        model.use("mine")
+        #expect(!enabled(#selector(Commands.useTheme(_:))))
+        model.customize("default")
+        #expect(enabled(#selector(Commands.exportTheme(_:))) && !enabled(#selector(Commands.trashTheme(_:))))
+        // A theme the config's read does not list, such as an id from a request, takes no theme command.
+        try sandbox.write("init.lua", "")
+        model.customize("../init")
+        for action in [#selector(Commands.useTheme(_:)), #selector(Commands.duplicateTheme(_:)), #selector(Commands.exportTheme(_:)),
+                       #selector(Commands.revertTheme(_:)), #selector(Commands.trashTheme(_:)), #selector(Commands.addWidget(_:))] {
+            #expect(!enabled(action), "\(action)")
+        }
+        model.customize("default")
+        let inspector = item(#selector(Commands.toggleInspector(_:)))
+        #expect(controller.validateMenuItem(inspector) && inspector.title == "Hide Inspector")
+    }
+
+    /// The Welcome waits for the config's first read, and for no more than its limit.
+    @Test func theFirstReadCanBeAwaited() async throws {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        let start = ContinuousClock.now
+        await model.firstRead(within: .milliseconds(100))
+        #expect(!model.inspection.loaded && ContinuousClock.now - start >= .milliseconds(100))
+        model.refresh()
+        await model.firstRead(within: .seconds(10))
+        #expect(model.inspection.loaded)
+    }
+
+    /// A lock closes the Schedule popover and the Import panel, so nothing but the lock takes the keyboard. Neither comes
+    /// back after it.
+    @Test func aLockClosesThePopoverAndTheImportPanel() throws {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        model.scheduling = true
+        model.importing = true
+        model.locked = true
+        #expect(!model.scheduling && !model.importing)
+        model.locked = false
+        #expect(!model.scheduling && !model.importing)
+    }
+
+    /// Customize shows why a theme does not load, and takes only Move to Trash for it: the menu offers no more. Use Theme
+    /// would make it the theme a lock uses.
+    @Test func aThemeThatDoesNotLoadTakesOnlyMoveToTrash() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/broken.lua", "error('broken')")
+        let model = await loaded(sandbox)
+        model.store.update { $0["themes"] = .table(["broken": .table(["widgets": .array([])])]) }
+        let controller = LockyWindowController(model: model, onClose: {})
+        func enabled(_ action: Selector) -> Bool { controller.validateMenuItem(NSMenuItem(title: "", action: action, keyEquivalent: "")) }
+        typealias Commands = LockyWindowController
+        model.customize("broken")
+        #expect(model.inspection.theme("broken")?.error != nil)
+        for action in [#selector(Commands.useTheme(_:)), #selector(Commands.previewTheme(_:)), #selector(Commands.duplicateTheme(_:)),
+                       #selector(Commands.exportTheme(_:)), #selector(Commands.revertTheme(_:)), #selector(Commands.addWidget(_:)),
+                       #selector(Commands.toggleGrid(_:)), #selector(Commands.toggleInspector(_:))] {
+            #expect(!enabled(action), "\(action)")
+        }
+        #expect(enabled(#selector(Commands.trashTheme(_:))))
+        // The gallery's Preview shows the theme in use.
+        model.finishEditing()
+        #expect(enabled(#selector(Commands.previewTheme(_:))))
+    }
+
+    /// A window with a sheet over it, as the Themes window has while Add Widget or an alert shows. (A real sheet over a
+    /// window that is not on screen runs modally and never returns.)
+    private final class WindowUnderASheet: NSWindow {
+        let over = NSWindow()
+        var covered = true
+        override var attachedSheet: NSWindow? { covered ? over : nil }
+    }
+
+    /// A sheet over the window holds the theme commands until it closes.
+    @Test func aSheetHoldsTheThemeCommands() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        let controller = LockyWindowController(model: model, onClose: {})
+        let window = WindowUnderASheet(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
+        controller.window = window
+        func enabled(_ action: Selector) -> Bool { controller.validateMenuItem(NSMenuItem(title: "", action: action, keyEquivalent: "")) }
+        typealias Commands = LockyWindowController
+        model.customize("default")
+        for action in [#selector(Commands.importTheme(_:)), #selector(Commands.useTheme(_:)), #selector(Commands.previewTheme(_:)),
+                       #selector(Commands.duplicateTheme(_:)), #selector(Commands.exportTheme(_:)), #selector(Commands.addWidget(_:))] {
+            #expect(!enabled(action), "\(action)")
+        }
+        window.covered = false
+        #expect(enabled(#selector(Commands.duplicateTheme(_:))) && enabled(#selector(Commands.addWidget(_:))))
+    }
+
+    // MARK: Plugins
+
+    /// Updating one plugin keeps every other plugin's Update….
+    @Test func anUpdateLeavesTheOtherPluginsUpdates() {
+        let updates = [PackUpdate(name: "a", current: "1", latest: "2"), PackUpdate(name: "b", current: "3", latest: "4")]
+        #expect(AppModel.remaining(updates, after: ["a"]) == [updates[1]])
+        // A run that named no plugin updated them all.
+        #expect(AppModel.remaining(updates, after: []).isEmpty)
+    }
+
+    /// Light content takes the dark press overlay, as the lock window's appearance does.
+    @Test(arguments: [("#F1EFE8", true), ("#02040a", false), (nil, false)] as [(String?, Bool)])
+    func aColorIsLightByTheLockWindowsRule(_ hex: String?, _ light: Bool) {
+        #expect(Design.isLight(hex) == light)
+    }
+
+    // MARK: The schedule and settings.json
+
+    /// A time of day on a calendar of its own, so no test depends on the Mac's time zone.
+    private func at(_ hour: Int) -> (date: Date, calendar: Calendar) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        return (calendar.date(from: DateComponents(year: 2026, month: 10, day: 13, hour: hour))!, calendar)
+    }
+
+    /// The default day runs from 07:00 to 19:00.
+    @Test func aThemeGoesToTheSlotThatShowsNow() {
+        let (morning, calendar) = at(10)
+        let (evening, _) = at(22)
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.setTheme("glass", at: morning, dark: true, calendar: calendar)
+        schedule.setTheme("matrix", at: evening, dark: false, calendar: calendar)
+        #expect(schedule.day == "glass" && schedule.night == "matrix" && schedule.light == nil && schedule.dark == nil)
+        schedule.mode = .appearance
+        schedule.setTheme("poster", at: morning, dark: false, calendar: calendar)
+        schedule.setTheme("tokyonight", at: morning, dark: true, calendar: calendar)
+        #expect(schedule.light == "poster" && schedule.dark == "tokyonight" && schedule.day == "glass" && schedule.night == "matrix")
+    }
+
+    @Test func forgettingAThemeEmptiesEverySlotThatNamesIt() {
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "mine"
+        schedule.night = "matrix"
+        schedule.light = "mine"
+        schedule.dark = "mine"
+        schedule.forget("mine")
+        #expect(schedule.day == nil && schedule.night == "matrix" && schedule.light == nil && schedule.dark == nil)
+    }
+
+    @Test func theScheduleSaysWhichThemeShowsWhen() {
+        var inspection = Inspection()
+        inspection.themes = [Inspection.ThemeInfo(id: "default", name: "Aurora"), Inspection.ThemeInfo(id: "matrix", name: "Matrix")]
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "default"
+        schedule.night = "matrix"
+        let britain = Locale(identifier: "en_GB")
+        #expect(schedule.summary(inspection, locale: britain) == "Day: Aurora from 07:00 · Night: Matrix from 19:00")
+        schedule.mode = .appearance
+        schedule.light = "default"
+        #expect(schedule.summary(inspection, locale: britain) == "Light: Aurora · Dark: the usual theme")
+    }
+
+    /// The times read as the Mac's clock reads them, as the Schedule popover's time pickers show them.
+    @Test func aTwelveHourClockReadsTheScheduleInItsOwnWay() {
+        let america = Locale(identifier: "en_US")
+        // ICU puts a narrow no-break space before AM and PM.
+        let morning = ThemeSchedule.time(7 * 60, locale: america), evening = ThemeSchedule.time(19 * 60, locale: america)
+        #expect(morning.hasPrefix("7:00") && morning.hasSuffix("AM") && evening.hasPrefix("7:00") && evening.hasSuffix("PM"))
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "default"
+        #expect(schedule.summary(Inspection(), locale: america) == "Day: default from \(morning) · Night: the usual theme from \(evening)")
+        // settings.json keeps its own 24-hour form.
+        #expect(ThemeSchedule.clock(19 * 60) == "19:00")
+    }
+
+    @Test func aValueInitLuaAlreadyGivesIsNoKey() {
+        var settings = Settings()
+        settings.setLuaValue("theme", .string("glass"), base: .string("default"))
+        #expect(settings["theme"] == .string("glass"))
+        settings.setLuaValue("theme", .string("default"), base: .string("default"))
+        #expect(settings["theme"].isNil)
+    }
+
+    /// A newer Locky's key in auto_lock outlives a change made here.
+    @Test func theTriggersChangeInPlace() {
+        var settings = Settings(["auto_lock": .table(["later": .string("kept")])])
+        settings.setAutoLock(AutoLockSettings(idleMinutes: 5, systemSleep: true))
+        #expect(settings["auto_lock"] == .table(["later": .string("kept"), "idle_minutes": .int(5), "system_sleep": .bool(true)]))
+        settings.setAutoLock(AutoLockSettings())
+        #expect(settings["auto_lock"] == .table(["later": .string("kept")]))
+        // With no other key, all off removes auto_lock.
+        var plain = Settings(["auto_lock": .table(["display_sleep": .bool(true)])])
+        plain.setAutoLock(AutoLockSettings())
+        #expect(plain["auto_lock"].isNil)
+    }
+
+    // MARK: Inspection
+
+    @Test func themesListByTheirNames() {
+        var inspection = Inspection()
+        inspection.themes = [Inspection.ThemeInfo(id: "wordclock", name: "Word Clock"), Inspection.ThemeInfo(id: "default", name: "Aurora"),
+                             Inspection.ThemeInfo(id: "deepblue", name: "Deep Blue")]
+        #expect(inspection.themesByName.map(\.id) == ["default", "deepblue", "wordclock"])
+    }
+
+    /// Locky's own widgets name no source: only someone else's do.
+    /// The inspector names where a widget comes from as Add Widget groups it.
+    @Test func aWidgetSaysWhereItComesFrom() {
+        func source(_ file: URL) -> String? { Inspection.WidgetInfo(name: "w", file: file).source }
+        #expect(source(RuntimePath.builtInRuntime.appending(path: "plugin/clock.lua")) == nil)
+        #expect(source(RuntimePath.resources.appending(path: "packages/sakura/plugin/sakura.lua")) == nil)
+        #expect(source(RuntimePath.defaultConfig.appending(path: "plugin/mine.lua")) == "Lua Config")
+        #expect(source(RuntimePath.defaultPacks.appending(path: "locky-weather/plugin/big.lua")) == "locky-weather")
+        // A plugin's lua/ module, in the pack folder and in a local plugin's folder.
+        #expect(source(RuntimePath.defaultPacks.appending(path: "locky-stars/lua/stars/init.lua")) == "locky-stars")
+        #expect(source(URL(fileURLWithPath: "/Users/someone/code/my-plugin/lua/my/init.lua")) == "my-plugin")
+        // A folder next to the config folder is a plugin of its own.
+        #expect(source(URL(fileURLWithPath: RuntimePath.defaultConfig.path + "-dev/plugin/thing.lua")) == "locky-dev")
+        #expect(Inspection.WidgetInfo(name: "w").source == "Lua Config")
+    }
+
+    // MARK: Problems
+
+    /// "$CONFIG" and "$PACKS" stand for a sandbox's folders, where the files are.
+    @Test(arguments: [
+        ("$CONFIG/init.lua:3: attempt to call a nil value (global 'boom')", "$CONFIG/init.lua", 3, "Attempt to call a nil value (global 'boom')"),
+        // Lua shortens a long chunk name from the front.
+        ("...ocky/init.lua:7: unexpected symbol near '}'", "$CONFIG/init.lua", 7, "Unexpected symbol near '}'"),
+        ("~/.config/locky/settings.json is not valid JSON: no value", nil, nil, "~/.config/locky/settings.json is not valid JSON: no value"),
+        ("$PACKS/locky-weather/plugin/weather.lua:12: bad argument #1 to 'format'", "$PACKS/locky-weather/plugin/weather.lua", 12,
+         "Bad argument #1 to 'format'"),
+    ] as [(String, String?, Int?, String)])
+    func aProblemNamesItsFileAndLine(_ problem: String, _ file: String?, _ line: Int?, _ message: String) throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "")
+        let plugin = sandbox.packs.appending(path: "locky-weather/plugin/weather.lua")
+        try FileManager.default.createDirectory(at: plugin.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: plugin)
+        func real(_ text: String) -> String {
+            text.replacingOccurrences(of: "$CONFIG", with: sandbox.config.path).replacingOccurrences(of: "$PACKS", with: sandbox.packs.path)
+        }
+        let found = ConfigProblem(real(problem), config: sandbox.config)
+        #expect(found.message == message)
+        #expect(found.file?.path == file.map(real))
+        #expect(found.line == line)
+    }
+
+    /// Lua shortens a long chunk name from the front, inside a folder's name: the file is the one in the config folder
+    /// whose path ends so, such as a theme of the person's own.
+    @Test func aShortenedPathFindsItsFile() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "")
+        let full = sandbox.config.appending(path: "themes/mine.lua").path
+        let found = ConfigProblem("..." + full.suffix(40) + ":2: attempt to perform arithmetic on a nil value", config: sandbox.config)
+        #expect(found.file?.path == full && found.line == 2 && found.message == "Attempt to perform arithmetic on a nil value")
+        // A tail that names no file there keeps the whole text.
+        let missing = ConfigProblem("...ocky/themes/gone.lua:2: boom", config: sandbox.config)
+        #expect(missing.file == nil && missing.line == nil && missing.message == "...ocky/themes/gone.lua:2: boom")
+        // As Customize and the gallery's tile show it: the file's name and the line under the message, when known.
+        #expect(found.described == "Attempt to perform arithmetic on a nil value\nmine.lua, line 2")
+        #expect(missing.described == missing.message)
+    }
+
+    // MARK: Menus
+
+    @Test func aShortcutIsAMenuKeyEquivalent() {
+        let lockNow = Shortcut(keyCode: UInt16(kVK_ANSI_L), modifiers: [.control, .option, .command])
+        #expect(lockNow.menuKeyEquivalent?.key == "l")
+        #expect(lockNow.menuKeyEquivalent?.modifiers == [.control, .option, .command])
+        #expect(Shortcut(keyCode: UInt16(kVK_F5), modifiers: []).menuKeyEquivalent?.key == "\u{F708}")
+        // A menu cannot show Space.
+        #expect(Shortcut(keyCode: UInt16(kVK_Space), modifiers: [.command]).menuKeyEquivalent == nil)
+    }
+
+    @Test func aFailedThemeNamesItselfInTheMenu() {
+        var inspection = Inspection()
+        inspection.themes = [Inspection.ThemeInfo(id: "tokyonight", name: "Tokyo Night")]
+        #expect(ThemeFailure(theme: "tokyonight", fallback: "default", message: "", date: 0).menuTitle(inspection) == "Tokyo Night Didn't Load")
+        #expect(ThemeFailure(theme: "gone", fallback: "default", message: "", date: 0).menuTitle(inspection) == "gone Didn't Load")
+    }
+}

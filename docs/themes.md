@@ -81,7 +81,7 @@ display gets the background.
 
 **Testing.** `Scripts/snapshot.sh <id> out.png` renders a theme to a PNG. `LOCKY_WALLPAPER=/path/to/image.jpg`
 (or `none`) stands in for the desktop picture, to try a theme on other wallpapers. A `preview.png` or
-`preview.jpg` next to `themes/` becomes the theme's thumbnail in the Locky window.
+`preview.jpg` next to `themes/` becomes the theme's thumbnail in the Themes window.
 
 **Layout size.** Lay a theme out for a 1440×900 screen. Locky scales sizes and offsets on other screens
 (a 1728×1117 MacBook Pro screen scales by 1.2).
@@ -132,19 +132,22 @@ the lock screen in the preview, with its line number, and in the log.
 
 ## Make and share themes in the window
 
-The Themes page makes themes without Lua. Its ⋯ menu has two commands:
+Customize makes themes without Lua. Its More menu, and the File menu, have these commands:
 
-- **Duplicate Theme…** asks for a name and writes your own theme to `~/.config/locky/themes/<id>.lua`: the
-  selected theme with your changes to it. The new theme opens in the editor.
+- **Duplicate Theme…** asks for a name and writes your own theme to `~/.config/locky/themes/<id>.lua`: this
+  theme with your changes to it. The new theme opens in Customize.
 - **Export Theme…** saves the theme with your changes as one `.lua` file to share. It works for a built-in theme
   and for a theme made from one.
+- **Revert to Original** removes your changes to the theme in one step; Edit › Undo brings them back.
+- **Move to Trash** (a theme you made) moves its file to the Trash. If a lock used it, the lock goes back to the
+  usual theme. The Finder's Put Back restores it.
 
-**Import Theme…**, below the theme list, adds an exported file to `~/.config/locky/themes/`. A theme file is Lua,
-and Lua can run code, so Locky imports only files in the shape Export Theme writes. It reads the settings from
-the file as text, checks that the theme loads, and writes the file again from those settings. No code from an
-imported file runs. The file sets widget options, and a plugin's widget could run an option as a command, so
-Locky refuses a file that uses widgets that do not come with Locky. A theme written in Lua by hand goes in
-`~/.config/locky/themes/` directly.
+**File › Import Theme…** adds an exported file to `~/.config/locky/themes/` and opens it in Customize. A theme
+file is Lua, and Lua can run code, so Locky imports only files in the shape Export Theme writes. It reads the
+settings from the file as text, checks that the theme loads, and writes the file again from those settings. No
+code from an imported file runs. The file sets widget options, and a plugin's widget could run an option as a
+command, so Locky refuses a file that uses widgets that do not come with Locky. A theme written in Lua by hand
+goes in `~/.config/locky/themes/` directly.
 
 The file calls `locky.theme.derive`:
 

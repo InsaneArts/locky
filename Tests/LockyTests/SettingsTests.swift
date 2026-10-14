@@ -133,6 +133,15 @@ import Testing
         #expect(Settings.load(config: sandbox.config).problem == nil)
     }
 
+    /// The parser's words say where the file breaks, so General's error row does too.
+    @Test func aBrokenFileSaysWhereItBreaks() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true, "#)
+        let problem = try #require(Settings.load(config: sandbox.config).problem)
+        #expect(problem.contains("is not valid JSON: "))
+        #expect(problem.contains("line 1"), "\(problem)")
+    }
+
     @Test func savingKeepsKeysThisVersionDoesNotKnow() throws {
         let sandbox = try Sandbox()
         try sandbox.write("settings.json", #"{ "from_the_future": { "a": [1, 2.5, "x"] }, "theme": "old" }"#)
@@ -876,5 +885,105 @@ import Testing
         // settings.json in a folder that is not there yet makes it private too.
         try Settings().save(config: sandbox.root.appending(path: "other"))
         #expect(try mode(sandbox.root.appending(path: "other")) == 0o700)
+    }
+}
+
+/// The Settings window's own rules: General's pop-ups and switches, and Lua Config's Open in button.
+@Suite struct WindowSettingsTests {
+    @Test func whenInactiveListsNeverAndTheUsualTimes() {
+        let choices = SettingsPage.idleChoices(stored: nil)
+        #expect(choices.map(\.minutes) == [nil, 1, 2, 5, 10, 15, 30, 60])
+        #expect(choices.map(\.title) == ["Never", "For 1 minute", "For 2 minutes", "For 5 minutes", "For 10 minutes", "For 15 minutes",
+                                         "For 30 minutes", "For 1 hour"])
+        // A usual time adds nothing; any other stays in the list as a custom item.
+        #expect(SettingsPage.idleChoices(stored: 5).count == 8)
+        #expect(SettingsPage.idleChoices(stored: 7).last?.minutes == 7)
+        #expect(SettingsPage.idleChoices(stored: 7).last?.title == "For 7 minutes (custom)")
+    }
+
+    @Test func turnTheDisplayOffListsTheSystemFirst() {
+        let choices = SettingsPage.displayOffChoices(stored: nil)
+        #expect(choices.map(\.seconds) == [nil, 10, 30, 60, 300])
+        #expect(choices.map(\.title) == ["Like the system", "After 10 seconds", "After 30 seconds", "After 1 minute", "After 5 minutes"])
+        #expect(SettingsPage.displayOffChoices(stored: 90).last?.title == "After 90 seconds (custom)")
+        #expect(SettingsPage.displayOffChoices(stored: 120).last?.title == "After 2 minutes (custom)")
+    }
+
+    /// settings.json may hold any number: its pop-up rounds it up, and a huge one cannot stop the pane.
+    @Test func aStoredTimeBecomesAWholeNumber() {
+        #expect(SettingsPage.whole(nil) == nil)
+        #expect(SettingsPage.whole(5) == 5)
+        #expect(SettingsPage.whole(2.5) == 3)
+        #expect(SettingsPage.whole(1e300) == 1_000_000_000)
+    }
+
+    @Test func theScreenSaverOrDisplaySwitchWritesBothKeysInPlace() {
+        var settings = Settings(["auto_lock": .table(["later": .string("kept"), "system_sleep": .bool(true)])])
+        SettingsPage.setScreenSaverOrDisplay(true, in: &settings)
+        #expect(settings["auto_lock"] == .table(["later": .string("kept"), "system_sleep": .bool(true),
+                                                 "display_sleep": .bool(true), "screen_saver": .bool(true)]))
+        SettingsPage.setScreenSaverOrDisplay(false, in: &settings)
+        #expect(settings["auto_lock"] == .table(["later": .string("kept"), "system_sleep": .bool(true)]))
+    }
+
+    @Test func hidePersonalInformationAlwaysStoresOn() {
+        // init.lua says privacy = true: off has to say false, and on says true all the same.
+        var settings = Settings()
+        SettingsPage.setPrivacy(false, base: .bool(true), in: &settings)
+        #expect(settings["privacy"] == .bool(false))
+        SettingsPage.setPrivacy(true, base: .bool(true), in: &settings)
+        #expect(settings["privacy"] == .bool(true))
+        // With nothing in init.lua, off is no key, and on is still true.
+        SettingsPage.setPrivacy(false, base: .nil, in: &settings)
+        #expect(settings["privacy"].isNil)
+        SettingsPage.setPrivacy(true, base: .nil, in: &settings)
+        #expect(settings["privacy"] == .bool(true))
+    }
+
+    /// The field reads init.lua's message as the lock does, so its own message stores no key even with a space after it
+    /// or past 200 characters, and the row can always go back to no key.
+    @Test func theMessageStoresNoKeyForInitLuasOwn() {
+        var settings = Settings()
+        SettingsPage.setMessage("Call 555", base: .string("Call 555 "), in: &settings)
+        #expect(settings["message"].isNil)
+        let long = String(repeating: "a", count: 250)
+        SettingsPage.setMessage(long, base: .string(long), in: &settings)
+        #expect(settings["message"].isNil)
+        // A cut that ends in a space reads the same the second time, so the field's second save stores no key either.
+        let spaced = String(repeating: "a", count: 199) + " " + String(repeating: "b", count: 50)
+        #expect(SettingsPage.messageText(SettingsPage.messageText(spaced)) == SettingsPage.messageText(spaced))
+        SettingsPage.setMessage(SettingsPage.messageText(spaced), base: .string(spaced), in: &settings)
+        #expect(settings["message"].isNil)
+        // Empty still hides init.lua's message, and init.lua's message again is no key.
+        SettingsPage.setMessage("", base: .string("Call 555 "), in: &settings)
+        #expect(settings["message"] == .string(""))
+        SettingsPage.setMessage("Call 555", base: .string("Call 555 "), in: &settings)
+        #expect(settings["message"].isNil)
+        // Without a message in init.lua, empty is no key, and a message is stored as the lock shows it.
+        SettingsPage.setMessage("", base: .nil, in: &settings)
+        #expect(settings["message"].isNil)
+        SettingsPage.setMessage("  Call me  ", base: .nil, in: &settings)
+        #expect(settings["message"] == .string("Call me"))
+    }
+
+    /// On is stored, so an init.lua that fails before its locky.setup still hides the name.
+    @Test func privacyOnOutlivesABrokenInitLua() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "error('broken') locky.setup({ privacy = true })")
+        var settings = Settings()
+        SettingsPage.setPrivacy(true, base: .bool(true), in: &settings)
+        try settings.save(config: sandbox.config)
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        let started = await runtime.start(theme: "default")
+        runtime.stop()
+        #expect(started.problems.contains { $0.contains("broken") }, "\(started.problems)")
+        #expect(started.privacy)
+    }
+
+    @Test func openInNamesTheDefaultEditorByItsApp() {
+        let neovide = URL(fileURLWithPath: "/Applications/Neovide.app")
+        #expect(Editor(id: "default", name: "Default (Neovide)", kind: .app(bundleID: "com.neovide.neovide", url: neovide)).shortName == "Neovide")
+        #expect(Editor(id: "com.neovide.neovide", name: "Neovide", kind: .app(bundleID: "com.neovide.neovide", url: neovide)).shortName == "Neovide")
+        #expect(Editor(id: "nvim", name: "Neovim", kind: .command(executable: URL(fileURLWithPath: "/opt/homebrew/bin/nvim"))).shortName == "Neovim")
     }
 }

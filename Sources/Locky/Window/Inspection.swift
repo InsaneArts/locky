@@ -7,7 +7,6 @@ struct Inspection: Sendable {
         var id: String
         var name: String
         var description: String?
-        var author: String?
         var directory: URL?
         /// The theme's own colors, before the defaults: for the theme cards.
         var palette: [String: String] = [:]
@@ -82,7 +81,7 @@ struct Inspection: Sendable {
                 result.config = (try? runtime.call("config", budget: 1).first) ?? .nil
                 result.themes = ((try? runtime.call("theme_infos", budget: 5).first?.array) ?? []).map { info in
                     ThemeInfo(id: info["id"].string ?? "?", name: info["name"].string ?? info["id"].string ?? "?",
-                              description: info["description"].string, author: info["author"].string,
+                              description: info["description"].string,
                               directory: info["dir"].string.map { URL(fileURLWithPath: $0) },
                               palette: (info["palette"].table ?? [:]).compactMapValues(\.string), error: info["error"].string)
                 }
@@ -145,6 +144,50 @@ struct Inspection: Sendable {
     private static func background<T: Sendable>(_ body: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async { continuation.resume(returning: body()) }
+        }
+    }
+}
+
+extension Inspection {
+    /// Themes by the name people read, as every theme list shows them.
+    var themesByName: [ThemeInfo] { themes.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
+}
+
+extension Inspection.WidgetInfo {
+    /// Where a widget comes from, by the file that defines it.
+    enum Origin: Equatable {
+        /// Locky's runtime.
+        case locky
+        /// A built-in theme package.
+        case package
+        /// The config folder, or no file: a widget defined from a string of Lua.
+        case config
+        /// A plugin, by its folder's name: the folder in the pack folder, else (a local plugin) the folder that holds its
+        /// plugin/ or lua/ folder. A file in neither gives its short path.
+        case plugin(String)
+    }
+
+    /// The inspector's source line and Add Widget's groups both follow it. Folders compare with their "/", so a folder
+    /// next to the config folder, such as ~/.config/locky-dev, is a plugin of its own.
+    var origin: Origin {
+        guard let path = file?.path else { return .config }
+        if path.hasPrefix(RuntimePath.builtInRuntime.path + "/") { return .locky }
+        if path.hasPrefix(RuntimePath.resources.appending(path: "packages").path + "/") { return .package }
+        if path.hasPrefix(RuntimePath.defaultConfig.path + "/") { return .config }
+        let packs = RuntimePath.defaultPacks.path + "/"
+        if path.hasPrefix(packs), let folder = path.dropFirst(packs.count).split(separator: "/").first { return .plugin(String(folder)) }
+        let parts = path.split(separator: "/")
+        if let index = parts.lastIndex(of: "plugin") ?? parts.lastIndex(of: "lua"), index > 0 { return .plugin(String(parts[index - 1])) }
+        return .plugin(LuaError.shortenPaths(path))
+    }
+
+    /// Where the widget comes from, for people: nil for Locky's own (the runtime and the built-in packages), "Lua Config"
+    /// for the config folder's, else the plugin's folder name.
+    var source: String? {
+        switch origin {
+        case .locky, .package: nil
+        case .config: "Lua Config"
+        case .plugin(let folder): folder
         }
     }
 }

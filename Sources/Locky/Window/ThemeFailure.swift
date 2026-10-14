@@ -27,6 +27,11 @@ extension ThemeFailure {
         return "\(name(theme)) failed to load on the last lock; Locky showed \(name(fallback))"
     }
 
+    /// "Tokyo Night Didn't Load": the status menu's item.
+    func menuTitle(_ inspection: Inspection) -> String {
+        "\(inspection.theme(theme)?.name ?? theme) Didn't Load"
+    }
+
     /// The newest modification date of the files, and of the files in the folders, among `urls`. settings.json
     /// and hidden files do not count: the window writes settings.json all the time.
     static func lastChange(_ urls: [URL]) -> Date? {

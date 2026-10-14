@@ -7,15 +7,46 @@ import Testing
     @Test func widgetsGroupByWhereTheyComeFrom() {
         func widget(_ name: String, _ file: URL) -> Inspection.WidgetInfo { Inspection.WidgetInfo(name: name, file: file) }
         let packages = RuntimePath.resources.appending(path: "packages")
-        let groups = WidgetGroup.groups([
+        let widgets = [
             widget("sakura.month", packages.appending(path: "sakura/plugin/sakura.lua")),
             widget("clock", RuntimePath.builtInRuntime.appending(path: "plugin/clock.lua")),
             widget("weather.big", RuntimePath.defaultPacks.appending(path: "locky-weather/plugin/big.lua")),
             widget("matrix.whisper", packages.appending(path: "matrix/plugin/matrix.lua")),
             widget("mine", RuntimePath.defaultConfig.appending(path: "plugin/mine.lua")),
+        ]
+        // Without a theme, no theme's pieces.
+        let groups = WidgetGroup.groups(widgets)
+        #expect(groups.map(\.title) == ["Locky", "Lua Config", "locky-weather"])
+        #expect(groups.map { $0.widgets.map(\.name) } == [["clock"], ["mine"], ["weather.big"]])
+        // Sakura's own pieces come last, under its name; another theme's stay out.
+        let sakura = Inspection.ThemeInfo(id: "sakura", name: "Sakura", directory: packages.appending(path: "sakura"))
+        let customizing = WidgetGroup.groups(widgets, theme: sakura)
+        #expect(customizing.map(\.title) == ["Locky", "Lua Config", "locky-weather", "Sakura"])
+        #expect(customizing.last?.widgets.map(\.name) == ["sakura.month"])
+        #expect(!customizing.flatMap(\.widgets).contains { $0.name == "matrix.whisper" })
+    }
+
+    /// A plugin's group is titled with its folder, whichever file of it defines the widget. A folder next to the config
+    /// folder is a plugin of its own, not Lua Config.
+    @Test func pluginGroupsTakeTheirFoldersName() {
+        func widget(_ name: String, _ path: String) -> Inspection.WidgetInfo { Inspection.WidgetInfo(name: name, file: URL(fileURLWithPath: path)) }
+        let config = RuntimePath.defaultConfig.path, packs = RuntimePath.defaultPacks.path
+        let groups = WidgetGroup.groups([
+            widget("mine", config + "/plugin/mine.lua"),
+            widget("thing", config + "-dev/plugin/thing.lua"),
+            widget("stars.graph", packs + "/locky-stars/lua/stars/init.lua"),
+            widget("stars.count", packs + "/locky-stars/plugin/stars.lua"),
+            widget("local.one", "/Users/someone/code/my-plugin/lua/my/init.lua"),
         ])
-        #expect(groups.map(\.title) == ["Locky", "Your Config", "Installed", "Matrix Theme", "Sakura Theme"])
-        #expect(groups.map { $0.widgets.map(\.name) } == [["clock"], ["mine"], ["weather.big"], ["matrix.whisper"], ["sakura.month"]])
+        #expect(groups.map(\.title) == ["Lua Config", "locky-dev", "locky-stars", "my-plugin"])
+        #expect(groups.map { $0.widgets.map(\.name) } == [["mine"], ["thing"], ["stars.graph", "stars.count"], ["local.one"]])
+        #expect(Set(groups.map(\.id)).count == groups.count)
+        // A plugin folder named like the theme being customized: two groups, each its own.
+        let sakura = Inspection.ThemeInfo(id: "sakura", name: "Sakura", directory: RuntimePath.resources.appending(path: "packages/sakura"))
+        let named = WidgetGroup.groups([widget("petals", packs + "/Sakura/plugin/petals.lua"),
+                                        widget("sakura.month", RuntimePath.resources.path + "/packages/sakura/plugin/sakura.lua")], theme: sakura)
+        #expect(named.map(\.title) == ["Sakura", "Sakura"])
+        #expect(Set(named.map(\.id)).count == 2)
     }
 
     /// The gallery runs every widget in one runtime, once in each of its families, and hands each card the live
@@ -123,12 +154,6 @@ import Testing
 @Suite struct OddNumberTests {
     /// init.lua's auto_unlock = math.huge, a theme's offset = { math.huge, 0 }: the window once trapped on them.
     @Test func numbersThatAreNotFiniteShowAndSaveSafely() {
-        #expect(SettingsPage.duration(.infinity) == "Off")
-        #expect(SettingsPage.duration(.nan) == "Off")
-        // Over a day is a day, as the runtime clamps it.
-        #expect(SettingsPage.duration(1e300) == "1440 min")
-        #expect(SettingsPage.duration(100_000) == "1440 min")
-        #expect(SettingsPage.duration(90) == "90 s")
         let placement = EditorPlacement(entry: .table(["widget": .string("clock"), "offset": .array([.double(.infinity), .double(-1e12)])]))
         #expect(placement.x == 0 && placement.y == -100_000)
         // And it saves as JSON can hold it.
@@ -190,33 +215,5 @@ import Testing
         holder.terminate()
         holder.waitUntilExit()
         #expect(InstanceLock.acquire(file))
-    }
-}
-
-/// A click on a widget card on the Widgets page adds the widget to a theme.
-@MainActor
-@Suite struct AddToThemeTests {
-    @Test func addingWritesThePlacementAndShowsTheTheme() async throws {
-        let sandbox = try Sandbox()
-        try sandbox.write("themes/t.lua", "return { widgets = { { 'clock', anchor = 'top' } } }")
-        let model = AppModel(store: SettingsStore(config: sandbox.config))
-        let index = await AddToTheme.add("date", to: Inspection.ThemeInfo(id: "t", name: "T"), model: model)
-        #expect(index == 1)
-        let widgets = model.store.settings.themeEdit("t", "widgets").array ?? []
-        #expect(widgets.map { $0["widget"] } == [.string("clock"), .string("date")])
-        #expect(widgets.first?["ref"] == .int(1))
-        #expect(model.selectedTheme == "t")
-        #expect(model.section == .themes)
-        // The settings file says the same.
-        #expect(Settings.load(config: sandbox.config).settings.themeEdit("t", "widgets") == model.store.settings.themeEdit("t", "widgets"))
-    }
-
-    @Test func aThemeThatDoesNotLoadIsLeftAlone() async throws {
-        let sandbox = try Sandbox()
-        try sandbox.write("themes/t.lua", "error('broken')")
-        let model = AppModel(store: SettingsStore(config: sandbox.config))
-        #expect(await AddToTheme.add("date", to: Inspection.ThemeInfo(id: "t", name: "T"), model: model) == nil)
-        #expect(model.store.settings.themeEdit("t", "widgets").isNil)
-        #expect(model.section == .dashboard)
     }
 }

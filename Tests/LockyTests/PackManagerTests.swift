@@ -160,6 +160,25 @@ import Testing
         #expect(try String(contentsOf: sandbox.path().lockfile, encoding: .utf8) == conflicted)
     }
 
+    /// A check that read the lockfile reached every plugin it pins, none at all included. One that failed as a whole did
+    /// not: the window then says nothing of when it ran.
+    @Test func aCheckSaysWhetherItReadTheLockfile() throws {
+        let sandbox = try Sandbox()
+        let manager = PackManager(path: sandbox.path())
+        let empty = manager.run(.check)
+        #expect(empty.ok && empty.readLockfile && empty.updates.isEmpty)
+        // Another run holds the plugins.
+        let lock = open(sandbox.packs.appending(path: ".locky-pack.lock").path, O_CREAT | O_RDWR, 0o644)
+        defer { close(lock) }
+        #expect(flock(lock, LOCK_EX) == 0)
+        let busy = manager.run(.check)
+        #expect(!busy.ok && !busy.readLockfile && busy.text == "Another plugin run is in progress. Try again when it finishes.")
+        flock(lock, LOCK_UN)
+        try "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> theirs\n".write(to: sandbox.path().lockfile, atomically: true, encoding: .utf8)
+        let unreadable = manager.run(.check)
+        #expect(!unreadable.ok && !unreadable.readLockfile)
+    }
+
     @Test func specsRefuseOptionLikeValuesAndCaseTwins() throws {
         let sandbox = try Sandbox()
         try sandbox.write("init.lua", "locky.pack.add({ { src = '--upload-pack=x', name = 'a' } })")
@@ -349,6 +368,8 @@ import Testing
         #expect(update.changes.count == 3, "\(update.changes)")
         #expect(update.changes.first == "  \(new.prefix(7)) hi[31m")
         #expect(update.changes.last?.contains("1 file changed, 1 insertion(+), 1 deletion(-)") == true)
+        // The diffstat keeps git's own leading space, its first line too, so its lines line up.
+        #expect(update.changes.dropFirst().allSatisfy { $0.hasPrefix("   ") && !$0.hasPrefix("    ") }, "\(update.changes)")
         #expect(report.lines == [update.line] + update.changes)
         // locky pack update prints the same lines as it moves.
         #expect(manager.run(.update).lines == ["updated hello \(update.current!.prefix(7)) → \(new.prefix(7))\n" + update.changes.joined(separator: "\n")])

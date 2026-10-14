@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Renders the built-in themes' thumbnails (Sources/Locky/Resources/thumbnails/<id>.jpg) for the Locky
-# window. Nothing personal goes into them: privacy mode is on and no desktop picture shows.
+# windows. Privacy mode is on and no desktop picture shows, so no name, picture, or place name goes into them.
+# Widgets that read this Mac still draw its own values, such as its model and memory, running programs, and the
+# day's sunrise and sunset here: look at each image before committing it.
 #
 #   Scripts/thumbnails.sh [THEME ...]      # default: every built-in theme
 set -euo pipefail

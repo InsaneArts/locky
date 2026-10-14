@@ -42,6 +42,7 @@ struct Shortcut: Equatable, Sendable {
         var names: [String] { Self.table.filter { contains($0.modifier) }.map(\.name) }
         var symbols: String { Self.table.filter { contains($0.modifier) }.map(\.symbol).joined() }
         var carbon: UInt32 { UInt32(Self.table.filter { contains($0.modifier) }.reduce(0) { $0 | $1.carbon }) }
+        var flags: NSEvent.ModifierFlags { NSEvent.ModifierFlags(Self.table.filter { contains($0.modifier) }.map(\.flag)) }
     }
 
     var keyCode: UInt16
@@ -78,6 +79,17 @@ struct Shortcut: Equatable, Sendable {
     /// as in macOS's own menus: a Georgian or Russian layout still shows "L" for the L key, and a French one its "L".
     @MainActor
     var display: String { modifiers.symbols + Self.keyName(keyCode) }
+
+    /// The shortcut as a menu item's key equivalent: the character the key types, an F-key's function-key character,
+    /// and nil for other keys, which a menu cannot show. If the menu item and the global hot key both fire, the second
+    /// lock does nothing: a lock starts only when no session runs.
+    @MainActor
+    var menuKeyEquivalent: (key: String, modifiers: NSEvent.ModifierFlags)? {
+        if let number = Self.functionKeys.firstIndex(of: Int(keyCode)) {
+            return (String(Character(UnicodeScalar(NSEvent.SpecialKey.f1.rawValue + number)!)), modifiers.flags)
+        }
+        return Self.character(keyCode).map { ($0.lowercased(), modifiers.flags) }
+    }
 
     private static let functionKeys = [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10, kVK_F11,
                                        kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20]

@@ -14,8 +14,8 @@ locky.setup({ theme = "mocha" })
   keeps the palette. Without a desktop picture, a quiet base-to-mantle gradient.
 - The center: the ring, 320 points wide. Each key you type lights a green arc at a random place; backspace
   lights a rosewater one. The ring turns green while the password is checked and maroon when it is wrong.
-  Inside, on a dark disc: the time, the date, and the keyboard layout. With Touch ID, "Touch ID or type"
-  shows near the bottom of the ring.
+  Inside, on a dark disc: the time, the date, and the keyboard layout. With Touch ID, the Touch ID symbol
+  shows near the bottom of the ring while Touch ID listens.
 - Top left: `user@host`. Top right: battery and uptime (no battery on a desktop Mac).
 - Bottom left: one dot per [herdr](https://herdr.dev) agent that needs you or is working (blocked peach,
   done green, working blue) and their counts. Hidden when herdr is not running.

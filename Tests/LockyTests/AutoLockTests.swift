@@ -144,9 +144,10 @@ import Testing
     }
 }
 
-/// Posts NSWorkspace's notifications to this process's own center: nothing outside the test sees them.
+/// Posts NSWorkspace's notifications to this process's own center: nothing outside the test sees them. One test at a
+/// time: each one's posts reach every AutoLock that listens.
 @MainActor
-@Suite struct AutoLockTriggerTests {
+@Suite(.serialized) struct AutoLockTriggerTests {
     @Test func sleepTriggersLockAndNothingFiresWhileLocked() async throws {
         var locked = false
         var reasons: [String] = []
@@ -174,6 +175,26 @@ import Testing
         workspace.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
         try await Task.sleep(for: .milliseconds(100))
         #expect(reasons == ["system sleep", "display sleep"])
+    }
+
+    /// Settings and the Welcome show display sleep and the screen saver as one switch, so either key stored locks on
+    /// both. Nothing else changes, and neither key adds nothing.
+    @Test func eitherScreenKeyLocksOnBoth() async throws {
+        let both = AutoLockSettings(displaySleep: true, screenSaver: true)
+        #expect(AutoLock.listened(AutoLockSettings(screenSaver: true)) == both)
+        #expect(AutoLock.listened(AutoLockSettings(displaySleep: true)) == both)
+        #expect(AutoLock.listened(AutoLockSettings(idleMinutes: 5, systemSleep: true, screenSaver: true))
+            == AutoLockSettings(idleMinutes: 5, displaySleep: true, systemSleep: true, screenSaver: true))
+        #expect(AutoLock.listened(AutoLockSettings(idleMinutes: 5, systemSleep: true)) == AutoLockSettings(idleMinutes: 5, systemSleep: true))
+
+        // The screen saver key alone locks when the display sleeps.
+        var reasons: [String] = []
+        let autoLock = AutoLock(isLocked: { false }, lock: { reasons.append($0) })
+        autoLock.apply(AutoLockSettings(screenSaver: true))
+        defer { autoLock.apply(AutoLockSettings()) }
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
+        for _ in 0..<100 where reasons.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(reasons == ["display sleep"])
     }
 
     /// A lock the shortcut started and Touch ID opened, between two checks and with no key pressed: the count

@@ -37,7 +37,7 @@ Each time the screen locks, Locky starts a fresh Lua state and:
 
 1. runs `init.lua`, then makes `locky.config` read-only: plugins, themes, and widgets read options but never change them
 2. runs every `plugin/*.lua` in the runtime path, in path order, then by file name
-3. loads the theme (`locky.config.theme`, or the one picked in the menu)
+3. loads the theme (the theme schedule's pick for now, else `locky.config.theme`)
 4. creates the theme's widgets, calls each one's `init`, and draws them
 5. fires the `lock` event
 
@@ -55,7 +55,7 @@ locky.widget.define("uptime", {
   card = true,                         -- sit on the theme's card unless the theme says otherwise
   families = { "inline", "small" },    -- optional: Apple's sizes it draws; render reads self.family (nil: its own size)
   opts = { label = "Up" },             -- defaults; the theme's and the user's options merge in
-  choices = { label = { "Up", "On" } }, -- optional: the values an option takes, for the window's editor
+  choices = { label = { "Up", "On" } }, -- optional: the values an option takes, for Customize
   init = function(self)
     self:every(60, function(self)      -- runs now, then every minute; stops when the lock opens
       self:set({ seconds = locky.sys.uptime() })
@@ -114,7 +114,8 @@ view and property, and [api.md](api.md) for `locky.*`.
 A plugin you install (a folder in `~/.local/share/locky/pack`) runs programs and changes files only if you
 allow it. Without the grant, `locky.system` fails, and so do `io.open` in a write, append, or update mode,
 `io.output` with a file name, `os.remove`, `os.rename`, and `os.tmpname`. The error names the plugin and says
-how to allow it. Allow it on the Plugins page ("Run programs", "Change files"), or in `init.lua`:
+how to allow it. For a plugin you added with Install Plugin… in Settings › Plugins, turn on "Run programs" or
+"Change files" there. For one that only init.lua adds, allow it in `init.lua`:
 
 ```lua
 locky.pack.add({ { src = "someone/locky-git", allow = { "system" } } })   -- "system", "files", or both
@@ -152,7 +153,7 @@ locky-weather/
   README.md
 ```
 
-Users add it in `init.lua` and install it with `locky pack sync` (or the Locky window's Plugins page):
+Users add it in `init.lua` and install it with `locky pack sync` (or Settings › Plugins):
 
 ```lua
 locky.pack.add({
@@ -163,6 +164,9 @@ locky.pack.add({
 require("weather").setup({ city = "Tbilisi" })
 ```
 
+Installing clones the plugin with git into `~/.local/share/locky/pack` and pins its commit in
+`locky-pack-lock.json`, next to init.lua.
+
 A source is `"user/repo"` (GitHub), or an `https://`, `ssh://`, or `git@` address. Locky refuses `http://`,
 `git://`, and `file://`, even through a redirect: anyone on the network could change what they send. For a
 folder on your Mac, use `{ dir = ... }`.
@@ -171,8 +175,10 @@ folder on your Mac, use `{ dir = ... }`.
 and lists each moved package's new commits and diffstat; `locky pack clean` deletes packages `init.lua` no
 longer adds. `locky pack check` fetches the packages the lockfile pins and lists the ones `update` would move,
 with the same commits and diffstat, and moves none. It runs no Lua, so no plugin code runs: the Locky app runs
-it once a day in the background. The Plugins page's Update All… shows the same review before it installs
-anything, and installs exactly the commits it showed.
+it once a day in the background. In Settings › Plugins, Update… on a plugin shows the same review for that
+plugin before it installs anything, and installs exactly the commits it showed. `locky pack clean` is also how to
+delete plugin folders that nothing adds any more: Settings › Plugins deletes a plugin's folder only when you
+remove that plugin.
 
 Follow Neovim's conventions: `setup(opts)` only merges options (use `locky.tbl.deep_extend`), keep
 `plugin/<name>.lua` small, and give every option a default.

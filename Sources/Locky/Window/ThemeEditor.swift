@@ -2,122 +2,261 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The theme editor's panel. On top: the theme, and whether a lock uses it. With nothing selected: its background,
-/// and its widgets and password field to select. With a widget selected: where it sits, its card, and its options. With the password field selected:
-/// where it sits. Changes save to settings.json at once, and the preview shows them as they are made.
-struct ThemeEditor: View {
-    @Bindable var model: AppModel
-    let editing: ThemeEditing
-    @Binding var selection: EditorItem?
-    /// settings.json with a change still being made, such as a slider being dragged: the preview shows it first.
-    @Binding var draft: Settings?
-    /// The Add Widget sheet, which the page shows.
-    @Binding var adding: Bool
+/// Customize: one theme's live lock screen as a canvas, where widgets are clicked to change them and dragged to move
+/// them, the inspector beside it, and the theme's commands in the toolbar. Changes save to settings.json at once, and
+/// the canvas follows.
+struct ThemeEditorPage: View {
+    let model: AppModel
+    let info: Inspection.ThemeInfo
+    /// The theme being edited; a new one per theme, so one theme's layout is never saved as another's.
+    @State private var editing: ThemeEditing?
+    @State private var selection: EditorItem?
+    /// settings.json with a change still being made, such as a slider being dragged: the canvas shows it first.
+    @State private var draft: Settings?
     /// The name Duplicate Theme asks for, while it asks.
     @State private var copyName: String?
-    @State private var problem: String?
+    /// A command that failed: its alert's title and message.
+    @State private var problem: (title: String, message: String)?
+    @AppStorage("themeEditorGrid") private var grid = false
+    @AppStorage("customizeInspector") private var inspectorShown = true
+    @Environment(\.undoManager) private var undoManager
+    @FocusedValue(\.typing) private var typing
 
-    private var theme: Inspection.ThemeInfo { editing.theme }
+    /// The editor of this theme, once it is made: right after a change of theme, `editing` is still the last one's.
+    private var current: ThemeEditing? { editing?.theme.id == info.id ? editing : nil }
+    /// The editor once it has the theme's layout, which every change starts from.
+    private var loaded: ThemeEditing? { current?.layout == nil ? nil : current }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            content
-        }
+        content
+            .navigationTitle(info.name)
+            .toolbar { toolbar }
+            // Read again when Lua files change: init.lua may give the theme other widgets or options.
+            .task(id: "\(info.id)-\(model.inspection.sources)") {
+                let next = ThemeEditing(theme: info, model: model)
+                next.undoManager = undoManager
+                await next.load()
+                // A newer load replaced this one.
+                guard !Task.isCancelled else { return }
+                editing = next
+            }
+            .onChange(of: info.id) {
+                selection = nil
+                draft = nil
+            }
+            // A change in progress belongs to what was selected.
+            .onChange(of: selection) { draft = nil }
+            // Escape in the inspector does what it does on the canvas: it clears the selection, then ends Customize. A text
+            // field that has the keyboard keeps it.
+            .onExitCommand {
+                guard typing != true else { return }
+                if selection == nil { model.finishEditing() } else { selection = nil }
+            }
+            // File menu commands that need the editor: the More menu's, under its rules.
+            .onChange(of: model.editorRequest) {
+                guard let request = model.editorRequest else { return }
+                model.editorRequest = nil
+                guard allows(request) else { return }
+                switch request {
+                case .duplicate: copyName = "\(info.name) Copy"
+                case .export: export()
+                case .revert: current?.revertToOriginal()
+                }
+            }
+            .sheet(isPresented: Binding(get: { model.addingWidget && loaded != nil }, set: { model.addingWidget = $0 })) {
+                WidgetGallerySheet(model: model, theme: info) { name, family in
+                    if let loaded { selection = .widget(loaded.add(name, family: family)) }
+                }
+            }
+            // A lock cancels the Duplicate alert: its name field must not take what is typed at the lock.
+            .onChange(of: model.locked) { if model.locked { copyName = nil } }
+            .alert("Duplicate Theme", isPresented: Binding(get: { copyName != nil }, set: { if !$0 { copyName = nil } })) {
+                TextField("Name", text: Binding(get: { copyName ?? "" }, set: { copyName = $0 }))
+                Button("Duplicate") { duplicate(named: copyName ?? "") }
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert(problem?.title ?? "", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
+                Button("OK") {}
+            } message: {
+                Text(problem?.message ?? "")
+            }
     }
 
-    /// The theme being edited, and whether a lock uses it: the theme selected here is not always the one that locks.
-    private var header: some View {
-        let active = model.activeTheme
-        let scheduled = model.store.settings.schedule != nil
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(theme.name).font(.title3.weight(.semibold)).lineLimit(1)
-                if theme.id == active { Tag("In Use", color: .green) }
-                if !model.store.settings["themes"][theme.id].isNil { Tag("Changed", color: .orange) }
-                Spacer(minLength: 0)
-                Menu {
-                    Button("Duplicate Theme…") { copyName = "\(theme.name) Copy" }
-                    Button("Export Theme…", action: export)
-                        .disabled(!ThemeFile.isBuiltIn(made(name: theme.name).base))
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .disabled(editing.layout == nil)
-                .help("Duplicate this theme with your changes, or export it to share")
-            }
-            if theme.id != active {
-                let name = model.inspection.theme(active)?.name ?? active
-                Text(scheduled ? "Not in use: the theme schedule shows \(name) now." : "Not in use: your lock shows \(name).")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if !scheduled {
-                    Button { model.store.update { $0["theme"] = .string(theme.id) } } label: {
-                        Text("Use This Theme").frame(maxWidth: .infinity)
+    /// The canvas, in the space the inspector leaves; for a theme that does not load, why.
+    @ViewBuilder private var content: some View {
+        if let error = info.error {
+            UnloadableTheme(model: model, problem: ConfigProblem(error, config: model.store.config))
+        } else {
+            ThemePreview(theme: info.id, settings: draft ?? model.store.settings, sources: model.inspection.sources,
+                         config: model.store.config, alwaysLive: model.screenshots, canvas: canvas, info: info)
+                .aspectRatio(1.6, contentMode: .fit)
+                .previewFrame()
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .inspector(isPresented: $inspectorShown) {
+                    Group {
+                        if let current {
+                            ThemeInspector(model: model, editing: current, selection: $selection, draft: $draft)
+                        } else {
+                            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(theme.error != nil)
-                    .help("Lock with this theme from now on")
+                    .inspectorColumnWidth(min: 280, ideal: 300, max: 400)
                 }
+        }
+    }
+
+    /// Three groups: the theme's tools, Use Theme, and Done. Use Theme stays when it does not apply, dimmed, so a click
+    /// never takes a button from under the pointer.
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button("Add Widget…", systemImage: "plus") { model.addingWidget = true }
+                .help("Add a widget to this theme")
+                .disabled(loaded == nil)
+            Button("Preview", systemImage: "play.rectangle") { model.preview(info.id) }
+                .help("Show this theme full size")
+                .disabled(info.error != nil)
+            Menu {
+                Button("Duplicate Theme…") { copyName = "\(info.name) Copy" }
+                    .disabled(!allows(.duplicate))
+                Button("Export Theme…", action: export)
+                    .disabled(!allows(.export))
+                Divider()
+                Button("Revert to Original") { current?.revertToOriginal() }
+                    .disabled(!allows(.revert))
+                if model.canTrash(info.id) {
+                    Button("Move to Trash", action: moveToTrash)
+                }
+            } label: {
+                Label("More", systemImage: "ellipsis")
             }
+            .menuIndicator(.hidden)
+            .help(model.canTrash(info.id) ? "Duplicate, export, revert, or move this theme to the Trash" : "Duplicate, export, or revert this theme")
+            .disabled(info.error != nil && !model.canTrash(info.id))
         }
-        .padding(16)
-        .alert("Duplicate Theme", isPresented: Binding(get: { copyName != nil }, set: { if !$0 { copyName = nil } })) {
-            TextField("Name", text: Binding(get: { copyName ?? "" }, set: { copyName = $0 }))
-            Button("Duplicate") { duplicate(named: copyName ?? "") }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("A theme of your own, with this theme's look and your changes to it, in your config folder's themes.")
+        if #available(macOS 26, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
+        ToolbarItem(placement: .primaryAction) {
+            Button("Use Theme") { model.use(info.id) }
+                .disabled(info.id == model.activeTheme || info.error != nil)
         }
-        .alert("Can't Save the Theme", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })) {
-            Button("OK") {}
-        } message: {
-            Text(problem ?? "")
+        if #available(macOS 26, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
+        ToolbarItem(placement: .primaryAction) {
+            Button("Done") { model.finishEditing() }
+                .buttonStyle(.borderedProminent)
         }
     }
 
-    /// This theme with the editor's changes, as a theme named `name`.
+    /// Whether a More menu command applies: none to a theme that does not load, Export only to a theme another Mac can
+    /// load, and Revert only to a theme with changes.
+    private func allows(_ command: AppModel.EditorRequest) -> Bool {
+        guard info.error == nil else { return false }
+        switch command {
+        case .duplicate: return true
+        case .export: return model.canExport(info.id)
+        case .revert: return current?.isChanged == true
+        }
+    }
+
+    /// What the canvas shows and reports, once the theme's layout is in: the selection, the grid, and where clicks,
+    /// drags, and keys go.
+    private var canvas: ThemePreview.Canvas? {
+        guard let editing = loaded else { return nil }
+        return ThemePreview.Canvas(selection: selection, grid: grid, name: { editing.name(of: $0) }, select: { selection = $0 },
+                                   move: { editing.move($0, anchor: $1, offset: $2) },
+                                   nudge: { editing.nudge($0, by: $1, byGrid: $2) },
+                                   remove: { index in
+                                       draft = nil
+                                       selection = nil
+                                       editing.remove(index)
+                                   },
+                                   exit: { model.finishEditing() })
+    }
+
+    /// This theme with its changes, as a theme named `name`.
     private func made(name: String) -> ThemeFile {
-        ThemeFile.made(from: theme.id, edit: model.store.settings["themes"][theme.id], name: name, config: model.store.config)
+        ThemeFile.made(from: info.id, edit: model.store.settings["themes"][info.id], name: name, config: model.store.config)
     }
 
-    /// Writes the copy to the config's themes folder, and opens it in the editor.
+    /// Writes the copy to the config's themes folder, and opens it in Customize.
     private func duplicate(named name: String) {
         let name = name.trimmingCharacters(in: .whitespaces)
         guard ThemeFile.isName(name) else {
-            problem = "A theme's name has 1 to 80 characters, on one line."
+            problem = ("Can't Duplicate the Theme", "Use a name of 1 to 80 characters on one line.")
             return
         }
-        let id = ThemeFile.id(for: name, taken: ThemeFile.takenIDs(model.inspection.themes, settings: model.store.settings, config: model.store.config))
         let file = made(name: name)
         Task {
             do {
-                try await file.install(as: id, config: model.store.config)
-                model.selectedTheme = id
-                model.refresh()
+                model.customize(try await model.install(file))
             } catch {
-                problem = (error as? LuaError)?.message ?? error.localizedDescription
+                problem = ("Can't Duplicate the Theme", (error as? LuaError)?.message ?? error.localizedDescription)
             }
         }
     }
 
-    /// Saves the theme, with the editor's changes, as one file to share; Import Theme adds it on another Mac.
+    /// Saves the theme, with its changes, as one file to share; Import Theme adds it on another Mac.
     private func export() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(theme.id).lua"
+        panel.nameFieldStringValue = "\(info.id).lua"
         panel.allowedContentTypes = [ThemeFile.type]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try made(name: theme.name).source().write(to: url, atomically: true, encoding: .utf8)
+            try made(name: info.name).source().write(to: url, atomically: true, encoding: .utf8)
         } catch {
-            problem = (error as? LuaError)?.message ?? error.localizedDescription
+            problem = ("Can't Export the Theme", (error as? LuaError)?.message ?? error.localizedDescription)
         }
+    }
+
+    /// The person's own theme goes to the Trash, which is the undo, and Customize ends with it.
+    private func moveToTrash() {
+        do {
+            try model.trash(info.id)
+        } catch {
+            problem = ("Can't Move the Theme to the Trash", error.localizedDescription)
+        }
+    }
+}
+
+/// A theme that does not load: why, in the words Lua Config uses, and Open at the file and line the error names.
+private struct UnloadableTheme: View {
+    let model: AppModel
+    let problem: ConfigProblem
+    /// Why the editor did not open, if it did not.
+    @State private var openError: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Can't Edit This Theme", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(problem.described)
+        } actions: {
+            OpenProblemButton(model: model, problem: problem, error: $openError)
+            if let openError { WarningLabel(openError) }
+        }
+        // Nothing here takes the keyboard by itself, as the canvas does: this view does, so Esc reaches the page and
+        // ends Customize. On the next turn, once the view that had it is gone.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($focused)
+        .onAppear { DispatchQueue.main.async { focused = true } }
+        // Gives the keyboard back as it goes, or the gallery's grid takes Return but not the arrows.
+        .onDisappear { focused = false }
+    }
+}
+
+/// Customize's inspector, which follows the selection. With nothing selected: the theme's background, and its widgets
+/// and password field to select. With a widget selected: where it sits, its card, and its options. With the password
+/// field selected: where it sits. Changes save to settings.json at once, and the canvas shows them as they are made.
+struct ThemeInspector: View {
+    let model: AppModel
+    let editing: ThemeEditing
+    @Binding var selection: EditorItem?
+    /// settings.json with a change still being made, such as a slider being dragged: the canvas shows it first.
+    @Binding var draft: Settings?
+
+    var body: some View {
+        content
     }
 
     private var content: some View {
@@ -125,7 +264,7 @@ struct ThemeEditor: View {
             if let layoutError = editing.layoutError {
                 ContentUnavailableView("Can't Edit This Theme", systemImage: "exclamationmark.triangle", description: Text(layoutError))
             } else if editing.layout == nil {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 switch selection {
                 case .widget(let index) where editing.placements.indices.contains(index):
@@ -133,7 +272,7 @@ struct ThemeEditor: View {
                     WidgetInspector(model: model, editing: editing, index: index, selection: $selection, draft: $draft)
                         .id(index)
                 case .passwordField:
-                    PasswordFieldInspector(editing: editing, selection: $selection)
+                    PasswordFieldInspector(model: model, editing: editing)
                 default:
                     overview
                 }
@@ -144,73 +283,50 @@ struct ThemeEditor: View {
 
     private var overview: some View {
         Form {
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(theme.description ?? theme.id).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    if let author = theme.author { Text("By \(author)").font(.caption).foregroundStyle(.tertiary) }
-                }
-            }
-            Section {
+            SaveProblem(model: model)
+            Section("Background") {
                 BackgroundEditor(model: model, editing: editing, draft: $draft)
             }
-            Section {
-                ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
-                    Button { selection = .widget(index) } label: {
-                        WidgetRow(placement: placement, info: editing.info(placement))
-                    }
-                    .buttonStyle(.plain)
-                }
-                Button("Add Widget…", systemImage: "plus") { adding = true }
-            } header: {
-                HStack {
-                    Text("Widgets")
-                    Spacer()
-                    if editing.widgetsChanged {
-                        Button("Reset Layout") { editing.resetWidgets() }
-                            .buttonStyle(.link)
-                            .font(.callout)
+            // A theme with no widgets has no header over nothing; the toolbar's + adds one.
+            if !editing.placements.isEmpty {
+                Section("Widgets") {
+                    ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
+                        Button { selection = .widget(index) } label: {
+                            WidgetRow(placement: placement, missing: editing.info(placement) == nil)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
             Section {
                 Button { selection = .passwordField } label: {
-                    HStack {
+                    HStack(spacing: 8) {
                         Text("Password Field")
                         Spacer()
-                        Text(editing.authPlace.anchor.replacingOccurrences(of: "-", with: " ").capitalizedFirst).foregroundStyle(.secondary)
+                        Text(AnchorPicker.name(editing.authPlace.anchor)).foregroundStyle(.secondary)
                         Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-            } footer: {
-                Text("Click a widget in the preview to change it, and drag it to move it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
     }
 }
 
-/// A widget in the theme's list: its name and what it shows.
+/// A widget in the theme's list, by name.
 private struct WidgetRow: View {
     let placement: EditorPlacement
-    let info: Inspection.WidgetInfo?
+    /// Locky has no widget of its name, such as one from a plugin that is not installed.
+    let missing: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(EditorPlacement.title(placement.widget)).font(.body.weight(.medium)).lineLimit(1)
-                    if info == nil {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                            .help("No widget has this name. Is its plugin installed?")
-                    }
-                }
-                if let description = info?.description {
-                    Text(description).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-                }
+        HStack(spacing: 8) {
+            Text(EditorPlacement.title(placement.widget)).lineLimit(1)
+            if missing {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    .help("No widget has this name. Is its plugin installed?")
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
@@ -219,14 +335,44 @@ private struct WidgetRow: View {
     }
 }
 
-/// Back to the theme's panel.
-private struct BackButton: View {
+/// A section's header with a trailing Reset, shown while there is something to reset.
+private struct ResetHeader: View {
     let title: String
-    let action: () -> Void
+    let shown: Bool
+    let reset: () -> Void
 
     var body: some View {
-        Button(action: action) { Label(title, systemImage: "chevron.left") }
-            .buttonStyle(.link)
+        HStack {
+            Text(title)
+            Spacer()
+            if shown {
+                Button("Reset", action: reset)
+                    .buttonStyle(.link)
+                    .font(.callout)
+            }
+        }
+    }
+}
+
+/// While settings.json has an error, nothing the inspector changes can save: it says so first, with the way to fix it.
+private struct SaveProblem: View {
+    let model: AppModel
+
+    var body: some View {
+        if model.store.problem != nil {
+            Section {
+                // WarningLabel's look, with the link under the sentence: the inspector is too narrow for it beside.
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("settings.json has an error, so changes can't save.")
+                        Button("Open Settings") { model.openWindow(.settings) }
+                            .buttonStyle(.link)
+                    }
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+            }
+        }
     }
 }
 
@@ -251,21 +397,22 @@ private struct WidgetInspector: View {
         let info = editing.info(placement)
         let inherited = editing.inherited(placement)
         let keys = OptionRow.keys(inherited: inherited, overrides: placement.opts, choices: info?.choices ?? [:])
+        let families = info?.families ?? []
+        let cards = editing.layout?.cardStyle != "none"
         Form {
+            SaveProblem(model: model)
             Section {
-                BackButton(title: editing.theme.name) { selection = nil }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(EditorPlacement.title(placement.widget)).font(.title3.weight(.semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(EditorPlacement.title(placement.widget)).font(.headline)
                     if let info {
-                        if let description = info.description { Text(description).foregroundStyle(.secondary) }
-                        Text(AddWidgetSheet.source(of: info)).font(.caption).foregroundStyle(.tertiary)
+                        if let description = info.description { Text(description).font(.callout).foregroundStyle(.secondary) }
+                        if let source = info.source { Text(source).font(.caption).foregroundStyle(.secondary) }
                     } else {
-                        Label("No widget has this name. Is its plugin installed?", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                        WarningLabel("No widget has this name. Is its plugin installed?")
                     }
                 }
             }
-            Section("Position") {
+            Section {
                 PositionEditor(anchor: placement.anchor, x: placement.x, y: placement.y) { anchor, x, y in
                     change("Move") {
                         $0.anchor = anchor
@@ -273,22 +420,28 @@ private struct WidgetInspector: View {
                         $0.y = y
                     }
                 }
-            }
-            if let families = info?.families, !families.isEmpty {
-                Section("Size") {
-                    let options = (editing.themeFamily(placement) == nil ? [String?.none] : []) + families.map(Optional.some)
-                    Picker("Size", selection: Binding(get: { editing.family(placement) }, set: { value in
-                        change("Resize") { $0.rest["family"] = value.map(LuaValue.string) }
-                    })) {
-                        ForEach(options, id: \.self) { family in
-                            Text(family.map(FamilyPicker.name) ?? "Its Own Size").tag(family)
-                        }
-                    }
+            } header: {
+                ResetHeader(title: "Position", shown: editing.isMoved(.widget(index))) {
+                    // Colors being picked save first, as before any change.
+                    if !picked.isEmpty { change() }
+                    editing.resetPlace(.widget(index))
                 }
             }
-            if editing.layout?.cardStyle != "none" {
+            if !families.isEmpty || cards {
                 Section {
-                    Toggle("On a Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
+                    if !families.isEmpty {
+                        let options = (editing.themeFamily(placement) == nil ? [String?.none] : []) + families.map(Optional.some)
+                        Picker("Size", selection: Binding(get: { editing.family(placement) }, set: { value in
+                            change("Resize") { $0.rest["family"] = value.map(LuaValue.string) }
+                        })) {
+                            ForEach(options, id: \.self) { family in
+                                Text(family.map(FamilyPicker.name) ?? "Original").tag(family)
+                            }
+                        }
+                    }
+                    if cards {
+                        Toggle("Show card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
+                    }
                 }
             }
             if !keys.isEmpty {
@@ -301,15 +454,7 @@ private struct WidgetInspector: View {
                                   commit: { value in change { $0.opts[key] = value == inherited[key] ? nil : value } })
                     }
                 } header: {
-                    HStack {
-                        Text("Options")
-                        Spacer()
-                        if !placement.opts.isEmpty {
-                            Button("Reset Options") { change("Reset Options of") { $0.opts = [:] } }
-                                .buttonStyle(.link)
-                                .font(.callout)
-                        }
-                    }
+                    ResetHeader(title: "Options", shown: !placement.opts.isEmpty) { change("Reset Options of") { $0.opts = [:] } }
                 }
             }
             Section {
@@ -364,26 +509,20 @@ private struct WidgetInspector: View {
 
 /// The password field: where it sits. The theme sets its look.
 private struct PasswordFieldInspector: View {
+    let model: AppModel
     let editing: ThemeEditing
-    @Binding var selection: EditorItem?
 
     var body: some View {
         let place = editing.authPlace
         Form {
+            SaveProblem(model: model)
             Section {
-                BackButton(title: editing.theme.name) { selection = nil }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Password Field").font(.title3.weight(.semibold))
-                    Text("Where the password is typed. Its look is the theme's.").foregroundStyle(.secondary)
-                }
+                Text("Password Field").font(.headline)
             }
-            Section("Position") {
+            Section {
                 PositionEditor(anchor: place.anchor, x: place.x, y: place.y) { editing.setAuth(anchor: $0, x: $1, y: $2) }
-            }
-            if editing.authChanged {
-                Section {
-                    Button("Put It Back Where the Theme Has It") { editing.resetAuth() }
-                }
+            } header: {
+                ResetHeader(title: "Position", shown: editing.isMoved(.passwordField)) { editing.resetPlace(.passwordField) }
             }
         }
         .formStyle(.grouped)
@@ -398,7 +537,7 @@ private struct PositionEditor: View {
     let set: (_ anchor: String, _ x: Double, _ y: Double) -> Void
 
     var body: some View {
-        LabeledContent("Place") {
+        LabeledContent("Pinned to") {
             AnchorPicker(anchor: anchor) { picked in
                 let margin = EditorPlacement.margin(for: picked)
                 set(picked, margin.x, margin.y)
@@ -410,9 +549,6 @@ private struct PositionEditor: View {
                 NumberField(label: "Y", value: y) { set(anchor, x, $0) }
             }
         }
-        Text("In points \(Self.describe(anchor)), on a 1440 × 900 screen; y grows downwards.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 
     /// "top-right" → "from the top right corner".
@@ -557,14 +693,23 @@ private struct TextOrOff: View {
     let text: String?
     let own: String
     let commit: (LuaValue) -> Void
+    /// Set as the switch turns the text off: the field then goes, and the text it held does not save. Text that comes
+    /// back, by the switch or by Undo, saves again.
+    @State private var off = false
 
     var body: some View {
         HStack(spacing: 8) {
-            if let text { TextOption(text: text) { commit(.string($0)) } }
-            Toggle("", isOn: Binding(get: { text != nil }, set: { commit($0 ? .string(own) : .bool(false)) }))
+            if let text {
+                TextOption(text: text, commit: { off = false; commit(.string($0)) }, leave: { if !off { commit(.string($0)) } })
+            }
+            Toggle("", isOn: Binding(get: { text != nil }, set: { on in
+                off = !on
+                commit(on ? .string(own) : .bool(false))
+            }))
                 .labelsHidden()
                 .toggleStyle(.switch)
         }
+        .onChange(of: text != nil) { _, on in if on { off = false } }
     }
 }
 
@@ -572,6 +717,8 @@ private struct TextOrOff: View {
 private struct TextOption: View {
     let text: String
     let commit: (String) -> Void
+    /// What saves the typed text when the field goes while it has the keyboard; commit, unless the caller says otherwise.
+    var leave: ((String) -> Void)?
     @State private var current = ""
     @FocusState private var focused: Bool
 
@@ -581,10 +728,13 @@ private struct TextOption: View {
             .textFieldStyle(.roundedBorder)
             .frame(width: 150)
             .focused($focused)
+            .focusedValue(\.typing, true)
             .onSubmit { if current != text { commit(current) } }
             .onChange(of: focused) { if !focused, current != text { commit(current) } }
             .onAppear { current = text }
             .onChange(of: text) { current = text }
+            // The panel can go before the field gives up the keyboard, as after Done or a click on the canvas.
+            .onDisappear { if focused, current != text { (leave ?? commit)(current) } }
     }
 }
 
@@ -598,8 +748,8 @@ private struct NumberField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 3) {
-            if let label { Text(label).font(.caption).foregroundStyle(.secondary) }
+        HStack(spacing: 4) {
+            if let label { Text(label).font(.callout).foregroundStyle(.secondary) }
             TextField(label ?? "", text: $text)
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
@@ -607,6 +757,7 @@ private struct NumberField: View {
                 .multilineTextAlignment(.trailing)
                 .frame(width: 60)
                 .focused($focused)
+                .focusedValue(\.typing, true)
                 .onSubmit(save)
                 .onChange(of: focused) { if !focused { save() } }
             if let step {
@@ -616,6 +767,8 @@ private struct NumberField: View {
         }
         .onAppear { text = Self.format(value) }
         .onChange(of: value) { text = Self.format(value) }
+        // The panel can go before the field gives up the keyboard, as after Done or a click on the canvas.
+        .onDisappear { if focused { save() } }
     }
 
     private func save() {
@@ -644,6 +797,11 @@ private struct AnchorPicker: View {
 
     private static let grid = [["top-left", "top", "top-right"], ["left", "center", "right"], ["bottom-left", "bottom", "bottom-right"]]
 
+    /// "top-left" → "Top Left": a place's name, as the password field's row shows it and VoiceOver reads its cell.
+    static func name(_ anchor: String) -> String {
+        anchor.split(separator: "-").map(\.capitalized).joined(separator: " ")
+    }
+
     var body: some View {
         VStack(spacing: 3) {
             ForEach(Self.grid, id: \.self) { row in
@@ -656,86 +814,16 @@ private struct AnchorPicker: View {
                         }
                         .buttonStyle(.plain)
                         .help("Move it to the \(PositionEditor.describe(name).dropFirst(9))")
+                        .accessibilityLabel(Self.name(name))
+                        .accessibilityAddTraits(name == anchor ? .isSelected : [])
                     }
                 }
             }
         }
         .padding(5)
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-        .accessibilityElement()
-        .accessibilityLabel("Place")
-        .accessibilityValue(anchor)
-    }
-}
-
-struct AddWidgetSheet: View {
-    let model: AppModel
-    let add: (_ widget: String, _ family: String?) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var search = ""
-    @State private var gallery = WidgetGallery()
-
-    private var shown: [Inspection.WidgetInfo] {
-        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { return model.inspection.widgets }
-        return model.inspection.widgets.filter { $0.name.lowercased().contains(query) || ($0.description ?? "").lowercased().contains(query) }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Add a Widget").font(.headline)
-                Spacer()
-                TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(width: 220)
-            }
-            .padding(16)
-            Divider()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18, pinnedViews: .sectionHeaders) {
-                    ForEach(WidgetGroup.groups(shown)) { group in
-                        Section {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 18)], spacing: 22) {
-                                ForEach(group.widgets) { widget in
-                                    WidgetCard(gallery: gallery, widget: widget) { family in
-                                        add(widget.name, family)
-                                        dismiss()
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                        } header: {
-                            Text(group.title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16).padding(.vertical, 6)
-                                .background(.bar)
-                        }
-                    }
-                }
-                .padding(.vertical, 12)
-            }
-            Divider()
-            HStack {
-                Text("Click a widget to add it at the center. Drag it where you want it.").font(.callout).foregroundStyle(.secondary)
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding(12)
-        }
-        .frame(width: 940, height: 700)
-        .task(id: model.revision) {
-            gallery.start(widgets: model.inspection.widgets, settings: model.store.settings, config: model.store.config, revision: model.revision)
-        }
-        .onDisappear { gallery.stop() }
-    }
-
-    /// "Built in", a package's name, or the user's config.
-    static func source(of widget: Inspection.WidgetInfo) -> String {
-        guard let path = widget.file?.path else { return "" }
-        if path.hasPrefix(RuntimePath.builtInRuntime.path) { return "Built in" }
-        if path.hasPrefix(RuntimePath.defaultConfig.path) { return "Your config" }
-        let parts = path.split(separator: "/")
-        if let plugin = parts.lastIndex(of: "plugin"), plugin > 0 { return String(parts[plugin - 1]) }
-        return LuaError.shortenPaths(path)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Pinned to")
     }
 }
 
@@ -755,7 +843,7 @@ private struct BackgroundEditor: View {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .theme: "Theme's Own"
+            case .theme: "Original"
             case .wallpaper: "Desktop Picture"
             case .image: "Image"
             case .video: "Video"
@@ -767,7 +855,6 @@ private struct BackgroundEditor: View {
 
     private var store: SettingsStore { model.store }
     private var theme: Inspection.ThemeInfo { editing.theme }
-    private var layout: ThemeLayout? { editing.layout }
     private var edit: LuaValue { store.settings.themeEdit(theme.id, "background") }
 
     private var kind: Kind {
@@ -786,7 +873,7 @@ private struct BackgroundEditor: View {
         .onDisappear { if !picked.isEmpty { save([:]) } }
         switch kind {
         case .theme:
-            LabeledContent("Shows", value: summary(layout?.background ?? .nil))
+            EmptyView()
         case .wallpaper:
             slider("Blur", key: "blur", range: 0...60, fallback: 30)
             slider("Dim", key: "dim", range: 0...0.8, fallback: 0.25)
@@ -893,17 +980,6 @@ private struct BackgroundEditor: View {
         ColorWell(title: title, hex: get() ?? "#000000", pick: { pick(fields($0)) })
     }
 
-    /// What the theme's own background is, in a few plain words.
-    private func summary(_ background: LuaValue) -> String {
-        if background["shader"].string != nil { return "An animated scene" }
-        if background["wallpaper"].bool == true { return "Your desktop picture" }
-        if background["image"].string != nil { return "A picture" }
-        if background["video"].string != nil { return "A video" }
-        if background["gradient"].array != nil { return "A gradient" }
-        if background["color"].string != nil { return "One color" }
-        return "Nothing"
-    }
-
     @MainActor
     static func chooseFile(types: [UTType]) -> URL? {
         let panel = NSOpenPanel()
@@ -963,6 +1039,11 @@ private struct ColorWell: View {
         .onAppear { color = Color(hex: hex) ?? .black }
         .onChange(of: hex) { color = Color(hex: hex) ?? .black }
     }
+}
+
+private extension FocusedValues {
+    /// True while a text field in the inspector has the keyboard: Escape belongs to it, not to the page.
+    @Entry var typing: Bool?
 }
 
 extension Color {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// ~/.config/locky/settings.json: what the Locky window changes. Lua applies it before init.lua runs (so the
+/// ~/.config/locky/settings.json: what Locky's windows change. Lua applies it before init.lua runs (so the
 /// modules init.lua requires already see privacy mode) and again after the plugin scripts, so a key set here
 /// wins over init.lua and plugins, and a missing key leaves their value (or the default) in place.
 /// The app's own settings (the shortcut, auto-lock, power) live here too, so dotfiles carry them. Keys
@@ -41,7 +41,10 @@ struct Settings: Equatable, Sendable {
             guard let table = object as? [String: Any] else { return (Settings(), "\(name) must hold a JSON object") }
             return (Settings(LuaValue(json: table).table ?? [:]), nil)
         } catch {
-            return (Settings(), "\(name) is not valid JSON: \(error.localizedDescription)")
+            // The parser's own words say where the file breaks ("Unexpected end of file around line 1, column 19.");
+            // localizedDescription only says that it does.
+            let detail = (error as NSError).userInfo[NSDebugDescriptionErrorKey] as? String ?? error.localizedDescription
+            return (Settings(), "\(name) is not valid JSON: \(detail)")
         }
     }
 
@@ -78,6 +81,9 @@ struct Settings: Equatable, Sendable {
             if newValue.isNil { values.removeValue(forKey: key) } else { values[key] = newValue }
         }
     }
+
+    /// Sets `key`, or removes it when `value` is what init.lua (or the default) already gives: the row is its own reset.
+    mutating func setLuaValue(_ key: String, _ value: LuaValue, base: LuaValue) { self[key] = value == base ? .nil : value }
 
     /// What Lua's apply_settings reads.
     var lua: LuaValue { .table(values.filter { Self.luaKeys.contains($0.key) }) }

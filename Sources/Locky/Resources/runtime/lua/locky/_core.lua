@@ -116,7 +116,7 @@ local function require_grant(capability, what, level)
     end
     local granted = grants[lower(name)]
     if not (granted and granted[capability]) then
-      error(("%s: plugin %q may not %s. To allow it, turn on %s for it on the Plugins page, or add allow = { %q } to its locky.pack.add entry in init.lua")
+      error(("%s: plugin %q may not %s. To allow it, turn on %s for it in Settings › Plugins, or add allow = { %q } to its locky.pack.add entry in init.lua")
         :format(what, name, words[1], words[2], capability), level + 1)
     end
   end
@@ -835,7 +835,7 @@ end
 ---   size          optional: { width, height } in points; without it the widget fits its content
 ---   card          optional: true to sit on the theme's card unless the theme says otherwise
 ---   families      optional: the families it draws, such as { "circular", "small" }; render reads self.family
----   choices       optional: the values an option takes, for the Locky window's editor, such as
+---   choices       optional: the values an option takes, for Customize, such as
 ---                 { style = { "list", "dots" } }
 ---   description   optional
 function locky.widget.define(name, spec)
@@ -1083,7 +1083,7 @@ local function read_theme(name)
   return theme
 end
 
--- The Locky window's changes to themes, from settings.json: { [name] = { background = {...}, widgets = {...} } }.
+-- Customize's changes to themes, from settings.json: { [name] = { background = {...}, widgets = {...} } }.
 local settings_themes = {}
 
 local function placement_name(placement)
@@ -1132,7 +1132,7 @@ local function settings_background(where, background)
   return result
 end
 
--- What the window changed in `theme`: its background, its widget list, and where its password field sits. A
+-- What Customize changed in `theme`: its background, its widget list, and where its password field sits. A
 -- widget entry with `ref` is the theme's own placement number `ref` (keeping its options) with the entry's
 -- fields on top; an entry without `ref` adds a widget. Returns nil for no change; raises on a bad entry, so
 -- nothing half-applies.
@@ -1238,7 +1238,7 @@ end
 -- Themes being derived, so a theme that derives from itself fails instead of looping.
 local deriving = {}
 
---- A theme made in the Locky window (Duplicate Theme, Import Theme): theme `base` with `def.edits` applied in
+--- A theme made in the Themes window (Duplicate Theme, Import Theme): theme `base` with `def.edits` applied in
 --- order, each a change as settings.json's themes.<name> holds one, and `def.name` as its name. The changes' widget
 --- options become the theme's own, so init.lua's merge over them. See docs/themes.md.
 function locky.theme.derive(base, def)
@@ -1426,7 +1426,7 @@ local function pack_spec(spec)
   return { name = name, src = src, version = spec.version, dir = spec.dir and locky.fs.expand(spec.dir), allow = allow }
 end
 
--- `from` is "settings" for the Locky window's packages (settings.json) and "config" for init.lua's.
+-- `from` is "settings" for Settings › Plugins' packages (settings.json) and "config" for init.lua's.
 local function add_packs(specs, from, level)
   for _, spec in ipairs(specs) do
     local normalized = pack_spec(spec)
@@ -1440,7 +1440,7 @@ local function add_packs(specs, from, level)
       end
     end
     if duplicate and duplicate.from == "settings" and from ~= "settings" then
-      -- The window added it before init.lua ran; settings.json wins, as it does everywhere.
+      -- Settings › Plugins added it before init.lua ran; settings.json wins, as it does everywhere.
       duplicate.in_config = true
     elseif duplicate then
       error(("two packages are named %q; give one a name = ..."):format(normalized.name), level)
@@ -1617,7 +1617,7 @@ return {
     local instance = raw_setmetatable({
       id = last_instance,
       name = definition.name,
-      -- The user has the last word, and the window's layer wins, as everywhere.
+      -- The user has the last word, and settings.json's layer wins, as everywhere.
       opts = widget_opts(definition.name, placement),
       -- Apple's family the placement asks for, or nil: the widget's own size.
       family = placement.family,
@@ -1694,7 +1694,7 @@ return {
     return list
   end,
 
-  -- The theme as init.lua and plugins leave it, before the window's changes: what Reset goes back to. Each
+  -- The theme as init.lua and plugins leave it, before Customize's changes: what Reset goes back to. Each
   -- placement's options are the ones it gets before settings.json's.
   theme_layout = function(name)
     local theme = normalize_theme(name, read_theme(name), false)
