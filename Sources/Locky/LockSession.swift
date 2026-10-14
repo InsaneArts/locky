@@ -92,7 +92,7 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     /// The last theme's password field look, so the next lock's field appears in it at once.
     private static var lastLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec)?
-    /// The last theme's palette, kept across launches as lastPrivacy is: the first lock after a relaunch starts in its
+    /// The last lock's palette, kept across launches as lastPrivacy is: the first lock after a relaunch starts in its
     /// bg, not black.
     private static var lastPalette: [String: String]? {
         get { UserDefaults.standard.dictionary(forKey: "lastPalette") as? [String: String] }
@@ -603,7 +603,8 @@ final class LockSession: NSObject, NSWindowDelegate {
             Self.lastLook = (theme.auth, theme.palette, theme.font)
             if options.remembers {
                 Self.lastPrivacy = started.privacy
-                Self.lastPalette = theme.palette
+                // A preview's theme may not be the one the next lock shows.
+                if mode == .lock { Self.lastPalette = theme.palette }
             }
         }
         buildScreens(started)
