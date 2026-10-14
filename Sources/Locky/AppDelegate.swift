@@ -293,7 +293,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc func openWelcome(_ sender: Any?) { showWindow(.welcome) }
 
     /// AppKit names the root menu of the menu that opens: the menu bar, or the menu a pop-up button or a right click shows.
-    @objc private func menuDidBeginTracking(_ notification: Notification) { trackedMenu = notification.object as? NSMenu }
+    /// During a lock, a menu that opens closes at once: a right click or VoiceOver's VO-Shift-M on the password field opens
+    /// the field's context menu, with Paste, above the lock. The close waits for the menu's first run loop pass: a cancel
+    /// inside this notification leaves the menu on screen.
+    @objc private func menuDidBeginTracking(_ notification: Notification) {
+        trackedMenu = notification.object as? NSMenu
+        if session?.mode == .lock, let trackedMenu {
+            perform(#selector(closeMenu(_:)), with: trackedMenu, afterDelay: 0, inModes: [.common])
+        }
+    }
+
+    @objc private func closeMenu(_ menu: NSMenu) { menu.cancelTrackingWithoutAnimation() }
 
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {
         guard session == nil else { return }
@@ -301,9 +311,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         var options = options
         if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)
-        // While locked no menu item exists (a regular app gets an empty main menu from AppKit in place of nil), so no key
-        // equivalent and no service can act. The lock's end builds the menus again. macOS 26 ignores servicesMenu once it is
-        // set, nil included: taking the main menu away is what puts Services out of reach.
+        // While locked no menu item exists, so no key equivalent and no service can act: the main menu goes (a regular app
+        // gets an empty one from AppKit in place of nil), and a menu that opens during the lock closes at once
+        // (menuDidBeginTracking). The lock's end builds the menus again. macOS 26 ignores servicesMenu once it is set, nil
+        // included: taking the main menu away is what puts Services out of reach.
         if mode == .lock {
             // A menu that is open as the lock starts closes first: it would take the keys typed at the lock, and Return would
             // choose its highlighted item behind the lock.
