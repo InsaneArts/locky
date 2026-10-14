@@ -1,7 +1,8 @@
 # settings.json
 
 Locky's windows save every change to `~/.config/locky/settings.json` at once. Open at login is not in the file:
-macOS keeps it as a login item. init.lua stays yours: the windows only read it.
+macOS keeps it as a login item. init.lua stays yours: the windows never change it, and Settings › Lua Config creates
+it only when it is missing.
 
 Locky applies the layers in this order, and a later layer wins key by key:
 
