@@ -457,6 +457,8 @@ final class CanvasOverlay: NSView {
     /// With the canvas focused: the arrow keys move what is selected, Delete removes a selected widget, and Escape
     /// clears the selection, or with nothing selected ends Customize.
     override func keyDown(with event: NSEvent) {
+        // A drag ends only where the mouse goes up: Escape during one does nothing.
+        if drag != nil, event.charactersIgnoringModifiers == "\u{1b}" { return }
         guard let canvas, drag == nil else { return super.keyDown(with: event) }
         let byGrid = event.modifierFlags.contains(.shift)
         switch (event.specialKey, canvas.selection) {
