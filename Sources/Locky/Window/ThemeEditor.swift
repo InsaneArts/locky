@@ -699,7 +699,9 @@ private struct TextOrOff: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if let text { TextOption(text: text) { if !off { commit(.string($0)) } } }
+            if let text {
+                TextOption(text: text, commit: { off = false; commit(.string($0)) }, leave: { if !off { commit(.string($0)) } })
+            }
             Toggle("", isOn: Binding(get: { text != nil }, set: { on in
                 off = !on
                 commit(on ? .string(own) : .bool(false))
@@ -715,6 +717,8 @@ private struct TextOrOff: View {
 private struct TextOption: View {
     let text: String
     let commit: (String) -> Void
+    /// What saves the typed text when the field goes while it has the keyboard; commit, unless the caller says otherwise.
+    var leave: ((String) -> Void)?
     @State private var current = ""
     @FocusState private var focused: Bool
 
@@ -730,7 +734,7 @@ private struct TextOption: View {
             .onAppear { current = text }
             .onChange(of: text) { current = text }
             // The panel can go before the field gives up the keyboard, as after Done or a click on the canvas.
-            .onDisappear { if focused, current != text { commit(current) } }
+            .onDisappear { if focused, current != text { (leave ?? commit)(current) } }
     }
 }
 

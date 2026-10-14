@@ -473,6 +473,40 @@ import Testing
         #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets")[0]["opts"]["note"] == .string("again") })
     }
 
+    /// An Off that settings.json refuses leaves the switch On, and text typed and confirmed after the file is fixed
+    /// still saves.
+    @Test func textSavesAfterARefusedOff() async throws {
+        let page = try await open(widgets: "{ 'box', anchor = 'center', opts = { note = false } }")
+        let box = try #require(frame(of: .widget(0), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        func noteSwitch() -> NSSwitch? {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            return Self.all(NSSwitch.self, in: page.window.contentView!)
+                .min { $0.convert($0.bounds, to: nil).minY < $1.convert($1.bounds, to: nil).minY }
+        }
+        #expect(await wait(page.window) { noteSwitch() != nil })
+        try #require(noteSwitch()).performClick(nil)
+        #expect(await wait(page.window) { Self.textField("hi", in: page.window.contentView!) != nil })
+        let url = Locky.Settings.url(config: page.sandbox.config)
+        let good = try Data(contentsOf: url)
+        try Data("{ broken".utf8).write(to: url)
+        page.model.store.reload()
+        #expect(page.model.store.problem != nil)
+        try #require(noteSwitch()).performClick(nil)
+        try await Task.sleep(for: .milliseconds(300))
+        page.window.contentView?.layoutSubtreeIfNeeded()
+        let field = try #require(Self.textField("hi", in: page.window.contentView!))
+        try good.write(to: url)
+        page.model.store.reload()
+        #expect(page.model.store.problem == nil)
+        #expect(page.window.makeFirstResponder(field))
+        let typing = try #require(field.currentEditor() as? NSTextView)
+        typing.selectAll(nil)
+        typing.insertText("again", replacementRange: typing.selectedRange())
+        typing.insertNewline(nil)
+        #expect(await wait(page.window, timeout: 3) { saved(page).themeEdit("t", "widgets")[0]["opts"]["note"] == .string("again") })
+    }
+
     /// A value typed for a widget that Remove Widget then takes away goes with it: the widget that moves into its
     /// place keeps where it was.
     @Test func aTypedValueGoesWithItsRemovedWidget() async throws {
