@@ -608,7 +608,7 @@ final class CanvasItemElement: NSAccessibilityElement {
         setAccessibilityEnabled(true)
     }
 
-    /// The selected item's button reads as selected, as the current Pinned To cell does. AppKit asks on the main thread.
+    /// The selected item's button reads as selected, as the current Pinned to cell does. AppKit asks on the main thread.
     override func isAccessibilitySelected() -> Bool {
         guard let overlay = accessibilityParent() as? CanvasOverlay else { return false }
         let item = item

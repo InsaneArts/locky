@@ -440,7 +440,7 @@ private struct WidgetInspector: View {
                         }
                     }
                     if cards {
-                        Toggle("Show Card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
+                        Toggle("Show card", isOn: Binding(get: { editing.card(placement) }, set: { value in change { $0.card = editing.cardValue(value, for: $0) } }))
                     }
                 }
             }
@@ -537,7 +537,7 @@ private struct PositionEditor: View {
     let set: (_ anchor: String, _ x: Double, _ y: Double) -> Void
 
     var body: some View {
-        LabeledContent("Pinned To") {
+        LabeledContent("Pinned to") {
             AnchorPicker(anchor: anchor) { picked in
                 let margin = EditorPlacement.margin(for: picked)
                 set(picked, margin.x, margin.y)
@@ -812,7 +812,7 @@ private struct AnchorPicker: View {
         .padding(5)
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Pinned To")
+        .accessibilityLabel("Pinned to")
     }
 }
 
