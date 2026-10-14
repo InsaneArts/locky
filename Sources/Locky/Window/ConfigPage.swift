@@ -13,7 +13,7 @@ struct ConfigPage: View {
     private var file: URL { model.store.config.appending(path: "init.lua") }
 
     var body: some View {
-        let problems = model.inspection.problems.map { ConfigProblem($0, config: model.store.config) }
+        let problems = Self.rows(model.inspection.problems, config: model.store.config)
         Form {
             Section {
                 LabeledContent {
@@ -52,7 +52,7 @@ struct ConfigPage: View {
             }
             if !problems.isEmpty {
                 Section("Problems") {
-                    ForEach(Array(problems.enumerated()), id: \.offset) { _, problem in
+                    ForEach(problems, id: \.key) { problem in
                         LabeledContent {
                             if let file = problem.file, let line = problem.line {
                                 // Waits for the editors, which the pane looks for when it first shows.
@@ -76,6 +76,17 @@ struct ConfigPage: View {
         // A problem's Open needs the editors before the Open in button has shown.
         .task { await model.findEditors() }
     }
+
+    /// The Problems rows: each problem once, so its key names one row. When a problem goes, the rows below keep theirs.
+    private static func rows(_ problems: [String], config: URL) -> [ConfigProblem] {
+        var seen = Set<String>()
+        return problems.map { ConfigProblem($0, config: config) }.filter { seen.insert($0.key).inserted }
+    }
+}
+
+private extension ConfigProblem {
+    /// A problem's row in the list: what it says, and where.
+    var key: String { "\(file?.path ?? ""):\(line ?? 0): \(message)" }
 }
 
 /// "Open in <editor>", with a menu to choose the editor (and the terminal for terminal editors) and to show init.lua in
