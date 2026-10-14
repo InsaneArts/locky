@@ -10,7 +10,6 @@ struct SettingsPage: View {
     let model: AppModel
     /// The intruder photos, newest first. They are read before the first frame, so the pane opens with them.
     @State private var photos: [(url: URL, date: Date)]
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(model: AppModel) {
         self.model = model
@@ -20,8 +19,8 @@ struct SettingsPage: View {
     private var store: SettingsStore { model.store }
 
     var body: some View {
-        // The Photos group comes and goes at once: the grouped Form cannot slide the rows below a whole group, and
-        // cross-fades the whole pane instead.
+        // The settings.json error and Photos groups come and go at once: the grouped Form cannot slide the rows below a
+        // whole group, and cross-fades the whole pane instead.
         Form {
             if let problem = store.problem {
                 Section {
@@ -45,7 +44,6 @@ struct SettingsPage: View {
             .disabled(store.problem != nil)
         }
         .formStyle(.grouped)
-        .animation(Motion.rows(reduceMotion), value: store.problem)
         .task(id: model.revision) { loadPhotos() }
     }
 
