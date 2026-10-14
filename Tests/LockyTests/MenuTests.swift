@@ -46,11 +46,28 @@ import Testing
     @Test func theSixMenusComeInTheStandardOrder() throws {
         try installed { main throws in
             #expect(main.items.map(\.title) == ["Locky", "File", "Edit", "View", "Window", "Help"])
-            // AppKit fills these: the window list and the help search field. It also keeps the first Services menu it is
-            // given and ignores later ones, so in a test process that installs more than once only the item is checked.
+            // AppKit fills these: the services that apply, the window list, and the help search field.
             #expect(NSApp.windowsMenu === (try menu("Window", in: main)))
             #expect(NSApp.helpMenu === (try menu("Help", in: main)))
-            #expect((try menu("Locky", in: main)).items.first { $0.title == "Services" }?.submenu != nil)
+            let services = try #require((try menu("Locky", in: main)).items.first { $0.title == "Services" }?.submenu)
+            #expect(NSApp.servicesMenu === services)
+        }
+    }
+
+    /// The end of a lock builds the menus again. The new build takes the one Services menu AppKit fills from the old
+    /// build, which may still exist, and holds the same items.
+    @Test func aSecondBuildTakesTheServicesMenu() throws {
+        try installed { first in
+            let oldItem = try #require((try menu("Locky", in: first)).items.first { $0.title == "Services" })
+            let services = try #require(oldItem.submenu)
+            MainMenu.install(in: NSApp)
+            let second = try #require(NSApp.mainMenu)
+            #expect(second !== first && oldItem.submenu == nil)
+            #expect((try menu("Locky", in: second)).items.first { $0.title == "Services" }?.submenu === services)
+            #expect(NSApp.servicesMenu === services)
+            for title in ["Locky", "File", "Edit", "View", "Help"] {
+                #expect(try layout(title, in: second) == layout(title, in: first))
+            }
         }
     }
 

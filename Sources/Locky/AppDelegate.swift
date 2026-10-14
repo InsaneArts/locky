@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
         // No tabs: the windows are a main window, a settings window, and the Welcome.
         NSWindow.allowsAutomaticWindowTabbing = false
-        // First: the shortcut below gives Lock Now its key, and a launch-time lock stores and clears the menus.
+        // First: the shortcut below gives Lock Now its key, and a launch-time lock clears the menus.
         MainMenu.install(in: NSApp)
         try? Settings.createFolder(store.config)
         if !Self.isTool { store.migrateMenuTheme() }
@@ -294,12 +294,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)
         // While locked no menu item exists (a regular app gets an empty main menu from AppKit in place of nil), so no key
-        // equivalent and no service can act. The lock's end puts both back. macOS 26 ignores servicesMenu once it is set, nil
-        // included: taking the main menu away is what puts Services out of reach.
-        let menus = (main: NSApp.mainMenu, services: NSApp.servicesMenu)
+        // equivalent and no service can act. The lock's end builds the menus again. macOS 26 ignores servicesMenu once it is
+        // set, nil included: taking the main menu away is what puts Services out of reach.
         if mode == .lock {
             // A menu that is open as the lock starts closes first: nothing in it may be chosen behind the lock.
-            menus.main?.cancelTracking()
+            NSApp.mainMenu?.cancelTracking()
             statusItem?.menu?.cancelTracking()
             NSApp.mainMenu = nil
             NSApp.servicesMenu = nil
@@ -309,8 +308,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             self.session = nil
             if mode == .lock {
                 model.locked = false
-                NSApp.mainMenu = menus.main
-                NSApp.servicesMenu = menus.services
+                MainMenu.install(in: NSApp)
+                MainMenu.setLockNowShortcut(hotkeys.shortcut)
             }
             model.refresh()
             if mode == .lock { autoLock.noteUnlock() }

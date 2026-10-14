@@ -1,19 +1,23 @@
 import AppKit
 
-/// The menu bar while a Locky window is open: Locky, File, Edit, View, Window, and Help, built once at launch. Items
-/// without a target go down the key window's responder chain to NSApp and its delegate, so the theme commands reach the
-/// Themes window's controller and are dimmed while another window is key.
+/// The menu bar while a Locky window is open: Locky, File, Edit, View, Window, and Help, built at launch and again after
+/// each lock. Items without a target go down the key window's responder chain to NSApp and its delegate, so the theme
+/// commands reach the Themes window's controller and are dimmed while another window is key.
 @MainActor
 enum MainMenu {
     /// Locky › Lock Now: its key equivalent follows the recorded shortcut.
     private static var lockNow: NSMenuItem?
+    /// AppKit fills the first Services menu it is given and ignores later ones, so every build uses this one.
+    private static let services = NSMenu(title: "Services")
 
-    /// Builds the six menus and sets them on `app`.
+    /// Builds the six menus and sets them on `app`. The end of a lock builds them again: each time a main menu is set,
+    /// AppKit adds hidden items to its Edit and View menus, so the old one set again would gain another set.
     static func install(in app: NSApplication) {
         typealias Themes = LockyWindowController
+        // A menu has one parent: free the Services menu from the last build, which may still exist.
+        services.supermenu?.items.first { $0.submenu === services }?.submenu = nil
         let lock = item("Lock Now", #selector(AppDelegate.lockNow(_:)), symbol: "lock.fill")
         lockNow = lock
-        let services = NSMenu(title: "Services")
         let locky = menu("Locky", [
             item("About Locky", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
             .separator(),
