@@ -301,7 +301,8 @@ import Testing
 @Suite struct WayOutTests {
     /// The message's height before and after `change`, laid out as the lock does it: the session asks for a layout,
     /// and AppKit lays the screen out on its next pass. The window sits far off the screen.
-    private func messageHeight(exit: Bool, _ change: (AuthModel) async throws -> Void) async throws -> (before: CGFloat, after: CGFloat) {
+    private func messageHeight(exit: Bool, model: AuthModel = AuthModel(slowAfter: .milliseconds(50)),
+                               _ change: (AuthModel) async throws -> Void) async throws -> (before: CGFloat, after: CGFloat) {
         _ = NSApplication.shared
         let window = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 1440, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -311,7 +312,6 @@ import Testing
         window.orderBack(nil)
         screen.auth = (NSView(), Theme.Auth())
         screen.authSize = CGSize(width: 240, height: 64)
-        let model = AuthModel(slowAfter: .milliseconds(50))
         screen.message = NSHostingController(rootView: LockMessage(text: nil, model: model, exit: exit, auth: Theme.Auth(), style: LockyStyle()))
         screen.layoutSubtreeIfNeeded()
         let before = screen.message?.view.frame.height ?? -1
@@ -340,6 +340,23 @@ import Testing
     @Test func withoutTheExitNothingIsNamed() async throws {
         let off = try await messageHeight(exit: false) { model in for _ in 0..<3 { model.failed() } }
         #expect(off.after == 0)
+    }
+
+    /// Ten wrong passwords, ⌃⌥⌘Q, and the macOS unlock: a lock in the next 5 minutes starts with its field disabled and
+    /// no wrong password of its own. It names the way out from the start.
+    @Test func aLockThatStartsInTheWaitNamesTheWayOut() async throws {
+        let name = "locky-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        PasswordAttempts(count: 10, last: Date()).save(defaults)
+        let model = AuthModel(defaults: defaults)
+        #expect(model.startedInWait && model.waitLeft > 0 && model.wrong == 0)
+        let waiting = try await messageHeight(exit: true, model: model) { _ in }
+        #expect(waiting.before > 0)
+        // A lock with no wait behind it starts without the line.
+        let fresh = AuthModel(defaults: defaults)
+        fresh.succeeded()
+        #expect(!AuthModel(defaults: defaults).startedInWait)
     }
 }
 
