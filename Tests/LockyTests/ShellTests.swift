@@ -46,7 +46,7 @@ import Testing
         let settings = try #require(SettingsWindowController(model: model, onClose: {}).window)
         #expect(settings.standardWindowButton(.miniaturizeButton)?.isEnabled == false)
         #expect(settings.standardWindowButton(.zoomButton)?.isEnabled == false)
-        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 680))
+        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 745))
         let items = try #require(settings.toolbar?.items)
         #expect(items.map(\.label) == ["General", "Plugins", "Lua Config"])
         let top = settings.frame.maxY

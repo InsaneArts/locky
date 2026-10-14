@@ -74,12 +74,14 @@ final class SettingsTabViewController: NSTabViewController {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    /// A pane's content size: one width for all, and a height that fits the pane.
+    /// A pane's content size: one width for all, and a height that fits the pane. General fits its tallest usual state
+    /// without scrolling: a Touch ID Mac that has not allowed Accessibility, as every new install starts, with the Open at
+    /// login subtitle (744.5 pt measured).
     static func size(of pane: AppModel.Section) -> CGSize {
         switch pane {
         case .plugins: CGSize(width: 640, height: 520)
         case .config: CGSize(width: 640, height: 360)
-        default: CGSize(width: 640, height: 680)
+        default: CGSize(width: 640, height: 745)
         }
     }
 
