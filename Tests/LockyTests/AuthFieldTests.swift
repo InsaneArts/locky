@@ -41,6 +41,12 @@ import Testing
         #expect(AuthPanel.note(waitLeft: waitLeft, wrongShown: wrongShown) == text)
     }
 
+    /// VoiceOver hears the wait with the wrong password, since the field refuses keys until it ends.
+    @Test(arguments: [(0, "Wrong Password"), (1, "Wrong Password. Try again in 1 second"), (300, "Wrong Password. Try again in 5 minutes")])
+    func announcement(waitLeft: Int, text: String) {
+        #expect(AuthPanel.announcement(waitLeft: waitLeft) == text)
+    }
+
     @Test(arguments: [
         // touchIDOffered, listening, placeholder, hint, text
         (true, true, "", true, "Touch ID or Enter Password"), (true, true, "Enter Password", true, "Touch ID or Enter Password"),

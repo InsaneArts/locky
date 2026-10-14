@@ -337,6 +337,11 @@ struct AuthPanel: View {
         return wrongShown ? "Wrong Password" : nil
     }
 
+    /// What VoiceOver says after a wrong password: the wait too, once there is one, since the field then refuses keys.
+    static func announcement(waitLeft: Int) -> String {
+        note(waitLeft: waitLeft, wrongShown: false).map { "Wrong Password. \($0)" } ?? "Wrong Password"
+    }
+
     /// The line under the field says how to unlock, unless the field's placeholder says it already. nil: no text
     /// (the glyph alone still shows while Touch ID listens).
     static func statusText(touchIDOffered: Bool, listening: Bool, placeholder: String, hint: Bool) -> String? {
@@ -376,10 +381,12 @@ struct AuthPanel: View {
             // makes macOS show its own prompt.
             if listening { glyph(.small).offset(y: diameter * 0.34) }
             if let note {
+                // VoiceOver reads it on the field.
                 Text(note)
                     .font(font(12, "medium"))
                     .foregroundStyle(model.waitLeft > 0 ? style.quiet(on: auth.ringFill) : style.color("danger"))
                     .offset(y: diameter * 0.24)
+                    .accessibilityHidden(true)
             }
         }
         .frame(width: diameter, height: diameter)
@@ -509,6 +516,8 @@ struct AuthPanel: View {
                 .disabled(busy || !interactive)
                 .onSubmit(submit)
                 .accessibilityLabel("Password")
+                // The drawn note is hidden: VoiceOver hears the wait, or "Wrong Password", on the field.
+                .accessibilityHint(note ?? "")
         }
         .shadow(color: glowColor, radius: auth.glow ?? 0)
     }
@@ -575,7 +584,7 @@ struct AuthPanel: View {
                 unlock()
             } else {
                 model.failed()
-                AccessibilityNotification.Announcement("Wrong Password").post()
+                AccessibilityNotification.Announcement(Self.announcement(waitLeft: model.waitLeft)).post()
                 failed()
                 focused = true
             }
