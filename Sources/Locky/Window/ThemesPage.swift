@@ -37,4 +37,11 @@ enum ThemeThumbnails {
         cache[info.id] = image
         return image
     }
+
+    /// The thumbnail Locky ships for a built-in theme, by its id alone: what a preview shows before the config's first
+    /// read gives the theme's info. Only a plain id, so no path leads out of the thumbnails folder.
+    static func bundled(_ id: String) -> NSImage? {
+        guard !id.isEmpty, !id.contains("/"), !id.hasPrefix(".") else { return nil }
+        return ["png", "jpg"].lazy.compactMap { NSImage(contentsOf: RuntimePath.resources.appending(path: "thumbnails/\(id).\($0)")) }.first
+    }
 }

@@ -92,8 +92,8 @@ final class ThemePreviewView: NSView {
     }
     /// The shown theme's info, for the placeholder.
     var info: Inspection.ThemeInfo?
-    /// The theme whose placeholder the stage shows; nil for black.
-    private var placeholder: Inspection.ThemeInfo?
+    /// The theme, and its info, whose placeholder the stage shows.
+    private var placeholder: (theme: String, info: Inspection.ThemeInfo?)?
     /// Rounds the corners, in screen points. Its own layer shows the placeholder, under the screens.
     private let clip = NSView()
     /// Holds each session's screen at the layout size; its frame is the scaled-down size.
@@ -141,12 +141,13 @@ final class ThemePreviewView: NSView {
     }
 
     /// What the stage shows under the screens, so it is never black while a theme's screen loads: the theme's
-    /// thumbnail, else its background color, else black.
+    /// thumbnail, else its background color, else black. Before the config's first read there is no info: the picture
+    /// Locky ships for a built-in theme stands in.
     private func showPlaceholder(for theme: String) {
         let info = info?.id == theme ? info : nil
-        guard info != placeholder else { return }
-        placeholder = info
-        clip.layer?.contents = info.flatMap(ThemeThumbnails.image(for:))
+        if let placeholder, placeholder.theme == theme, placeholder.info == info { return }
+        placeholder = (theme, info)
+        clip.layer?.contents = if let info { ThemeThumbnails.image(for: info) } else { ThemeThumbnails.bundled(theme) }
         clip.layer?.backgroundColor = (info.flatMap { NSColor(hex: $0.palette["bg"] ?? "") } ?? .black).cgColor
     }
 

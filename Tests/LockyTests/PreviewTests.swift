@@ -155,6 +155,14 @@ import Testing
         #expect((order.firstIndex(of: widget) ?? 99) < (order.firstIndex(of: field) ?? -1))
     }
 
+    /// Before the config's first read, a preview knows only the theme's id: the thumbnail Locky ships stands in, never a
+    /// black stage. An id that is not a plain name reads no file.
+    @Test func aBuiltInThemesThumbnailNeedsOnlyItsID() {
+        #expect(ThemeThumbnails.bundled("bauhaus") != nil && ThemeThumbnails.bundled("default") != nil)
+        #expect(ThemeThumbnails.bundled("no-such-theme") == nil)
+        #expect(ThemeThumbnails.bundled("../thumbnails/bauhaus") == nil && ThemeThumbnails.bundled("") == nil)
+    }
+
     @Test func onlyTheThemesOwnChangesReloadInPlace() {
         let base = ThemePreviewView.Key(theme: "t", settings: Settings(["theme": .string("t")]), sources: 5)
         var edited = base
