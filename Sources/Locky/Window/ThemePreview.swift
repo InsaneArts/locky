@@ -73,9 +73,10 @@ final class ThemePreviewView: NSView {
         /// The window's changes to this theme, which a reload in place shows.
         var edit: LuaValue { settings["themes"][theme] }
 
-        /// settings.json's values a preview shows, apart from the window's changes to themes.
+        /// settings.json's values a preview shows, apart from the window's changes to themes. touch_id decides the status
+        /// line under the field, which a session picks once.
         static func shared(_ settings: Settings) -> Settings {
-            Settings(settings.values.filter { ["hour24", "privacy", "message", "packs", "battery_saver"].contains($0.key) })
+            Settings(settings.values.filter { ["hour24", "privacy", "message", "packs", "battery_saver", "touch_id"].contains($0.key) })
         }
     }
 

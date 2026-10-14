@@ -166,6 +166,10 @@ import Testing
         var privacy = base
         privacy.settings["privacy"] = .bool(true)
         #expect(base.needsRestart(for: privacy))
+        // Touch ID's status line, as the Welcome's unlock line follows it.
+        var touchID = base
+        touchID.settings["touch_id"] = .bool(false)
+        #expect(base.needsRestart(for: touchID))
         var theme = base
         theme.theme = "u"
         #expect(base.needsRestart(for: theme))
