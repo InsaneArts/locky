@@ -259,12 +259,15 @@ struct ThemeInspector: View {
             Section("Background") {
                 BackgroundEditor(model: model, editing: editing, draft: $draft)
             }
-            Section("Widgets") {
-                ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
-                    Button { selection = .widget(index) } label: {
-                        WidgetRow(placement: placement, missing: editing.info(placement) == nil)
+            // A theme with no widgets has no header over nothing; the toolbar's + adds one.
+            if !editing.placements.isEmpty {
+                Section("Widgets") {
+                    ForEach(Array(editing.placements.enumerated()), id: \.offset) { index, placement in
+                        Button { selection = .widget(index) } label: {
+                            WidgetRow(placement: placement, missing: editing.info(placement) == nil)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             Section {
