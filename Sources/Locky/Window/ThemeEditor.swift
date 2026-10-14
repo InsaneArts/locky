@@ -225,8 +225,6 @@ struct ThemeInspector: View {
     /// settings.json with a change still being made, such as a slider being dragged: the canvas shows it first.
     @Binding var draft: Settings?
 
-    private var theme: Inspection.ThemeInfo { editing.theme }
-
     var body: some View {
         content
     }

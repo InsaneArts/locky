@@ -176,8 +176,8 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
     }
 
-    /// After a switch to another theme, the old theme's screen stays until the new one is ready: its widgets are not
-    /// the new theme's to drag.
+    /// After a switch to another theme, the old theme's screen ends at once, and the canvas has nothing to drag until
+    /// the new theme's screen is ready.
     @Test func theCanvasWaitsForTheNextThemesScreen() async throws {
         let page = try await open()
         try page.sandbox.write("themes/u.lua", "return { background = { color = '#402020' }, widgets = { { 'box', anchor = 'top' } } }")

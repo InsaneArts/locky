@@ -223,7 +223,7 @@ final class ThemeEditing {
         }
     }
 
-    /// The name on a selected item.
+    /// An item's name, as the inspector shows it and VoiceOver reads it on the canvas.
     func name(of item: EditorItem) -> String {
         switch item {
         case .widget(let index): placements.indices.contains(index) ? EditorPlacement.title(placements[index].widget) : "Widget"

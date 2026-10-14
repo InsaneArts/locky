@@ -25,7 +25,7 @@ struct ThemePreview: NSViewRepresentable {
     struct Canvas {
         var selection: EditorItem?
         var grid = false
-        /// The name on a selected item.
+        /// The name VoiceOver reads for an item, as the inspector names it.
         var name: (EditorItem) -> String
         var select: (EditorItem?) -> Void
         /// A drag ended: the item's new anchor and offset, in layout points.
@@ -157,8 +157,8 @@ final class ThemePreviewView: NSView {
     }
 
     /// The current screen's items the editor can select, with their frames in layout points: none while the screen
-    /// shows another theme (one the editor left, waiting for its replacement to load, or the one Locky fell back to),
-    /// or the theme without the window's changes.
+    /// waits for a new one (other Lua files, or other settings.json values it shows), shows the theme Locky fell back
+    /// to, or shows the theme without the window's changes.
     var editables: [(item: EditorItem, frame: CGRect)] {
         guard let current, let wanted, !current.key.needsRestart(for: wanted), current.session.shows(theme: wanted.theme) else { return [] }
         return current.session.editables
