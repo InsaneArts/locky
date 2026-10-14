@@ -481,23 +481,23 @@ struct WidgetGroup: Identifiable {
     var title: String
     var widgets: [Inspection.WidgetInfo]
 
+    /// The groups by where each widget comes from (`Inspection.WidgetInfo.origin`, which the inspector's source line
+    /// follows too). Of the built-in packages' pieces, only `theme`'s own.
     static func groups(_ widgets: [Inspection.WidgetInfo], theme: Inspection.ThemeInfo? = nil) -> [WidgetGroup] {
-        let packages = RuntimePath.resources.appending(path: "packages").path + "/"
         // The theme's package: the folder its themes/ folder is in.
         let package = theme?.directory.map { $0.resolvingSymlinksInPath().path + "/" }
         var core: [Inspection.WidgetInfo] = [], config: [Inspection.WidgetInfo] = [], own: [Inspection.WidgetInfo] = []
         var plugins: [String: [Inspection.WidgetInfo]] = [:]
         for widget in widgets {
-            let path = widget.file?.path ?? ""
-            if path.hasPrefix(RuntimePath.builtInRuntime.path + "/") {
+            switch widget.origin {
+            case .locky:
                 core.append(widget)
-            } else if path.hasPrefix(packages) {
+            case .package:
                 if let package, widget.file?.resolvingSymlinksInPath().path.hasPrefix(package) == true { own.append(widget) }
-            } else if path.isEmpty || path.hasPrefix(RuntimePath.defaultConfig.path + "/") {
-                // A widget without a file (defined from a string of Lua) joins the config's.
+            case .config:
                 config.append(widget)
-            } else {
-                plugins[plugin(of: path), default: []].append(widget)
+            case .plugin(let folder):
+                plugins[folder, default: []].append(widget)
             }
         }
         var list = [WidgetGroup(id: "locky", title: "Locky", widgets: core), WidgetGroup(id: "config", title: "Lua Config", widgets: config)]
@@ -506,15 +506,5 @@ struct WidgetGroup: Identifiable {
         }
         if let theme { list.append(WidgetGroup(id: "theme " + theme.id, title: theme.name, widgets: own)) }
         return list.filter { !$0.widgets.isEmpty }
-    }
-
-    /// The plugin folder a widget's file is in: the folder in the pack folder, else (a local plugin) the folder that
-    /// holds its plugin/ or lua/ folder.
-    private static func plugin(of path: String) -> String {
-        let packs = RuntimePath.defaultPacks.path + "/"
-        if path.hasPrefix(packs), let folder = path.dropFirst(packs.count).split(separator: "/").first { return String(folder) }
-        let parts = path.split(separator: "/")
-        if let index = parts.lastIndex(of: "plugin") ?? parts.lastIndex(of: "lua"), index > 0 { return String(parts[index - 1]) }
-        return LuaError.shortenPaths(path)
     }
 }

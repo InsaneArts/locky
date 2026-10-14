@@ -497,12 +497,19 @@ import Testing
     }
 
     /// Locky's own widgets name no source: only someone else's do.
+    /// The inspector names where a widget comes from as Add Widget groups it.
     @Test func aWidgetSaysWhereItComesFrom() {
         func source(_ file: URL) -> String? { Inspection.WidgetInfo(name: "w", file: file).source }
         #expect(source(RuntimePath.builtInRuntime.appending(path: "plugin/clock.lua")) == nil)
         #expect(source(RuntimePath.resources.appending(path: "packages/sakura/plugin/sakura.lua")) == nil)
         #expect(source(RuntimePath.defaultConfig.appending(path: "plugin/mine.lua")) == "Lua Config")
         #expect(source(RuntimePath.defaultPacks.appending(path: "locky-weather/plugin/big.lua")) == "locky-weather")
+        // A plugin's lua/ module, in the pack folder and in a local plugin's folder.
+        #expect(source(RuntimePath.defaultPacks.appending(path: "locky-stars/lua/stars/init.lua")) == "locky-stars")
+        #expect(source(URL(fileURLWithPath: "/Users/someone/code/my-plugin/lua/my/init.lua")) == "my-plugin")
+        // A folder next to the config folder is a plugin of its own.
+        #expect(source(URL(fileURLWithPath: RuntimePath.defaultConfig.path + "-dev/plugin/thing.lua")) == "locky-dev")
+        #expect(Inspection.WidgetInfo(name: "w").source == "Lua Config")
     }
 
     // MARK: Problems
