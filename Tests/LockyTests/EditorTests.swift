@@ -62,7 +62,7 @@ import Testing
                  widgets = { { 'box', anchor = 'center' }, { 'box', anchor = 'top-right', offset = { -30, 30 }, opts = { label = 'two' } } } }
         """)
         try sandbox.write("plugin/box.lua", """
-        locky.widget.define('box', { size = { 200, 100 }, opts = { label = 'box', size = 20, bold = false },
+        locky.widget.define('box', { size = { 200, 100 }, opts = { label = 'box', size = 20, bold = false, note = 'hi' },
           choices = { label = { 'box', 'two', 'three' } },
           render = function(self) return locky.ui.text(self.opts.label, { size = self.opts.size }) end })
         """)
@@ -361,6 +361,91 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil && page.window.firstResponder === page.overlay })
         escape(page)
         #expect(page.model.editingTheme == nil)
+    }
+
+    /// How Customize's inspector can go while a field still has the keyboard.
+    enum Leave: CaseIterable { case done, clickOtherWidget, clickEmptyCanvas }
+
+    /// A value typed in the inspector saves when the inspector goes before Return: by Done, or by a click on the canvas.
+    @Test(arguments: Leave.allCases) func aTypedValueSavesWhenTheInspectorGoes(_ leave: Leave) async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("-30", in: page.window.contentView!)
+            return found != nil
+        })
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        editor.selectAll(nil)
+        editor.insertText("-77", replacementRange: editor.selectedRange())
+        for _ in 0..<10 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        switch leave {
+        case .done: page.model.finishEditing()
+        case .clickOtherWidget:
+            let other = try #require(frame(of: .widget(0), page))
+            click(page, at: CGPoint(x: other.midX, y: other.midY))
+        case .clickEmptyCanvas: click(page, at: CGPoint(x: 300, y: 600))
+        }
+        #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets")[1]["offset"] == .array([.int(-77), .int(30)]) })
+    }
+
+    /// Text typed in an option's field saves the same way, here when Done ends Customize.
+    @Test func typedTextSavesWhenTheInspectorGoes() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("hi", in: page.window.contentView!)
+            return found != nil
+        })
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        editor.selectAll(nil)
+        editor.insertText("hello", replacementRange: editor.selectedRange())
+        for _ in 0..<10 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        page.model.finishEditing()
+        #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets")[1]["opts"]["note"] == .string("hello") })
+    }
+
+    /// A value typed for a widget that Remove Widget then takes away goes with it: the widget that moves into its
+    /// place keeps where it was.
+    @Test func aTypedValueGoesWithItsRemovedWidget() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(0), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("0", in: page.window.contentView!)
+            return found != nil
+        })
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        editor.selectAll(nil)
+        editor.insertText("-77", replacementRange: editor.selectedRange())
+        for _ in 0..<10 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        // As Remove Widget does: the selection clears, and the widget goes, while the field still has the keyboard.
+        page.overlay.delete(nil)
+        #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets").array?.count == 1 })
+        try await Task.sleep(for: .milliseconds(300))
+        page.window.contentView?.layoutSubtreeIfNeeded()
+        let moved = saved(page).themeEdit("t", "widgets")[0]
+        #expect(moved["anchor"].isNil || moved["anchor"] == .string("top-right"))
+        #expect(moved["offset"].isNil || moved["offset"] == .array([.int(-30), .int(30)]))
     }
 
     /// A drag ends only where the mouse goes up: Escape during one changes nothing.

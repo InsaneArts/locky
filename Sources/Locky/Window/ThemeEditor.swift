@@ -729,6 +729,8 @@ private struct TextOption: View {
             .onChange(of: focused) { if !focused, current != text { commit(current) } }
             .onAppear { current = text }
             .onChange(of: text) { current = text }
+            // The panel can go before the field gives up the keyboard, as after Done or a click on the canvas.
+            .onDisappear { if focused, current != text { commit(current) } }
     }
 }
 
@@ -761,6 +763,8 @@ private struct NumberField: View {
         }
         .onAppear { text = Self.format(value) }
         .onChange(of: value) { text = Self.format(value) }
+        // The panel can go before the field gives up the keyboard, as after Done or a click on the canvas.
+        .onDisappear { if focused { save() } }
     }
 
     private func save() {
