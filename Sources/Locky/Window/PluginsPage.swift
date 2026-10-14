@@ -155,10 +155,14 @@ struct PluginsPage: View {
             settings.packs.removeAll { PackSpec.name(of: $0)?.lowercased() == pack.name.lowercased() }
         }
         // Nothing saves while settings.json has an error: the plugin stays in it, so its folder stays too.
-        guard model.store.problem == nil, !pack.alsoInConfig else { return }
+        guard model.store.problem == nil, Self.deletesFolder(pack) else { return }
         let name = pack.name
         model.runPack(.clean, targets: [name], work: { $0.run(.clean, removing: [name]) })
     }
+
+    /// Whether Remove deletes the plugin's folder: only a clone Locky made, and only when init.lua does not add the
+    /// plugin too. A local folder is the person's own code: a clean could still match its name in the lockfile.
+    static func deletesFolder(_ pack: Inspection.PackInfo) -> Bool { !pack.alsoInConfig && pack.dir == nil }
 
     /// The failure section's title for a run of `action`.
     static func failure(_ action: PackManager.Action) -> String {
@@ -191,12 +195,11 @@ struct PluginsPage: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The Remove alert's message.
-    private static func removal(_ pack: Inspection.PackInfo) -> String {
+    /// The Remove alert's message: what happens to the folder, as `deletesFolder` decides it.
+    static func removal(_ pack: Inspection.PackInfo) -> String {
         if pack.alsoInConfig { return "init.lua also adds it, so it stays installed." }
-        // A local folder is the person's own code: removing the plugin never deletes it.
-        if pack.dir != nil { return "Locky keeps its folder. Its themes and widgets stop showing." }
-        return "Locky deletes its folder. Its themes and widgets stop showing."
+        return deletesFolder(pack) ? "Locky deletes its folder. Its themes and widgets stop showing."
+            : "Locky keeps its folder. Its themes and widgets stop showing."
     }
 
     /// "just now" within a minute, else "2 minutes ago", in English like the rest of the window.

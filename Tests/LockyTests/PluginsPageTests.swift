@@ -13,6 +13,13 @@ import Testing
         return condition()
     }
 
+    /// An installed plugin as the config read lists it.
+    private func pack(src: String? = nil, version: String? = nil, dir: String? = nil, fromSettings: Bool = true,
+                      alsoInConfig: Bool = false) -> Inspection.PackInfo {
+        Inspection.PackInfo(name: "x", src: src, version: version, dir: dir.map { URL(fileURLWithPath: $0) }, fromSettings: fromSettings,
+                            alsoInConfig: alsoInConfig, folder: URL(fileURLWithPath: "/tmp/x"), installed: true)
+    }
+
     /// A plugin's row says what it adds in the names people read, with "Theme:" and "Widget:" for one, and nothing when
     /// it adds nothing.
     @Test func aPluginSaysWhatItAdds() async throws {
@@ -39,16 +46,26 @@ import Testing
     /// A row names where a plugin comes from in short: its GitHub path or address, or its folder; then its version, and
     /// init.lua for one init.lua adds.
     @Test func aPluginsSourceIsShort() {
-        func pack(src: String? = nil, version: String? = nil, dir: String? = nil, fromSettings: Bool = true) -> Inspection.PackInfo {
-            Inspection.PackInfo(name: "x", src: src, version: version, dir: dir.map { URL(fileURLWithPath: $0) }, fromSettings: fromSettings,
-                                alsoInConfig: false, folder: URL(fileURLWithPath: "/tmp/x"), installed: true)
-        }
         #expect(PluginsPage.source(pack(src: "https://github.com/someone/locky-stars")) == "someone/locky-stars")
         #expect(PluginsPage.source(pack(src: "https://github.com/someone/locky-stars.git", version: "v1.2.0")) == "someone/locky-stars · v1.2.0")
         #expect(PluginsPage.source(pack(src: "https://github.com/someone/locky-git-extra", fromSettings: false)) == "someone/locky-git-extra · init.lua")
         #expect(PluginsPage.source(pack(src: "git@gitlab.com:someone/x.git")) == "git@gitlab.com:someone/x.git")
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         #expect(PluginsPage.source(pack(dir: home + "/code/my-plugin")) == "~/code/my-plugin")
+    }
+
+    /// Remove deletes only a clone Locky made, and its message says what happens to the folder. A local folder is the
+    /// person's own: a clean would delete it if the lockfile still named it from an earlier install.
+    @Test func removeDeletesOnlyACloneLockyMade() {
+        let clone = pack(src: "https://github.com/someone/locky-stars")
+        let local = pack(dir: "/tmp/x")
+        let both = pack(src: "https://github.com/someone/locky-stars", alsoInConfig: true)
+        #expect(PluginsPage.deletesFolder(clone))
+        #expect(!PluginsPage.deletesFolder(local))
+        #expect(!PluginsPage.deletesFolder(both))
+        #expect(PluginsPage.removal(clone) == "Locky deletes its folder. Its themes and widgets stop showing.")
+        #expect(PluginsPage.removal(local) == "Locky keeps its folder. Its themes and widgets stop showing.")
+        #expect(PluginsPage.removal(both) == "init.lua also adds it, so it stays installed.")
     }
 
     /// Every card shows the sizes in one order: the Lock Screen ones, then the desktop ones.
