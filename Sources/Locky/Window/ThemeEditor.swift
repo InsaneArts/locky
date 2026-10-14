@@ -131,7 +131,7 @@ struct ThemeEditorPage: View {
                 Label("More", systemImage: "ellipsis")
             }
             .menuIndicator(.hidden)
-            .help("Duplicate, export, or revert this theme")
+            .help(model.canTrash(info.id) ? "Duplicate, export, revert, or move this theme to the Trash" : "Duplicate, export, or revert this theme")
             .disabled(info.error != nil && !model.canTrash(info.id))
         }
         if #available(macOS 26, *) { ToolbarSpacer(.fixed, placement: .primaryAction) }
