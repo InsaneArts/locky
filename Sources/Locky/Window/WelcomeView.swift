@@ -62,13 +62,16 @@ struct WelcomeView: View {
                         Text("Lock automatically")
                         if model.store.problem != nil {
                             // The store saves nothing while the file has an error. The switch shows what Locky still uses.
-                            HStack(spacing: 4) {
+                            // In the subtitle's font and color, as the Form gives a Text here, so the row keeps its height.
+                            HStack(spacing: 8) {
                                 WarningLabel("settings.json has an error, so this can't change.")
+                                    .foregroundStyle(.secondary)
                                 Button("Open Settings") { model.openWindow(.settings) }
                                     .buttonStyle(.link)
                                     // The row is disabled, but not the way out of it.
                                     .environment(\.isEnabled, true)
                             }
+                            .font(.subheadline)
                         } else {
                             // While it is off: what turning it on stores.
                             Text(Self.autoLockSummary(stored != AutoLockSettings() ? stored : turnedOff ?? Self.defaultAutoLock))

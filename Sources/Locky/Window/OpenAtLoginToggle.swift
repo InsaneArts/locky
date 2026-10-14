@@ -23,17 +23,23 @@ struct OpenAtLoginToggle: View {
         .disabled(model.loginItem.isUnavailable)
     }
 
+    /// The row's second line. A grouped Form styles a Text there as the subtitle and nothing else, so a warning takes the
+    /// subtitle's font and color itself and the row keeps its height; the orange symbol and the link keep their colors.
     @ViewBuilder private var status: some View {
         if let error {
             WarningLabel(error)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         } else if case .unavailable(let message) = model.loginItem {
             Text(message)
         } else if model.loginItem == .requiresApproval {
-            HStack(spacing: 4) {
+            HStack(spacing: 8) {
                 WarningLabel("Allow Locky in Login Items.")
+                    .foregroundStyle(.secondary)
                 Button("Open Login Items") { LoginItem.openSystemSettings() }
                     .buttonStyle(.link)
             }
+            .font(.subheadline)
         } else if let subtitle {
             Text(subtitle)
         }
