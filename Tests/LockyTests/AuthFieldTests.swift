@@ -299,26 +299,69 @@ import Testing
 /// The lock names ⌃⌥⌘Q under the field once someone looks stuck, and only then.
 @MainActor
 @Suite struct WayOutTests {
-    /// The message's height before and after `change`, laid out as the lock does it: the session asks for a layout,
-    /// and AppKit lays the screen out on its next pass. The window sits far off the screen.
-    private func messageHeight(exit: Bool, model: AuthModel = AuthModel(slowAfter: .milliseconds(50)),
-                               _ change: (AuthModel) async throws -> Void) async throws -> (before: CGFloat, after: CGFloat) {
+    /// A screen as the lock lays it out: a 240×64 field, the message when there is one, and the way out's row. The
+    /// window sits far off the screen, so AppKit lays the screen out on its next pass after the session asks.
+    private func lockScreen(field spec: Theme.Auth = Theme.Auth(), message: String? = nil, exit: Bool = true,
+                            model: AuthModel) -> (NSWindow, LockScreenView) {
         _ = NSApplication.shared
         let window = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 1440, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        defer { window.orderOut(nil) }
         let screen = LockScreenView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
         window.contentView = screen
         window.orderBack(nil)
-        screen.auth = (NSView(), Theme.Auth())
+        screen.auth = (NSView(), spec)
         screen.authSize = CGSize(width: 240, height: 64)
-        screen.message = NSHostingController(rootView: LockMessage(text: nil, model: model, exit: exit, auth: Theme.Auth(), style: LockyStyle()))
+        screen.message = message.map { NSHostingController(rootView: LockMessage(text: $0, model: nil, exit: false, auth: spec, style: LockyStyle())) }
+        screen.wayOut = NSHostingController(rootView: LockMessage(text: nil, model: model, exit: exit, auth: spec, style: LockyStyle()))
         screen.layoutSubtreeIfNeeded()
-        let before = screen.message?.view.frame.height ?? -1
+        return (window, screen)
+    }
+
+    /// The way out's height before and after `change`.
+    private func messageHeight(exit: Bool, model: AuthModel = AuthModel(slowAfter: .milliseconds(50)),
+                               _ change: (AuthModel) async throws -> Void) async throws -> (before: CGFloat, after: CGFloat) {
+        let (window, screen) = lockScreen(exit: exit, model: model)
+        defer { window.orderOut(nil) }
+        let before = screen.wayOut?.view.frame.height ?? -1
         try await change(model)
         screen.needsLayout = true
         try await Task.sleep(for: .milliseconds(100))
-        return (before, screen.message?.view.frame.height ?? -1)
+        return (before, screen.wayOut?.view.frame.height ?? -1)
+    }
+
+    /// Aurora's field ends 56 points over the bottom: a one-line message fits under it, the way out under that does
+    /// not. The message stays where it is when the way out joins, which goes over the field.
+    @Test func theMessageStaysWhereItIsWhenTheWayOutJoins() async throws {
+        var spec = Theme.Auth()
+        spec.offset = CGPoint(x: 0, y: -56)
+        let model = AuthModel()
+        let (window, screen) = lockScreen(field: spec, message: "If found, please call 555-0100", model: model)
+        defer { window.orderOut(nil) }
+        let field = try #require(screen.auth?.view.frame), before = try #require(screen.message?.view.frame)
+        #expect(before.minY == field.maxY + 14 && before.height > 0)
+        for _ in 0..<3 { model.failed() }
+        screen.needsLayout = true
+        try await Task.sleep(for: .milliseconds(100))
+        let wayOut = try #require(screen.wayOut?.view.frame)
+        #expect(screen.message?.view.frame == before)
+        #expect(wayOut.height > 0 && wayOut.maxY == field.minY - 14 && abs(wayOut.midX - field.midX) <= 1)
+    }
+
+    /// With room under the message, the way out follows it as one more line.
+    @Test func theWayOutFollowsTheMessageWhenThereIsRoom() async throws {
+        var spec = Theme.Auth()
+        spec.anchor = .center
+        spec.offset = .zero
+        let model = AuthModel()
+        let (window, screen) = lockScreen(field: spec, message: "If found, please call 555-0100", model: model)
+        defer { window.orderOut(nil) }
+        for _ in 0..<3 { model.failed() }
+        screen.needsLayout = true
+        try await Task.sleep(for: .milliseconds(100))
+        let field = try #require(screen.auth?.view.frame), message = try #require(screen.message?.view.frame)
+        let wayOut = try #require(screen.wayOut?.view.frame)
+        #expect(message.minY == field.maxY + 14)
+        #expect(wayOut.height > 0 && wayOut.minY == message.maxY + 4 && abs(wayOut.midX - field.midX) <= 1)
     }
 
     @Test func theThirdWrongPasswordNamesTheWayOut() async throws {

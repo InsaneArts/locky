@@ -162,7 +162,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             touchIDPicture = true
         }
 
-        // A check that hangs leaves the field disabled: the message then names ⌃⌥⌘Q, and grows.
+        // A check that hangs leaves the field disabled: the lock then names ⌃⌥⌘Q, in its own row.
         authModel.onSlowCheck = { [weak self] in self?.screens.first?.needsLayout = true }
 
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
@@ -562,7 +562,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Counts a wrong password; at settings.json's intruder_photo, takes one photo with the camera. The camera
     /// never asks for permission here: Settings asks when the photo is turned on.
     private func wrongPassword() {
-        // From the third, the message names ⌃⌥⌘Q, and grows.
+        // From the third, or with a wait, the lock names ⌃⌥⌘Q, in its own row.
         screens.first?.needsLayout = true
         guard mode == .lock, intruder.wrongPassword() else { return }
         capturing = Task { [weak self] in
@@ -672,10 +672,12 @@ final class LockSession: NSObject, NSWindowDelegate {
                 }
                 screen.scrim = scrim()
                 screen.glanceScrim = theme.auth.reveal == "activity" ? scrim() : nil
-                // A lock with ⌃⌥⌘Q always has the view: the line naming it may join the message.
-                let exit = mode == .lock && emergencyExit
-                screen.message = started.message != nil || exit
-                    ? NSHostingController(rootView: LockMessage(text: started.message, model: authModel, exit: exit, auth: theme.auth, style: style))
+                screen.message = started.message.map {
+                    NSHostingController(rootView: LockMessage(text: $0, model: nil, exit: false, auth: theme.auth, style: style))
+                }
+                // A lock with ⌃⌥⌘Q always has the row: the line naming it shows once someone looks stuck.
+                screen.wayOut = mode == .lock && emergencyExit
+                    ? NSHostingController(rootView: LockMessage(text: nil, model: authModel, exit: true, auth: theme.auth, style: style))
                     : nil
                 if mode != .lock, !started.problems.isEmpty {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
@@ -1084,6 +1086,16 @@ final class LockScreenView: NSView {
             needsLayout = true
         }
     }
+    /// The line that names ⌃⌥⌘Q, in a row of its own: when it joins, the message stays where it is.
+    var wayOut: NSHostingController<LockMessage>? {
+        didSet {
+            oldValue?.view.removeFromSuperview()
+            if let wayOut {
+                if let banner { addSubview(wayOut.view, positioned: .below, relativeTo: banner) } else { addSubview(wayOut.view) }
+            }
+            needsLayout = true
+        }
+    }
 
     override var isFlipped: Bool { true }
 
@@ -1107,7 +1119,7 @@ final class LockScreenView: NSView {
         widget.onResize = { [weak self] in self?.needsLayout = true }
         // Widgets stay under an overlay, if the theme has one, and always under the password field, its message, and
         // banners: a widget placed where the field is must not cover it.
-        if let above = overlay ?? auth?.view ?? message?.view ?? banner {
+        if let above = overlay ?? auth?.view ?? message?.view ?? wayOut?.view ?? banner {
             addSubview(widget, positioned: .below, relativeTo: above)
         } else {
             addSubview(widget)
@@ -1135,7 +1147,7 @@ final class LockScreenView: NSView {
         let reordered = list.map(ObjectIdentifier.init) != widgets.map(ObjectIdentifier.init)
         widgets = list
         guard reordered else { return }
-        let above = overlay ?? auth?.view ?? message?.view ?? banner
+        let above = overlay ?? auth?.view ?? message?.view ?? wayOut?.view ?? banner
         for widget in list where widget.superview === self {
             if let above { addSubview(widget, positioned: .below, relativeTo: above) } else { addSubview(widget) }
         }
@@ -1252,13 +1264,17 @@ final class LockScreenView: NSView {
         if let message {
             message.view.frame = messageFrame(size: message.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale)), scale: scale)
         }
-        // Around the field, or the glance hint, and the message, with room to fade out. None while the field measures
-        // itself.
+        if let wayOut {
+            let size = wayOut.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale))
+            wayOut.view.frame = wayOutFrame(size: size, message: message?.view.frame ?? .zero, scale: scale)
+        }
+        // Around the field, or the glance hint, the message, and the way out, with room to fade out. None while the field
+        // measures itself.
         for (view, core) in [(scrim, auth?.view.frame), (glanceScrim, glanceHint?.frame)] {
             guard let view else { continue }
             if let core, authSize.width > 0 {
-                let text = message?.view.frame ?? .zero
-                view.frame = (text.isEmpty ? core : core.union(text)).insetBy(dx: -48 * scale, dy: -48 * scale).integral
+                let text = [message?.view.frame, wayOut?.view.frame].compactMap { $0 }.filter { !$0.isEmpty }
+                view.frame = text.reduce(core) { $0.union($1) }.insetBy(dx: -48 * scale, dy: -48 * scale).integral
             } else {
                 view.frame = .zero
             }
@@ -1278,6 +1294,24 @@ final class LockScreenView: NSView {
         let y = below + size.height <= bounds.maxY - 12 * scale ? below : frame.minY - gap - size.height
         let x = spec.hintAlign == "leading" ? frame.minX : frame.midX - size.width / 2
         // A field near an edge (Poster's is at the bottom left) must not push a long message off the screen.
+        let kept = Layout.keep(CGRect(x: x, y: y, width: size.width, height: size.height), inside: bounds, margin: 16 * scale)
+        return CGRect(x: kept.minX, y: y, width: size.width, height: size.height).integral
+    }
+
+    /// The ⌃⌥⌘Q line: under the message, or under the field without one there, when there is room; else above the field,
+    /// or above the message when that sits there. Lined up as the message is.
+    func wayOutFrame(size: CGSize, message: CGRect, scale: CGFloat) -> CGRect {
+        let gap = 14 * scale, spacing = 4 * scale
+        guard let field = auth?.view.frame, let spec = auth?.spec, authSize.width > 0 else {
+            // Before the field measures itself: over the message, or where the message goes.
+            let y = message.isEmpty ? bounds.maxY - 28 * scale - size.height : message.minY - spacing - size.height
+            return CGRect(x: bounds.midX - size.width / 2, y: y, width: size.width, height: size.height).integral
+        }
+        let text = message.isEmpty ? nil : message
+        let below = text.flatMap { $0.minY > field.midY ? $0.maxY + spacing : nil } ?? field.maxY + gap
+        let above = text.flatMap { $0.maxY < field.midY ? $0.minY - spacing : nil } ?? field.minY - gap
+        let y = below + size.height <= bounds.maxY - 12 * scale ? below : above - size.height
+        let x = spec.hintAlign == "leading" ? field.minX : field.midX - size.width / 2
         let kept = Layout.keep(CGRect(x: x, y: y, width: size.width, height: size.height), inside: bounds, margin: 16 * scale)
         return CGRect(x: kept.minX, y: y, width: size.width, height: size.height).integral
     }
