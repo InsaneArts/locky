@@ -28,6 +28,10 @@ struct SchedulePopover: View {
             }
         }
         .formStyle(.columns)
+        // The form at its own width from the leading edge, so its label column stays put when the mode adds or removes
+        // rows: centered, the pop-up just used would move sideways under the pointer.
+        .fixedSize()
+        .frame(maxWidth: .infinity, alignment: .leading)
         // While settings.json has an error nothing saves it, here as everywhere else.
         .disabled(store.problem != nil)
         .padding(20)
