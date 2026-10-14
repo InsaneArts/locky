@@ -10,7 +10,8 @@ end)
 
 Every core widget also draws Apple's widget families: give a placement `family = "small"` (or `circular`,
 `rectangular`, `inline`, `medium`, `large`) and it lays itself out like Apple's own widget of that size, on the
-theme's card ([themes.md](themes.md) lists the sizes). The Widgets page shows each family live.
+theme's card ([themes.md](themes.md) lists the sizes). Customize › Add Widget… shows each family live, in the
+theme you edit.
 
 | Widget | Families |
 |---|---|
@@ -68,8 +69,8 @@ each file in `Sources/Locky/Resources/runtime/plugin/` lists every option.
 | `sun` | Today's path of the sun, where it is now, and sunrise and sunset (from wttr.in). | `width`, `location` |
 | `moon` | Tonight's phase, how much is lit, and the days to the full moon. No network. | `style`: `full`, `symbol`, `row`; `size` |
 
-The weather and sun widgets share one request, cached in `~/Library/Caches/Locky`. Privacy mode hides the place's
-name.
+The weather and sun widgets share one request, cached in `~/Library/Caches/Locky`. Hide personal information
+(`privacy`) leaves out the place's name.
 
 ## System
 
@@ -94,6 +95,6 @@ name.
 | `quote` | A short quote that changes every half hour. | `source`: `builtin`, `fortune`; `quotes` (your own list of `{ text, author }`); `every` |
 | `life` | Conway's Game of Life, evolving quietly. | `columns`, `rows`, `every`, `cell` |
 
-Privacy mode (`privacy = true`) keeps names out: the user's and the Mac's, the place, the network address, git's
-repositories, branches, and commit messages (the git widget shows only its counts), and herdr's titles and
-workspaces.
+Hide personal information (`privacy = true`) keeps names out: the user's and the Mac's, the place, the network
+address, git's repositories, branches, and commit messages (the git widget shows only its counts), and herdr's
+titles and workspaces.
