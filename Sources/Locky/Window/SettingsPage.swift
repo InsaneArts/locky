@@ -36,7 +36,7 @@ struct SettingsPage: View {
             // While the file has an error, everything but the way out of it waits.
             Group {
                 if !photos.isEmpty {
-                    PhotosSection(photos: photos, delete: delete, deleteAll: deleteAll)
+                    PhotosSection(model: model, photos: photos, delete: delete, deleteAll: deleteAll)
                 }
                 StartSection(model: model)
                 AutoLockSection(model: model)
@@ -151,6 +151,7 @@ private struct WhenLockEnds: ViewModifier {
 
 /// The photos the camera took after wrong passwords, first in the pane while there are any.
 private struct PhotosSection: View {
+    let model: AppModel
     let photos: [(url: URL, date: Date)]
     let delete: (URL) -> Void
     let deleteAll: () -> Void
@@ -177,6 +178,8 @@ private struct PhotosSection: View {
         } footer: {
             Text("Locky took these when someone typed wrong passwords.")
         }
+        // A lock cancels the alert: Return at the lock must not delete the photos. Read here, not in the page's body.
+        .onChange(of: model.locked) { if model.locked { confirming = false } }
     }
 }
 

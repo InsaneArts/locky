@@ -89,8 +89,16 @@ final class AppModel {
     var shortcutProblem: String?
     /// Open at login, read again whenever Locky becomes active (back from System Settings).
     private(set) var loginItem = LoginItem.status
-    /// True for the length of a lock (AppDelegate sets it). Nothing is read on didBecomeActive then.
-    var locked = false
+    /// True for the length of a lock (AppDelegate sets it). Nothing is read on didBecomeActive then. As it turns true,
+    /// what waits for the person in the windows closes, so the lock alone takes the keyboard: the Schedule popover and
+    /// the Import panel here, the windows' own sheets and alerts that take input as they see it.
+    var locked = false {
+        didSet {
+            guard locked else { return }
+            scheduling = false
+            importing = false
+        }
+    }
 
     /// What the window asks the app to do.
     @ObservationIgnored var lockNow: () -> Void = {}

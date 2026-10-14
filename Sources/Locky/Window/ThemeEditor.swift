@@ -68,6 +68,8 @@ struct ThemeEditorPage: View {
                     if let loaded { selection = .widget(loaded.add(name, family: family)) }
                 }
             }
+            // A lock cancels the Duplicate alert: its name field must not take what is typed at the lock.
+            .onChange(of: model.locked) { if model.locked { copyName = nil } }
             .alert("Duplicate Theme", isPresented: Binding(get: { copyName != nil }, set: { if !$0 { copyName = nil } })) {
                 TextField("Name", text: Binding(get: { copyName ?? "" }, set: { copyName = $0 }))
                 Button("Duplicate") { duplicate(named: copyName ?? "") }

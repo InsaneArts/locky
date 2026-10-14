@@ -60,6 +60,13 @@ struct PluginsPage: View {
                 }
             }
         }
+        // A lock cancels what waits for input here: Return at the lock must not install, update, or remove a plugin.
+        .onChange(of: model.locked) {
+            guard model.locked else { return }
+            installing = false
+            reviewing = nil
+            removing = nil
+        }
         .sheet(isPresented: $installing) { InstallSheet(model: model) }
         .sheet(item: $reviewing) { UpdateSheet(model: model, update: $0) }
         .alert(removing.map { "Remove “\($0.name)”?" } ?? "", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),

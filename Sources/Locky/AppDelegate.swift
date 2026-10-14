@@ -323,6 +323,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             trackedMenu?.cancelTrackingWithoutAnimation()
             NSApp.mainMenu = nil
             NSApp.servicesMenu = nil
+            // A save or open panel ends as its Cancel ends it: one that runs on its own (Export Theme…, a background's
+            // Choose…) and one over a window (Import Theme…). The color panel goes; model.locked closes the rest.
+            (NSApp.modalWindow as? NSSavePanel)?.cancel(nil)
+            for window in NSApp.windows { (window.attachedSheet as? NSSavePanel)?.cancel(nil) }
+            if NSColorPanel.sharedColorPanelExists { NSColorPanel.shared.orderOut(nil) }
         }
         session.onEnd = { [weak self, weak session] in
             guard let self else { return }

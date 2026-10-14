@@ -359,6 +359,19 @@ import Testing
         #expect(controller.validateMenuItem(inspector) && inspector.title == "Hide Inspector")
     }
 
+    /// A lock closes the Schedule popover and the Import panel, so nothing but the lock takes the keyboard. Neither comes
+    /// back after it.
+    @Test func aLockClosesThePopoverAndTheImportPanel() throws {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        model.scheduling = true
+        model.importing = true
+        model.locked = true
+        #expect(!model.scheduling && !model.importing)
+        model.locked = false
+        #expect(!model.scheduling && !model.importing)
+    }
+
     /// Customize shows why a theme does not load, and takes only Move to Trash for it: the menu offers no more. Use Theme
     /// would make it the theme a lock uses.
     @Test func aThemeThatDoesNotLoadTakesOnlyMoveToTrash() async throws {
