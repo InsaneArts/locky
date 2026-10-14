@@ -7,7 +7,6 @@ struct Inspection: Sendable {
         var id: String
         var name: String
         var description: String?
-        var author: String?
         var directory: URL?
         /// The theme's own colors, before the defaults: for the theme cards.
         var palette: [String: String] = [:]
@@ -82,7 +81,7 @@ struct Inspection: Sendable {
                 result.config = (try? runtime.call("config", budget: 1).first) ?? .nil
                 result.themes = ((try? runtime.call("theme_infos", budget: 5).first?.array) ?? []).map { info in
                     ThemeInfo(id: info["id"].string ?? "?", name: info["name"].string ?? info["id"].string ?? "?",
-                              description: info["description"].string, author: info["author"].string,
+                              description: info["description"].string,
                               directory: info["dir"].string.map { URL(fileURLWithPath: $0) },
                               palette: (info["palette"].table ?? [:]).compactMapValues(\.string), error: info["error"].string)
                 }
