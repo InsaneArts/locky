@@ -66,10 +66,12 @@ Themes… in the menu bar icon's menu opens the **Themes** window: the theme in 
 picture. Click one to use it, or use the arrow keys. Customize… edits it on its live lock screen (drag widgets, add
 them from a live gallery, change their options, the background, and where the password field sits). Schedule (the
 clock in the toolbar) changes the theme by time of day or with Light and Dark mode, and Move to Trash removes a
-theme you made. Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, auto-lock, Open
-at login, a lock screen message, Hide personal information, Turn the display off, Touch ID, and a photo after wrong
-passwords. Plugins installs, updates, and removes plugins. Lua Config opens init.lua and shows its problems.
-Everything but Open at login saves to `~/.config/locky/settings.json`, which wins over init.lua key by key: see
+theme you made.
+
+Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, auto-lock, Open at login, a lock
+screen message, Hide personal information, Turn the display off, Touch ID, and a photo after wrong passwords.
+Plugins installs, updates, and removes plugins. Lua Config opens init.lua and shows its problems. Everything but
+Open at login saves to `~/.config/locky/settings.json`, which wins over init.lua key by key: see
 [settings.md](docs/settings.md).
 
 ## Configure
