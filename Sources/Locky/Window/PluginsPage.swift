@@ -131,8 +131,7 @@ struct PluginsPage: View {
                     .controlSize(.small)
                 Text("Checking for updates…")
             } else if let checked = model.lastUpdateCheck {
-                // A check that failed has its section at the top; this line then says only when it ran.
-                let upToDate = model.available.isEmpty && failedRun?.action != .check
+                let upToDate = Self.upToDate(model.updates)
                 TimelineView(.everyMinute) { _ in
                     Text(upToDate ? "Up to date · checked \(Self.ago(checked))" : "Checked \(Self.ago(checked))")
                 }
@@ -142,6 +141,13 @@ struct PluginsPage: View {
                 .buttonStyle(.link)
                 .disabled(isBusy)
         }
+    }
+
+    /// Whether the last check found every plugin it checked at its newest commit. A check that failed for one plugin,
+    /// or as a whole (it then lists none), never reads as up to date, whatever runs after it: its results stay until the
+    /// next check.
+    static func upToDate(_ updates: [PackUpdate]) -> Bool {
+        !updates.isEmpty && updates.allSatisfy { $0.error == nil && $0.latest != nil && $0.current == $0.latest }
     }
 
     /// Whether a run works on `pack` now: the plugins it names, and for a sync, every git plugin not installed yet.

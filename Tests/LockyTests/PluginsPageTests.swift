@@ -68,6 +68,19 @@ import Testing
         #expect(PluginsPage.removal(both) == "init.lua also adds it, so it stays installed.")
     }
 
+    /// The update footer says "Up to date" only after a check that reached every plugin and found nothing newer. A
+    /// failed check keeps its results until the next check, so a later run that succeeds does not make it up to date.
+    @Test func upToDateNeedsACheckThatReachedEveryPlugin() {
+        let old = "3f9c2a1b7d4e5f60718293a4b5c6d7e8f9a0b1c2", new = "8b1d0e4a9c7f6e5d4c3b2a1908f7e6d5c4b3a291"
+        let current = PackUpdate(name: "locky-stars", current: old, latest: old)
+        #expect(PluginsPage.upToDate([current]))
+        #expect(!PluginsPage.upToDate([PackUpdate(name: "locky-stars", current: old, latest: new)]))
+        #expect(!PluginsPage.upToDate([current, PackUpdate(name: "locky-transit", current: old, error: "fetch failed")]))
+        // A check that failed as a whole, such as one that found another run holding the lock, lists no plugin.
+        #expect(!PluginsPage.upToDate([]))
+        #expect(!PluginsPage.upToDate([PackUpdate(name: "locky-transit")]))
+    }
+
     /// Every card shows the sizes in one order: the Lock Screen ones, then the desktop ones.
     @Test func sizesShowInOneOrder() {
         #expect(FamilyPicker.sorted(["small", "inline", "circular", "large"]) == ["circular", "inline", "small", "large"])
