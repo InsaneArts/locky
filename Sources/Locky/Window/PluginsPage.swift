@@ -259,20 +259,27 @@ private struct PluginSection: View {
     let remove: () -> Void
     let grant: (_ capability: String, _ allowed: Bool) -> Void
 
+    /// Its grants can change: init.lua's plugins show the grants init.lua gives them, and nothing saves while
+    /// settings.json has an error.
+    private var canGrant: Bool { pack.fromSettings && canChange }
+
     var body: some View {
         Section {
             header
             // A local folder is the person's own code: it gets no grants.
             if pack.dir == nil {
+                // A grouped form draws a disabled switch's label at full contrast, so the labels dim themselves.
+                let title = canGrant ? HierarchicalShapeStyle.primary : .secondary
                 Group {
-                    Toggle("Run programs", isOn: allows("system"))
+                    Toggle(isOn: allows("system")) {
+                        Text("Run programs").foregroundStyle(title)
+                    }
                     Toggle(isOn: allows("files")) {
-                        Text("Change files")
-                        Text("Gives as much access as running programs.")
+                        Text("Change files").foregroundStyle(title)
+                        Text("Gives as much access as running programs.").foregroundStyle(canGrant ? HierarchicalShapeStyle.secondary : .tertiary)
                     }
                 }
-                // init.lua's plugins show the grants init.lua gives them.
-                .disabled(!pack.fromSettings || !canChange)
+                .disabled(!canGrant)
                 .help(pack.fromSettings ? "" : "Set allow = { … } for it in init.lua")
             }
         }
