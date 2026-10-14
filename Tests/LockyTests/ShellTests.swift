@@ -96,6 +96,38 @@ import Testing
         #expect(SettingsTabViewController.fitted(fits, in: short) == fits)
     }
 
+    /// On a screen shorter than General, the window takes the screen's height and General scrolls, so its last rows
+    /// can be reached. A later pane change on a taller screen gives General its full height again.
+    @Test func onAShortScreenGeneralScrolls() async throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        let controller = SettingsWindowController(model: AppModel(store: SettingsStore(config: sandbox.config)), onClose: {})
+        let settings = try #require(controller.window)
+        let tabs = try #require(settings.contentViewController as? SettingsTabViewController)
+        controller.show(.settings, behind: true)
+        defer { settings.close() }
+        tabs.place(settings, settings.frame, in: CGRect(x: 0, y: 40, width: 1440, height: 600), animate: false)
+        func scrollViews(in view: NSView) -> [NSScrollView] {
+            ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews(in:))
+        }
+        func scrolls() -> Bool {
+            settings.contentView?.layoutSubtreeIfNeeded()
+            return scrollViews(in: settings.contentView!).contains { ($0.documentView?.frame.height ?? 0) > $0.contentView.bounds.height }
+        }
+        #expect(await wait(scrolls))
+        #expect(settings.frame.height == 600, "\(settings.frame)")
+        #expect(settings.frame.minY == 40)
+
+        let tall = CGRect(x: 0, y: 0, width: 1440, height: 2000)
+        tabs.place(settings, settings.frameRect(forContentRect: CGRect(origin: .zero, size: SettingsTabViewController.size(of: .settings))),
+                   in: tall, animate: false)
+        settings.contentView?.layoutSubtreeIfNeeded()
+        #expect(settings.contentRect(forFrameRect: settings.frame).height == 745)
+    }
+
     /// The Message field saves when focus leaves it, and closing the window is one way focus leaves.
     @Test func theMessageSavesWhenTheSettingsWindowCloses() async throws {
         let sandbox = try Sandbox()

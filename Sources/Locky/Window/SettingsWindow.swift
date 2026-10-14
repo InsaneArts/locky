@@ -42,7 +42,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         if !opened {
             opened = true
             window.center()
-            window.setFrame(SettingsTabViewController.fitted(window.frame, in: (window.screen ?? NSScreen.main)?.visibleFrame), display: false)
+            tabs.place(window, window.frame, in: (window.screen ?? NSScreen.main)?.visibleFrame, animate: false)
         }
         if behind {
             window.orderBack(nil)
@@ -96,6 +96,14 @@ final class SettingsTabViewController: NSTabViewController {
         return fitted
     }
 
+    /// Gives the window `frame` fitted to `visible`. The pane's preferred size follows the fitted height: AppKit holds
+    /// the window to it above the priority of a frame change, so without this a shorter window keeps the pane's height.
+    func place(_ window: NSWindow, _ frame: CGRect, in visible: CGRect?, animate: Bool) {
+        let fitted = Self.fitted(frame, in: visible)
+        tabViewItems[selectedTabViewItemIndex].viewController?.preferredContentSize = window.contentRect(forFrameRect: fitted).size
+        window.setFrame(fitted, display: true, animate: animate)
+    }
+
     func select(_ pane: AppModel.Section) {
         if let index = tabViewItems.firstIndex(where: { $0.identifier as? String == pane.rawValue }) { selectedTabViewItemIndex = index }
     }
@@ -122,8 +130,8 @@ final class SettingsTabViewController: NSTabViewController {
         let old = window.frame
         var frame = window.frameRect(forContentRect: CGRect(origin: .zero, size: Self.size(of: pane)))
         frame.origin = CGPoint(x: old.minX, y: old.maxY - frame.height)
-        frame = Self.fitted(frame, in: (window.screen ?? NSScreen.main)?.visibleFrame)
-        window.setFrame(frame, display: true, animate: window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        place(window, frame, in: (window.screen ?? NSScreen.main)?.visibleFrame,
+              animate: window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         if !AppDelegate.isTool { UserDefaults.standard.set(pane.rawValue, forKey: Self.paneKey) }
         window.makeFirstResponder(nil)
     }
