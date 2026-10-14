@@ -97,6 +97,9 @@ struct ThemeGallery: View {
     private var header: some View {
         let id = model.activeTheme
         let info = model.inspection.theme(id)
+        // Why Customize… is dimmed: the theme's error, as its tile's tooltip gives it, or that no theme has the id, such
+        // as after its file was deleted in Finder.
+        let problem: String? = if let info { info.error.map { LuaError($0).summary } } else { "Locky has no theme named “\(id)”." }
         return HStack(alignment: .center, spacing: 24) {
             preview(id, info: info)
                 .aspectRatio(1.6, contentMode: .fit)
@@ -113,9 +116,8 @@ struct ThemeGallery: View {
                         .font(.largeTitle.bold())
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    // A theme that does not load says why, as its tile's tooltip does: it is why Customize… is dimmed.
-                    if let error = info?.error {
-                        WarningLabel(LuaError(error).summary)
+                    if let problem {
+                        WarningLabel(problem)
                             .lineLimit(3)
                             .textSelection(.enabled)
                     } else if let description = info?.description {
