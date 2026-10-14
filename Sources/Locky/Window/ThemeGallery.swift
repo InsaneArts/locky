@@ -113,7 +113,12 @@ struct ThemeGallery: View {
                         .font(.largeTitle.bold())
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    if let description = info?.description {
+                    // A theme that does not load says why, as its tile's tooltip does: it is why Customize… is dimmed.
+                    if let error = info?.error {
+                        WarningLabel(LuaError(error).summary)
+                            .lineLimit(3)
+                            .textSelection(.enabled)
+                    } else if let description = info?.description {
                         Text(description)
                             .foregroundStyle(.secondary)
                             .lineLimit(3)
