@@ -7,7 +7,10 @@ struct ConfigPage: View {
     let model: AppModel
     /// Whether init.lua is there, read again whenever the config changes.
     @State private var exists = false
+    /// Why Open in <editor> failed, under the init.lua row.
     @State private var openError: String?
+    /// Why a problem's Open failed, under that problem's row.
+    @State private var problemError: (key: String, text: String)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var file: URL { model.store.config.appending(path: "init.lua") }
@@ -56,7 +59,7 @@ struct ConfigPage: View {
                         LabeledContent {
                             if let file = problem.file, let line = problem.line {
                                 // Waits for the editors, which the pane looks for when it first shows.
-                                Button("Open") { openError = model.open(file, line: line) }
+                                Button("Open") { problemError = model.open(file, line: line).map { (problem.key, $0) } }
                                     .disabled(model.editor == nil)
                             }
                         } label: {
@@ -65,6 +68,9 @@ struct ConfigPage: View {
                             if let file = problem.file, let line = problem.line {
                                 Text("\(file.lastPathComponent), line \(line)")
                             }
+                        }
+                        if let problemError, problemError.key == problem.key {
+                            WarningLabel(problemError.text)
                         }
                     }
                 }
