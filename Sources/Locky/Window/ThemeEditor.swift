@@ -229,11 +229,7 @@ private struct UnloadableTheme: View {
         ContentUnavailableView {
             Label("Can't Edit This Theme", systemImage: "exclamationmark.triangle")
         } description: {
-            if let file = problem.file, let line = problem.line {
-                Text("\(problem.message)\n\(file.lastPathComponent), line \(line)")
-            } else {
-                Text(problem.message)
-            }
+            Text(problem.described)
         } actions: {
             if let file = problem.file, let line = problem.line {
                 Button("Open") { openError = model.open(file, line: line) }

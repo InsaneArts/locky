@@ -620,6 +620,9 @@ import Testing
         // A tail that names no file there keeps the whole text.
         let missing = ConfigProblem("...ocky/themes/gone.lua:2: boom", config: sandbox.config)
         #expect(missing.file == nil && missing.line == nil && missing.message == "...ocky/themes/gone.lua:2: boom")
+        // As Customize and the gallery's tile show it: the file's name and the line under the message, when known.
+        #expect(found.described == "Attempt to perform arithmetic on a nil value\nmine.lua, line 2")
+        #expect(missing.described == missing.message)
     }
 
     // MARK: Menus

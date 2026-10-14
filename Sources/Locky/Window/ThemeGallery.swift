@@ -175,7 +175,8 @@ struct ThemeGallery: View {
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 16, alignment: .top)],
                          alignment: .leading, spacing: 20) {
             ForEach(themes) { info in
-                ThemeTile(info: info, inUse: info.id == active, canTrash: model.canTrash(info.id),
+                ThemeTile(info: info, problem: info.error.map { ConfigProblem($0, config: model.store.config) }, inUse: info.id == active,
+                          canTrash: model.canTrash(info.id),
                           use: { use(info.id) }, customize: { model.customize(info.id) },
                           preview: { model.preview(info.id) }, trash: { trash(info.id) })
                     .id(info.id)
@@ -291,6 +292,8 @@ struct ThemeGallery: View {
 /// One theme in the grid: its picture and its name. The ring around the picture marks the theme in use.
 private struct ThemeTile: View {
     let info: Inspection.ThemeInfo
+    /// Why the theme does not load, in the words the header and Lua Config use.
+    let problem: ConfigProblem?
     let inUse: Bool
     let canTrash: Bool
     let use: () -> Void
@@ -317,9 +320,7 @@ private struct ThemeTile: View {
     }
 
     private var button: some View {
-        // The error's first line, for a theme that does not load.
-        let error = info.error.map { LuaError($0).summary }
-        return Button(action: use) {
+        Button(action: use) {
             VStack(alignment: .leading, spacing: 12) {
                 thumbnail
                 Text(info.name)
@@ -331,11 +332,11 @@ private struct ThemeTile: View {
         .buttonStyle(PressHighlightStyle())
         // The grid is the one stop in the key loop, not each of its tiles.
         .focusable(false)
-        .disabled(error != nil)
-        .help(error ?? info.description ?? "")
-        .accessibilityLabel(error == nil ? info.name : "\(info.name), does not load")
+        .disabled(problem != nil)
+        .help(problem?.described ?? info.description ?? "")
+        .accessibilityLabel(problem == nil ? info.name : "\(info.name), does not load")
         // After .help, which would make its text the hint.
-        .accessibilityHint(error ?? "Uses this theme when the Mac locks.")
+        .accessibilityHint(problem?.message ?? "Uses this theme when the Mac locks.")
         .accessibilityCustomContent(AccessibilityCustomContentKey("Description"), info.description.map { Text($0) })
         .accessibilityAddTraits(inUse ? .isSelected : [])
     }

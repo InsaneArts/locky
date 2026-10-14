@@ -29,6 +29,13 @@ struct ConfigProblem: Equatable {
         message = String(summary[match.range.upperBound...]).capitalizedFirst
     }
 
+    /// The message, then the file's name and the line on a line of their own when they are known: as Customize and
+    /// the gallery's tile show a theme that does not load.
+    var described: String {
+        guard let file, let line else { return message }
+        return "\(message)\n\(file.lastPathComponent), line \(line)"
+    }
+
     /// The file in one of `folders` whose whole path ends with `tail`. Lua cuts a chunk name inside a folder's name,
     /// so the tail's first part may be half a name: each shorter tail is tried below each folder.
     private static func file(endingWith tail: String, in folders: [URL]) -> URL? {
