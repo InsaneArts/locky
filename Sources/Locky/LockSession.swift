@@ -666,9 +666,13 @@ final class LockSession: NSObject, NSWindowDelegate {
             }
             if main {
                 // In every mode, so a preview shows what a lock shows.
-                let scrim = ScrimHost(rootView: LegibilityScrim(color: style.color("bg")))
-                scrim.setAccessibilityElement(false)
-                screen.scrim = scrim
+                func scrim() -> ScrimHost {
+                    let view = ScrimHost(rootView: LegibilityScrim(color: style.color("bg")))
+                    view.setAccessibilityElement(false)
+                    return view
+                }
+                screen.scrim = scrim()
+                screen.glanceScrim = theme.auth.reveal == "activity" ? scrim() : nil
                 // A lock with ⌃⌥⌘Q always has the view: the line naming it may join the message.
                 let exit = mode == .lock && emergencyExit
                 screen.message = started.message != nil || exit
@@ -964,13 +968,26 @@ final class LockScreenView: NSView {
     private var incomingBackground: NSView?
     /// The background the screen shows, or is about to: the one a change applies to.
     var latestBackground: NSView? { incomingBackground ?? background }
-    /// The legibility scrim behind the password field, its message, and the glance hint: right above the background,
-    /// so it dims neither the widgets nor the overlay above them.
+    /// The legibility scrim behind the password field and its message: right above the background, so it dims neither
+    /// the widgets nor the overlay above them.
     var scrim: NSView? {
         didSet {
             oldValue?.removeFromSuperview()
             if let scrim {
+                scrim.alphaValue = authVisible ? 1 : 0
                 if let background { addSubview(scrim, positioned: .above, relativeTo: background) } else { addSubview(scrim, positioned: .below, relativeTo: nil) }
+            }
+            needsLayout = true
+        }
+    }
+    /// The scrim around the glance hint and the message, for a field that shows on activity. It trades places with
+    /// `scrim` as the hint does with the field, so while the field hides, no scrim darkens the scene where nothing shows.
+    var glanceScrim: NSView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let glanceScrim {
+                glanceScrim.alphaValue = authVisible ? 0 : 1
+                if let background { addSubview(glanceScrim, positioned: .above, relativeTo: background) } else { addSubview(glanceScrim, positioned: .below, relativeTo: nil) }
             }
             needsLayout = true
         }
@@ -1023,16 +1040,22 @@ final class LockScreenView: NSView {
     func setAuthVisible(_ visible: Bool, dim: Double, animated: Bool) {
         authVisible = visible
         let (field, hint): (CGFloat, CGFloat) = visible ? (1, 0) : (0.011, 1)
+        // The scrims go with what they lie behind.
+        let (fieldScrim, hintScrim): (CGFloat, CGFloat) = visible ? (1, 0) : (0, 1)
         if animated, !visible {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.35
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 auth?.view.animator().alphaValue = field
                 glanceHint?.animator().alphaValue = hint
+                scrim?.animator().alphaValue = fieldScrim
+                glanceScrim?.animator().alphaValue = hintScrim
             }
         } else {
             auth?.view.alphaValue = field
             glanceHint?.alphaValue = hint
+            scrim?.alphaValue = fieldScrim
+            glanceScrim?.alphaValue = hintScrim
         }
         // A brightness change eases, also when the field came at once.
         CATransaction.begin()
@@ -1230,13 +1253,15 @@ final class LockScreenView: NSView {
         if let message {
             message.view.frame = messageFrame(size: message.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale)), scale: scale)
         }
-        if let scrim {
-            // Around the field and its message, with room to fade out. None while the field measures itself.
-            if let field = auth?.view.frame, authSize.width > 0 {
+        // Around the field, or the glance hint, and the message, with room to fade out. None while the field measures
+        // itself.
+        for (view, core) in [(scrim, auth?.view.frame), (glanceScrim, glanceHint?.frame)] {
+            guard let view else { continue }
+            if let core, authSize.width > 0 {
                 let text = message?.view.frame ?? .zero
-                scrim.frame = (text.isEmpty ? field : field.union(text)).insetBy(dx: -48 * scale, dy: -48 * scale).integral
+                view.frame = (text.isEmpty ? core : core.union(text)).insetBy(dx: -48 * scale, dy: -48 * scale).integral
             } else {
-                scrim.frame = .zero
+                view.frame = .zero
             }
         }
         banner?.frame = CGRect(x: 16, y: 16, width: min(bounds.width - 32, 640), height: 200)

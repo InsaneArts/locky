@@ -536,4 +536,35 @@ import Testing
         #expect(!message.isEmpty && scrim.frame == field.union(message).insetBy(dx: -48, dy: -48).integral)
         #expect(scrim.hitTest(CGPoint(x: scrim.frame.midX, y: scrim.frame.midY)) == nil)
     }
+
+    /// While a field that shows on activity hides, the scrim lies around the hint, not around the field nobody sees. A
+    /// key brings the field's scrim back at once, with the field.
+    @Test func whileTheFieldHidesTheScrimLiesAroundTheHint() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { background = { color = '#101010' }, auth = { reveal = 'activity' } }")
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        defer { session.end("test") }
+        let screen = try #require(container.subviews.first as? LockScreenView)
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            screen.layoutSubtreeIfNeeded()
+            if screen.glanceScrim != nil, screen.background != nil, screen.authSize.width > 0 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let scrim = try #require(screen.scrim), glance = try #require(screen.glanceScrim), hint = try #require(screen.glanceHint)
+        let background = try #require(screen.background), field = try #require(screen.auth?.view)
+        #expect(!screen.authVisible)
+        #expect(scrim.alphaValue == 0 && glance.alphaValue == 1)
+        #expect(!hint.frame.isEmpty && glance.frame == hint.frame.insetBy(dx: -48, dy: -48).integral)
+        let order = screen.subviews
+        let index = { (view: NSView) in order.firstIndex(of: view) ?? -1 }
+        #expect(index(glance) > index(background) && index(glance) < index(hint) && index(glance) < index(field))
+        screen.setAuthVisible(true, dim: 0.25, animated: true)
+        #expect(scrim.alphaValue == 1 && glance.alphaValue == 0)
+        #expect(scrim.layer?.animationKeys() == nil && glance.layer?.animationKeys() == nil)
+    }
 }
