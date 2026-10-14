@@ -92,6 +92,17 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     /// The last theme's password field look, so the next lock's field appears in it at once.
     private static var lastLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec)?
+    /// The last theme's palette, kept across launches as lastPrivacy is: the first lock after a relaunch starts in its
+    /// bg, not black.
+    private static var lastPalette: [String: String]? {
+        get { UserDefaults.standard.dictionary(forKey: "lastPalette") as? [String: String] }
+        set { UserDefaults.standard.set(newValue, forKey: "lastPalette") }
+    }
+    /// The shield and the field until the theme arrives: the last theme's look, or after a relaunch its palette with
+    /// the fallback's field.
+    private static var firstLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec) {
+        lastLook ?? (Theme.fallback.auth, lastPalette ?? Theme.fallback.palette, Theme.fallback.font)
+    }
     /// Privacy mode as the last lock had it (init.lua may turn it on), until this lock's Lua says. Kept across
     /// launches, so the first lock after a restart does not show the name while Lua starts.
     private static var lastPrivacy: Bool {
@@ -157,7 +168,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
         openWindows()
         if let first = screens.first {
-            let look = Self.lastLook ?? (Theme.fallback.auth, Theme.fallback.palette, Theme.fallback.font)
+            let look = Self.firstLook
             installAuth(look.auth, style: LockyStyle(palette: look.palette, font: look.font, scale: Layout.scale(for: first.bounds.size)))
         }
         if mode == .lock {
@@ -435,7 +446,8 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     private func openWindows() {
         // From the first frame, the last theme's bg: the scene fades in over it.
-        let backdrop = Self.backdrop(Self.lastLook?.palette ?? Theme.fallback.palette)
+        let palette = Self.firstLook.palette
+        let backdrop = Self.backdrop(palette)
         switch mode {
         case .preview:
             let window = PreviewWindow(contentRect: CGRect(origin: .zero, size: options.previewSize), styleMask: [.titled, .closable, .resizable],
@@ -503,7 +515,8 @@ final class LockSession: NSObject, NSWindowDelegate {
             NSApp.activate()
             NSApp.presentationOptions = Self.kioskOptions
         }
-        windows.forEach { $0.appearance = NSAppearance(named: .darkAqua) }
+        // The field on a light bg draws light glass, as the theme will.
+        windows.forEach { $0.appearance = NSAppearance(named: Design.isLight(palette["bg"]) ? .aqua : .darkAqua) }
     }
 
     /// New windows for the displays there are now, with the theme and each widget's latest view, without
@@ -518,7 +531,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         openWindows()
         old.forEach { $0.orderOut(nil) }
         if let started { buildScreens(started) } else if let first = screens.first {
-            let look = Self.lastLook ?? (Theme.fallback.auth, Theme.fallback.palette, Theme.fallback.font)
+            let look = Self.firstLook
             installAuth(look.auth, style: LockyStyle(palette: look.palette, font: look.font, scale: Layout.scale(for: first.bounds.size)))
         }
         touchID?.restart()
@@ -588,7 +601,10 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         if mode != .embedded {
             Self.lastLook = (theme.auth, theme.palette, theme.font)
-            if options.remembers { Self.lastPrivacy = started.privacy }
+            if options.remembers {
+                Self.lastPrivacy = started.privacy
+                Self.lastPalette = theme.palette
+            }
         }
         buildScreens(started)
         startTouchID()
