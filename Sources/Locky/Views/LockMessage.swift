@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// The lock screen message ("If found, call ..."), in the password field's font and the theme's quiet color. A lock
-/// with ⌃⌥⌘Q adds the way out once someone looks stuck: from the third wrong password, once one password check has
-/// run for 5 seconds, or from the start of a lock that begins in the wait earlier wrong passwords left. It sits under
-/// the password field and stays visible while a theme hides the field.
+/// with ⌃⌥⌘Q adds the way out once someone looks stuck (AuthModel.stuck): from the third wrong password, from a wait,
+/// or once one password check has run for 5 seconds. It sits under the password field and stays visible while a theme
+/// hides the field.
 struct LockMessage: View {
     let text: String?
     let model: AuthModel?
@@ -15,7 +15,7 @@ struct LockMessage: View {
     var body: some View {
         VStack(alignment: auth.hintAlign == "leading" ? .leading : .center, spacing: 4 * style.scale) {
             if let text { Text(text).lineLimit(3) }
-            if exit && ((model?.wrong ?? 0) >= 3 || model?.startedInWait == true || model?.slowCheck == true) {
+            if exit, model?.stuck == true {
                 Text("Press ⌃⌥⌘Q to switch to the macOS lock screen")
             }
         }

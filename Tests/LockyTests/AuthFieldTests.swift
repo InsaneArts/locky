@@ -350,13 +350,27 @@ import Testing
         defer { defaults.removePersistentDomain(forName: name) }
         PasswordAttempts(count: 10, last: Date()).save(defaults)
         let model = AuthModel(defaults: defaults)
-        #expect(model.startedInWait && model.waitLeft > 0 && model.wrong == 0)
+        #expect(model.waited && model.waitLeft > 0 && model.wrong == 0)
         let waiting = try await messageHeight(exit: true, model: model) { _ in }
         #expect(waiting.before > 0)
         // A lock with no wait behind it starts without the line.
         let fresh = AuthModel(defaults: defaults)
         fresh.succeeded()
-        #expect(!AuthModel(defaults: defaults).startedInWait)
+        #expect(!AuthModel(defaults: defaults).waited)
+    }
+
+    /// Twelve wrong passwords, ⌃⌥⌘Q, and the macOS unlock; a lock 6 minutes later starts with no wait, but the count
+    /// carries over, so its first wrong password waits 5 minutes. The way out shows with that wait.
+    @Test func aWaitFromACarriedCountNamesTheWayOut() async throws {
+        let name = "locky-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        PasswordAttempts(count: 12, last: Date().addingTimeInterval(-360)).save(defaults)
+        let model = AuthModel(defaults: defaults)
+        #expect(model.waitLeft == 0 && !model.waited)
+        let carried = try await messageHeight(exit: true, model: model) { model in model.failed() }
+        #expect(model.wrong == 1 && model.waitLeft > 59)
+        #expect(carried.before == 0 && carried.after > 0)
     }
 }
 

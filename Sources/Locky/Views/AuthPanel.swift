@@ -58,9 +58,9 @@ final class AuthModel {
     @ObservationIgnored var onSlowCheck: () -> Void = {}
     /// Whole seconds left in the wait before the next try (0: none). Waits outlast the lock: see PasswordAttempts.
     private(set) var waitLeft = 0
-    /// The lock began in a wait that wrong passwords in an earlier lock left (after ⌃⌥⌘Q, or a relaunch): its field is
-    /// disabled before anyone types, so the lock names the way out from the start.
-    private(set) var startedInWait = false
+    /// A wait has disabled the field in this lock: one after its wrong passwords, or one that a count carried over from an
+    /// earlier lock (after ⌃⌥⌘Q, or a relaunch) starts, at once or at this lock's first wrong password.
+    private(set) var waited = false
     /// The user the field shows; privacy mode can change it while the field stays.
     var user = Auth.User(name: "", login: "user", host: "mac", picture: nil)
     /// Where wrong passwords count across locks and relaunches. nil (the theme editor's preview) counts in memory.
@@ -77,8 +77,11 @@ final class AuthModel {
         // Saved as loaded: a last failure in the future becomes now, so the 15 minutes run from here.
         if let defaults { attempts.save(defaults) }
         wait(until: attempts.nextTry)
-        startedInWait = waitLeft > 0
     }
+
+    /// Someone may be stuck: the third wrong password in this lock, a wait, or one check that runs past `slowAfter`. A
+    /// lock with ⌃⌥⌘Q names it from then on.
+    var stuck: Bool { wrong >= 3 || waited || slowCheck }
 
     /// Starts a password check, unless one runs or the wait after wrong passwords does. Here, so no view can skip
     /// the wait. false: no check may start.
@@ -122,6 +125,7 @@ final class AuthModel {
         waiting?.cancel()
         waitLeft = date.map { Int(max(0, $0.timeIntervalSinceNow).rounded(.up)) } ?? 0
         guard let date, waitLeft > 0 else { return }
+        waited = true
         waiting = Task { [weak self] in
             while !Task.isCancelled {
                 let left = date.timeIntervalSinceNow
