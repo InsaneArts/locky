@@ -521,6 +521,12 @@ struct UpdateSheet: View {
         update.changes.map { $0.hasPrefix("  ") ? String($0.dropFirst(2)) : $0 }.joined(separator: "\n")
     }
 
+    /// With scroll bars always shown, the sideways scroller takes its height from the log: the well grows by it, so a
+    /// short log needs no vertical scroller.
+    private var scrollerHeight: CGFloat {
+        NSScroller.preferredScrollerStyle == .legacy ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Update \(update.name)").font(.headline)
@@ -537,8 +543,10 @@ struct UpdateSheet: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { logHeight = $0 }
             }
             .defaultScrollAnchor(.topLeading)
-            .frame(height: min(max(logHeight, 120), 320))
+            .frame(height: min(max(logHeight, 120), 320) + scrollerHeight)
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous))
+            // The scrollers stay inside the well's corners.
+            .clipShape(RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous))
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
