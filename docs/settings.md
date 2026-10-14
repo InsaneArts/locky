@@ -81,11 +81,11 @@ Locky has three windows: Themes, Settings, and the Welcome. Open the **Themes** 
 Dock, and its menus have Lock Now in the Locky menu.
 
 - **Themes:** the theme a lock uses now, live, with its name; then every theme as a picture, by name. Click a
-  theme to use it, or use the arrow keys; with a theme schedule on, the change goes to the theme the schedule
-  shows now. A theme that failed to load on the last lock shows at the top (and first in the menu bar icon's
-  menu) until its files or init.lua change or you dismiss it; Open goes to the line with the error. Schedule
-  (the clock in the toolbar) changes the theme by time of day or with Light and Dark mode. Right-click a theme
-  you made for Move to Trash.
+  theme to use it, or use the arrow keys. With a theme schedule on, the choice replaces the schedule's day or
+  night theme, or its light or dark mode theme, whichever applies now. A theme that failed to load on the last
+  lock shows at the top (and first in the menu bar icon's menu) until its files or init.lua change or you dismiss
+  it; Open goes to the line with the error. Schedule (the clock in the toolbar) changes the theme by time of day
+  or with Light and Dark mode. Right-click a theme you made for Move to Trash.
 - **Customize:** Customize… (or Return, or a theme's right-click menu) opens the editor on that theme's live lock
   screen. Click a widget or the password field to select it, and drag it to move it. A widget lands pinned to
   the corner, edge, or center of the part of the screen it is in, so it keeps its place on other screens; View ›
