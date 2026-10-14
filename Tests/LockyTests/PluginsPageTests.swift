@@ -98,6 +98,31 @@ import Testing
         #expect(model.upToDate)
     }
 
+    /// A check that reached only some of the listed plugins, as when one is listed but not installed, is not up to date
+    /// either: it never saw that plugin. A local folder is not one a check reaches, so it changes nothing.
+    @Test func aCheckThatMissedAListedPluginIsNotUpToDate() async throws {
+        let sandbox = try Sandbox()
+        let folder = sandbox.root.appending(path: "my-plugin")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // No clone of this one exists: its install failed.
+        let missing = "locky-missing-\(UUID().uuidString.prefix(8).lowercased())"
+        try Settings(["packs": .array([.table(["dir": .string(folder.path)]), .string("someone/\(missing)")])]).save(config: sandbox.config)
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.refresh()
+        #expect(await wait { model.inspection.packs.count == 2 })
+        let old = "3f9c2a1b7d4e5f60718293a4b5c6d7e8f9a0b1c2"
+        let check = PackManager.Report(lines: [], ok: true, updates: [PackUpdate(name: "locky-stars", current: old, latest: old)],
+                                       readLockfile: true)
+        model.finishCheck(check)
+        #expect(!model.upToDate)
+        // Without it, the same check is up to date.
+        model.store.update { $0.packs = [.table(["dir": .string(folder.path)])] }
+        model.refresh()
+        #expect(await wait { model.inspection.packs.count == 1 })
+        #expect(model.upToDate)
+    }
+
     /// A failed check shows the plugins it could not check: after another plugin's commits and diffstat, their lines
     /// would fall below the 8 lines the section shows. A check that failed as a whole, and any other run, show what
     /// they said.

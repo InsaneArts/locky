@@ -83,8 +83,10 @@ final class AppModel {
     /// yet, is not a reason to say the plugins are up to date.
     private(set) var lastCheckFound = false
     /// Whether the footer says Up to date: the last check reached the plugins, and each is at its newest commit, also
-    /// once Update… has installed the last one it found.
-    var upToDate: Bool { lastCheckFound && PluginsPage.upToDate(updates) }
+    /// once Update… has installed the last one it found. A git plugin listed but not installed is one no check reaches.
+    var upToDate: Bool {
+        lastCheckFound && PluginsPage.upToDate(updates) && inspection.packs.allSatisfy { $0.dir != nil || $0.installed }
+    }
     /// Packages with a newer commit upstream than the one pinned.
     var available: [PackUpdate] { updates.filter { $0.error == nil && $0.current != nil && $0.latest != nil && $0.current != $0.latest } }
 
