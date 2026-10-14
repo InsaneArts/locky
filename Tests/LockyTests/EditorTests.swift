@@ -381,6 +381,32 @@ import Testing
         #expect(saved(page).themeEdit("t", "widgets")[0]["offset"] == .array([.int(-100), .int(-100)]))
     }
 
+    /// ⌘. is Escape's twin, which AppKit sends up the responder chain as cancelOperation: during a drag it changes
+    /// nothing either. At rest it still clears the selection, then ends Customize.
+    @Test func commandPeriodDuringADragChangesNothing() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(0), page))
+        let start = CGPoint(x: box.midX, y: box.midY), end = CGPoint(x: start.x - 100, y: start.y - 100)
+        let commandPeriod = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                             windowNumber: page.window.windowNumber, context: nil, characters: ".",
+                                             charactersIgnoringModifiers: ".", isARepeat: false, keyCode: 47)!
+        page.overlay.mouseDown(with: event(.leftMouseDown, at: start, on: page))
+        page.overlay.mouseDragged(with: event(.leftMouseDragged, at: end, on: page))
+        for _ in 0..<2 {
+            page.window.sendEvent(commandPeriod)
+            try await Task.sleep(for: .milliseconds(100))
+            page.window.contentView?.layoutSubtreeIfNeeded()
+        }
+        #expect(page.preview.canvas?.selection == .widget(0))
+        #expect(page.model.editingTheme == "t")
+        page.overlay.mouseUp(with: event(.leftMouseUp, at: end, on: page))
+        #expect(saved(page).themeEdit("t", "widgets")[0]["offset"] == .array([.int(-100), .int(-100)]))
+        page.window.sendEvent(commandPeriod)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        page.window.sendEvent(commandPeriod)
+        #expect(await wait(page.window) { page.model.editingTheme == nil })
+    }
+
     private static func textField(_ value: String, in view: NSView) -> NSTextField? {
         if let field = view as? NSTextField, field.isEditable, field.stringValue == value { return field }
         for child in view.subviews { if let match = textField(value, in: child) { return match } }

@@ -457,6 +457,14 @@ final class CanvasOverlay: NSView {
         }
     }
 
+    /// ⌘., which AppKit sends up the responder chain as cancelOperation, as it sends Escape that no view takes: during
+    /// a drag it does nothing, as Escape does; otherwise it goes on to the page. Not to super: NSResponder has no
+    /// cancelOperation of its own.
+    override func cancelOperation(_ sender: Any?) {
+        guard drag == nil else { return }
+        nextResponder?.tryToPerform(#selector(cancelOperation(_:)), with: sender)
+    }
+
     /// Edit ▸ Delete: the selected widget goes.
     @objc func delete(_ sender: Any?) {
         if case .widget(let index)? = canvas?.selection { canvas?.remove(index) }
