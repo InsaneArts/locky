@@ -386,8 +386,14 @@ struct AuthPanel: View {
                 .frame(width: 1, height: 1)
                 .opacity(0.011)
             // Fixed in place while Touch ID listens, whatever the note says: a glyph taken out during an evaluation
-            // makes macOS show its own prompt.
-            if listening { glyph(.small).offset(y: diameter * 0.34) }
+            // makes macOS show its own prompt. It stands for the status line here, and LAAuthenticationView has no
+            // label of its own.
+            if listening {
+                glyph(.small)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Touch ID or Enter Password")
+                    .offset(y: diameter * 0.34)
+            }
             if let note {
                 // VoiceOver reads it on the field.
                 Text(note)
