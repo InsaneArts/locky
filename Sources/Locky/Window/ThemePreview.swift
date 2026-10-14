@@ -85,6 +85,8 @@ final class ThemePreviewView: NSView {
         didSet {
             overlay.isHidden = canvas == nil
             overlay.needsDisplay = true
+            // When the canvas shows, and when another item is selected (an inspector row selects too), the keys go to it.
+            if canvas != nil, oldValue == nil || oldValue?.selection != canvas?.selection { overlay.takeKeyboardIfFree() }
         }
     }
     /// The shown theme's info, for the placeholder.
@@ -431,6 +433,20 @@ final class CanvasOverlay: NSView {
         }
         guard let drag, let placed = drag.placed else { return }
         canvas?.move(drag.item, placed.anchor, placed.offset)
+    }
+
+    /// Gives the canvas the keyboard while no control has it, so Escape, the arrows, and Delete work without a click
+    /// first. The window itself, or a view around the canvas (the page, after the gallery's grid had the keys), holds it
+    /// for nobody; a text field keeps it. On the next turn of the run loop, once the views that this change adds or
+    /// removes are in place.
+    func takeKeyboardIfFree() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, canvas != nil, !isHiddenOrHasHiddenAncestor, let window else { return }
+            let responder = window.firstResponder
+            if responder == nil || responder === window || (responder as? NSView).map({ isDescendant(of: $0) }) == true {
+                window.makeFirstResponder(self)
+            }
+        }
     }
 
     /// Edit ▸ Delete: the selected widget goes.

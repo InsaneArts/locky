@@ -295,6 +295,57 @@ import Testing
         #expect(page.model.editingTheme == "t")
     }
 
+    /// Escape as a key press sends it: to whatever has the keyboard in the window.
+    private func escape(_ page: Page) {
+        page.window.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: page.window.windowNumber,
+                                               context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
+                                               keyCode: 53)!)
+    }
+
+    /// Esc needs no click first: the canvas has the keyboard as soon as Customize opens.
+    @Test func escapeEndsCustomizeRightAfterItOpens() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.window.firstResponder === page.overlay })
+        escape(page)
+        #expect(page.model.editingTheme == nil)
+    }
+
+    /// After an inspector row selects an item, the keys reach the canvas, here from the page itself, which has the
+    /// keyboard after the gallery's grid had it.
+    @Test func escapeWorksAfterAnInspectorRowSelects() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.window.firstResponder === page.overlay })
+        #expect(page.window.makeFirstResponder(page.window.contentView))
+        page.preview.canvas?.select(.widget(1))
+        #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) && page.window.firstResponder === page.overlay })
+        escape(page)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
+        escape(page)
+        #expect(page.model.editingTheme == nil)
+    }
+
+    /// A text field that goes with its item, as after Remove Widget, leaves the keyboard to the canvas.
+    @Test func theCanvasTakesTheKeyboardFromAFieldThatGoes() async throws {
+        let page = try await open()
+        let box = try #require(frame(of: .widget(1), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("-30", in: page.window.contentView!)
+            return found != nil
+        })
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        for _ in 0..<10 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        page.preview.canvas?.select(nil)
+        #expect(await wait(page.window) { page.preview.canvas?.selection == nil && page.window.firstResponder === page.overlay })
+        escape(page)
+        #expect(page.model.editingTheme == nil)
+    }
+
     private static func textField(_ value: String, in view: NSView) -> NSTextField? {
         if let field = view as? NSTextField, field.isEditable, field.stringValue == value { return field }
         for child in view.subviews { if let match = textField(value, in: child) { return match } }
