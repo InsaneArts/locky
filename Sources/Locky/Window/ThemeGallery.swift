@@ -396,7 +396,8 @@ private struct FailureBanner: View {
             Spacer()
             if let file = place.file, let line = place.line {
                 Button("Open") { openError = model.open(file, line: line) }
-                    // The editors are found once, before the first Open.
+                    // The editors are found once, before the first Open: until then no editor is known, and Open waits.
+                    .disabled(model.editors == nil)
                     .task { await model.findEditors() }
             }
             Button("Dismiss", action: dismiss)
