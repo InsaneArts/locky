@@ -387,9 +387,12 @@ import Testing
         #expect(elements.count == 3 && zip(elements, again).allSatisfy { $0 === $1 })
         #expect(elements.allSatisfy { ($0.accessibilityParent() as? CanvasOverlay) === overlay && $0.accessibilityRole() == .button })
         #expect(elements.map { $0.accessibilityLabel() ?? "" }.sorted() == ["Box", "Box", "Password Field"])
+        // Buttons that work, none of them selected yet.
+        #expect(elements.allSatisfy { $0.isAccessibilityEnabled() && !$0.isAccessibilitySelected() })
         let box = try #require(elements.first { $0.item == .widget(1) })
         #expect(box.accessibilityPerformPress())
         #expect(await wait(page.window) { page.preview.canvas?.selection == .widget(1) })
+        #expect(elements.filter { $0.isAccessibilitySelected() }.map(\.item) == [.widget(1)])
     }
 
     @Test func editDeleteRemovesTheSelectedWidgetOnly() async throws {

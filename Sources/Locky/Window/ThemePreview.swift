@@ -549,6 +549,11 @@ final class CanvasOverlay: NSView {
         canvas?.select(item)
     }
 
+    /// Whether VoiceOver's button for `item` is the selected one.
+    fileprivate func isSelected(_ item: EditorItem) -> Bool {
+        canvas?.selection == item
+    }
+
     /// A rounded line 3 points around an item: a wide dark stroke under a narrow light one, so one of the two reads on
     /// any background.
     private func outline(_ frame: CGRect, dark: (width: CGFloat, alpha: CGFloat), light: (width: CGFloat, color: NSColor)) {
@@ -580,6 +585,15 @@ final class CanvasItemElement: NSAccessibilityElement {
         super.init()
         setAccessibilityParent(parent)
         setAccessibilityRole(.button)
+        // An element starts disabled, and VoiceOver reads a disabled button as dimmed.
+        setAccessibilityEnabled(true)
+    }
+
+    /// The selected item's button reads as selected, as the current Pinned To cell does. AppKit asks on the main thread.
+    override func isAccessibilitySelected() -> Bool {
+        guard let overlay = accessibilityParent() as? CanvasOverlay else { return false }
+        let item = item
+        return MainActor.assumeIsolated { overlay.isSelected(item) }
     }
 
     /// AppKit asks on the main thread.
