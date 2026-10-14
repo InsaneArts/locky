@@ -10,10 +10,18 @@ struct ThemesPage: View {
         if let id = model.editingTheme, let info = model.inspection.theme(id) {
             ThemeEditorPage(model: model, info: info)
         } else if model.editingTheme != nil {
-            // Read before it shows: a theme just duplicated or imported, or the first read of the config.
+            // Read before it shows: a theme just duplicated or imported, or the first read of the config. Customize's
+            // Done is already there, so the toolbar keeps its height when the editor comes.
             ProgressView()
+                .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationTitle("Themes")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Done") { model.finishEditing() }
+                            .buttonStyle(.borderedProminent)
+                    }
+                }
         } else {
             ThemeGallery(model: model)
                 .navigationTitle("Themes")

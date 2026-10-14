@@ -98,7 +98,7 @@ struct ThemeEditorPage: View {
                         if let current {
                             ThemeInspector(model: model, editing: current, selection: $selection, draft: $draft)
                         } else {
-                            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                            ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                     }
                     .inspectorColumnWidth(min: 280, ideal: 300, max: 400)
@@ -271,7 +271,7 @@ struct ThemeInspector: View {
             if let layoutError = editing.layoutError {
                 ContentUnavailableView("Can't Edit This Theme", systemImage: "exclamationmark.triangle", description: Text(layoutError))
             } else if editing.layout == nil {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 switch selection {
                 case .widget(let index) where editing.placements.indices.contains(index):
