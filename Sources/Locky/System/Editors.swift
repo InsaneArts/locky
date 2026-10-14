@@ -13,6 +13,12 @@ struct Editor: Identifiable, Hashable, Sendable {
     var name: String
     var kind: Kind
 
+    /// The name a button shows: the app's own for "Default (Neovide)", so the button reads "Open in Neovide".
+    var shortName: String {
+        guard id == "default", case .app(_, let url) = kind else { return name }
+        return url.deletingPathExtension().lastPathComponent
+    }
+
     /// The app's icon; nil for a command.
     var icon: NSImage? {
         guard case .app(_, let url) = kind else { return nil }

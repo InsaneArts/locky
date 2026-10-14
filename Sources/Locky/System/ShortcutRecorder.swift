@@ -11,6 +11,8 @@ struct ShortcutRecorder<Label: View>: View {
     private let onRecordingChange: (Bool) -> Void
     private let label: Label
     @State private var recording = false
+    /// A key that cannot be a shortcut came while recording: the rule shows under the label until recording stops.
+    @State private var rejected = false
     @State private var monitor: Any?
     /// A click away from the button ends recording; a click on it is the button's own.
     @State private var hovering = false
@@ -24,7 +26,7 @@ struct ShortcutRecorder<Label: View>: View {
 
     var body: some View {
         LabeledContent {
-            let button = Button(recording ? "Type a shortcut…" : shortcut?.display ?? "Record Shortcut") {
+            let button = Button(recording ? "Press Shortcut…" : shortcut?.display ?? "Record Shortcut") {
                 recording ? stop() : start()
             }
             // One container for both looks, so the pointer stays tracked when the button changes.
@@ -32,8 +34,14 @@ struct ShortcutRecorder<Label: View>: View {
                 if recording { button.buttonStyle(.borderedProminent) } else { button }
             }
             .onHover { hovering = $0 }
+            .help("Click, then press the shortcut. Delete removes it. Esc cancels.")
         } label: {
             label
+            if rejected {
+                // A key press never animates: the rule comes on the beep's frame.
+                Text("Use ⌘ or ⌃ with a key, or an F-key.")
+                    .transaction { $0.animation = nil }
+            }
         }
         // In another window or app, the recording would wait for a key that never comes, with the shortcut paused.
         .onChange(of: appearsActive) { if !appearsActive { stop() } }
@@ -52,7 +60,9 @@ struct ShortcutRecorder<Label: View>: View {
             case .cancel: stop()
             case .clear: shortcut = nil; stop()
             case .record(let recorded): shortcut = recorded; stop()
-            case .reject: NSSound.beep()
+            case .reject:
+                NSSound.beep()
+                rejected = true
             }
             // Every key stays here while recording, so ⌘W or ⌘Q records instead of closing or quitting.
             return nil
@@ -62,6 +72,7 @@ struct ShortcutRecorder<Label: View>: View {
     private func stop() {
         guard recording else { return }
         recording = false
+        rejected = false
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         onRecordingChange(false)

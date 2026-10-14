@@ -1,68 +1,55 @@
 import AppKit
 import SwiftUI
 
-/// Photos the camera took after too many wrong passwords, newest first. Shown only when there are some.
+/// The intruder photos as a strip, newest first: each opens in Preview, and its menu shows it in Finder or deletes it.
+/// The page loads them and deletes them.
 struct IntruderPhotos: View {
-    let revision: Int
-    @State private var photos: [(url: URL, date: Date)] = []
-    @State private var confirmingDelete = false
+    let photos: [(url: URL, date: Date)]
+    let delete: (URL) -> Void
+
+    private let shape = RoundedRectangle(cornerRadius: Design.Radius.thumbnail, style: .continuous)
 
     var body: some View {
-        if !photos.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Label(photos.count == 1 ? "Someone typed wrong passwords" : "Someone typed wrong passwords \(photos.count) times",
-                          systemImage: "person.crop.circle.badge.exclamationmark")
-                        .font(.headline)
-                        .foregroundStyle(.orange)
-                    Spacer()
-                    Button("Delete All", role: .destructive) { confirmingDelete = true }
-                }
-                ScrollView(.horizontal) {
-                    HStack(spacing: 12) {
-                        ForEach(photos, id: \.url) { photo in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Button { NSWorkspace.shared.open(photo.url) } label: {
-                                    AsyncThumbnail(url: photo.url)
-                                        .frame(width: 160, height: 120)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                                .help("Open in Preview")
-                                HStack {
-                                    Text(photo.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
-                                    Spacer()
-                                    Button { delete(photo.url) } label: { Image(systemName: "trash") }
-                                        .buttonStyle(.borderless)
-                                        .help("Delete this photo")
-                                }
-                                .frame(width: 160)
-                            }
+        ScrollView(.horizontal) {
+            HStack(spacing: 12) {
+                ForEach(photos, id: \.url) { photo in
+                    let date = photo.date.formatted(date: .abbreviated, time: .shortened)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Button { open(photo.url) } label: {
+                            // The hairline keeps a bright photo's edge on the light card (1.2:1 without it).
+                            AsyncThumbnail(url: photo.url)
+                                .frame(width: 120, height: 90)
+                                .clipShape(shape)
+                                .pressOverlay(light: false, in: shape)
+                                .hairline(cornerRadius: Design.Radius.thumbnail)
                         }
+                        .buttonStyle(PressHighlightStyle())
+                        .help("Open in Preview")
+                        .accessibilityLabel("Photo, \(date)")
+                        Text(date)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
-                }
-                .scrollIndicators(.never)
-            }
-            .padding(16)
-            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .confirmationDialog("Delete every photo?", isPresented: $confirmingDelete) {
-                Button("Delete All", role: .destructive) {
-                    try? IntruderLog().deleteAll()
-                    load()
+                    .contextMenu {
+                        Button("Open in Preview") { open(photo.url) }
+                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([photo.url]) }
+                        Divider()
+                        Button("Delete") { delete(photo.url) }
+                    }
                 }
             }
         }
-        Color.clear.frame(height: 0)
-            .task(id: revision) { load() }
+        .scrollIndicators(.never)
     }
 
-    private func load() {
-        photos = IntruderLog().photos()
-    }
-
-    private func delete(_ url: URL) {
-        try? IntruderLog().delete(url)
-        load()
+    /// Opens the photo in Preview, as the tooltip says, whichever app this Mac opens JPEGs with.
+    private func open(_ photo: URL) {
+        guard let preview = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview") else {
+            NSWorkspace.shared.open(photo)
+            return
+        }
+        NSWorkspace.shared.open([photo], withApplicationAt: preview, configuration: NSWorkspace.OpenConfiguration())
     }
 }
 
