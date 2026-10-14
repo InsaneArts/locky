@@ -55,7 +55,7 @@ locky.widget.define("uptime", {
   card = true,                         -- sit on the theme's card unless the theme says otherwise
   families = { "inline", "small" },    -- optional: Apple's sizes it draws; render reads self.family (nil: its own size)
   opts = { label = "Up" },             -- defaults; the theme's and the user's options merge in
-  choices = { label = { "Up", "On" } }, -- optional: the values an option takes, for the window's editor
+  choices = { label = { "Up", "On" } }, -- optional: the values an option takes, for Customize
   init = function(self)
     self:every(60, function(self)      -- runs now, then every minute; stops when the lock opens
       self:set({ seconds = locky.sys.uptime() })

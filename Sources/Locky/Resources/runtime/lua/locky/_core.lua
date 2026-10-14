@@ -1132,7 +1132,7 @@ local function settings_background(where, background)
   return result
 end
 
--- What the window changed in `theme`: its background, its widget list, and where its password field sits. A
+-- What Customize changed in `theme`: its background, its widget list, and where its password field sits. A
 -- widget entry with `ref` is the theme's own placement number `ref` (keeping its options) with the entry's
 -- fields on top; an entry without `ref` adds a widget. Returns nil for no change; raises on a bad entry, so
 -- nothing half-applies.
@@ -1440,7 +1440,7 @@ local function add_packs(specs, from, level)
       end
     end
     if duplicate and duplicate.from == "settings" and from ~= "settings" then
-      -- The window added it before init.lua ran; settings.json wins, as it does everywhere.
+      -- Settings › Plugins added it before init.lua ran; settings.json wins, as it does everywhere.
       duplicate.in_config = true
     elseif duplicate then
       error(("two packages are named %q; give one a name = ..."):format(normalized.name), level)
@@ -1617,7 +1617,7 @@ return {
     local instance = raw_setmetatable({
       id = last_instance,
       name = definition.name,
-      -- The user has the last word, and the window's layer wins, as everywhere.
+      -- The user has the last word, and settings.json's layer wins, as everywhere.
       opts = widget_opts(definition.name, placement),
       -- Apple's family the placement asks for, or nil: the widget's own size.
       family = placement.family,
@@ -1694,7 +1694,7 @@ return {
     return list
   end,
 
-  -- The theme as init.lua and plugins leave it, before the window's changes: what Reset goes back to. Each
+  -- The theme as init.lua and plugins leave it, before Customize's changes: what Reset goes back to. Each
   -- placement's options are the ones it gets before settings.json's.
   theme_layout = function(name)
     local theme = normalize_theme(name, read_theme(name), false)
