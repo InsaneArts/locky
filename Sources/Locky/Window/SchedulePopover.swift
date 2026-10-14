@@ -19,8 +19,8 @@ struct SchedulePopover: View {
             if let schedule {
                 switch schedule.mode {
                 case .time:
-                    slot("Day theme", theme: \.day, starts: \.dayStarts)
-                    slot("Night theme", theme: \.night, starts: \.nightStarts)
+                    slot("Day theme", theme: \.day, starts: \.dayStarts, startsTitle: "Day starts")
+                    slot("Night theme", theme: \.night, starts: \.nightStarts, startsTitle: "Night starts")
                 case .appearance:
                     themePicker("Light mode theme", \.light)
                     themePicker("Dark mode theme", \.dark)
@@ -60,12 +60,14 @@ struct SchedulePopover: View {
         }
     }
 
-    private func slot(_ title: String, theme: WritableKeyPath<ThemeSchedule, String?>, starts: WritableKeyPath<ThemeSchedule, Int>) -> some View {
+    /// A row of a theme and its start. The hidden labels name the row, so VoiceOver tells the day's controls from the night's.
+    private func slot(_ title: String, theme: WritableKeyPath<ThemeSchedule, String?>, starts: WritableKeyPath<ThemeSchedule, Int>,
+                      startsTitle: String) -> some View {
         LabeledContent(title) {
             HStack {
-                themeMenu(theme)
+                themeMenu(title, theme)
                 Text("from").foregroundStyle(.secondary)
-                DatePicker("Starts", selection: Binding(get: {
+                DatePicker(startsTitle, selection: Binding(get: {
                     let minutes = schedule?[keyPath: starts] ?? 0
                     return Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()) ?? Date()
                 }, set: { date in
@@ -78,15 +80,15 @@ struct SchedulePopover: View {
     }
 
     private func themePicker(_ title: String, _ theme: WritableKeyPath<ThemeSchedule, String?>) -> some View {
-        LabeledContent(title) { themeMenu(theme) }
+        LabeledContent(title) { themeMenu(title, theme) }
     }
 
     /// The usual theme, then every theme that loads by name. A slot that names one that does not load still shows it.
     /// One width for every slot, so the times line up whichever themes the slots name: it fits "The usual theme" and
     /// every built-in name; a longer one shortens in the button and shows whole in the menu.
-    private func themeMenu(_ theme: WritableKeyPath<ThemeSchedule, String?>) -> some View {
+    private func themeMenu(_ title: String, _ theme: WritableKeyPath<ThemeSchedule, String?>) -> some View {
         let chosen = schedule?[keyPath: theme]
-        return Picker("Theme", selection: Binding(get: { chosen }, set: { value in update { $0[keyPath: theme] = value } })) {
+        return Picker(title, selection: Binding(get: { chosen }, set: { value in update { $0[keyPath: theme] = value } })) {
             Text("The usual theme").tag(String?.none)
             ForEach(model.inspection.themesByName.filter { $0.error == nil || $0.id == chosen }) { Text($0.name).tag(String?.some($0.id)) }
         }
