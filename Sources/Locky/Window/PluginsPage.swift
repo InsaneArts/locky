@@ -517,14 +517,16 @@ struct UpdateSheet: View {
             Text("\(update.current?.prefix(7) ?? "") → \(update.latest?.prefix(7) ?? "")")
                 .font(.subheadline.monospaced())
                 .foregroundStyle(.secondary)
-            ScrollView {
+            // Unwrapped, as git prints it for 80 columns: a long line scrolls sideways, so the diffstat keeps its columns.
+            ScrollView([.vertical, .horizontal]) {
                 Text(log)
                     .font(.callout.monospaced())
                     .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize()
                     .padding(12)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { logHeight = $0 }
             }
+            .defaultScrollAnchor(.topLeading)
             .frame(height: min(max(logHeight, 120), 320))
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: Design.Radius.tile, style: .continuous))
             HStack {
