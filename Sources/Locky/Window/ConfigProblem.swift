@@ -7,8 +7,10 @@ struct ConfigProblem: Equatable {
     var file: URL?
     var line: Int?
 
-    /// Reads `LuaError(problem).summary`, then finds its file: an absolute or "~" path that exists, or Lua's shortened
-    /// "...…/init.lua", which means `config`'s init.lua. With a file, the "file:line: " prefix leaves the message.
+    /// Reads `LuaError(problem).summary`, then finds its file: an absolute or "~" path that exists, or a path Lua
+    /// shortened from the front: "...…/init.lua" means `config`'s init.lua, and any other the file in `config` or the
+    /// plugins' folder whose path ends so, such as a theme in themes/. With a file, the "file:line: " prefix leaves the
+    /// message.
     init(_ problem: String, config: URL) {
         let summary = LuaError(problem).summary
         message = summary.capitalizedFirst
@@ -18,10 +20,26 @@ struct ConfigProblem: Equatable {
             file = URL(fileURLWithPath: path)
         } else if path.hasPrefix("..."), path.hasSuffix("/init.lua") {
             file = config.appending(path: "init.lua")
+        } else if path.hasPrefix("..."), let found = Self.file(endingWith: String(path.dropFirst(3)), in: [config, RuntimePath.defaultPacks]) {
+            file = found
         } else {
             return
         }
         self.line = line
         message = String(summary[match.range.upperBound...]).capitalizedFirst
+    }
+
+    /// The file in one of `folders` whose whole path ends with `tail`. Lua cuts a chunk name inside a folder's name,
+    /// so the tail's first part may be half a name: each shorter tail is tried below each folder.
+    private static func file(endingWith tail: String, in folders: [URL]) -> URL? {
+        let parts = tail.split(separator: "/")
+        for start in parts.indices {
+            let relative = parts[start...].joined(separator: "/")
+            for folder in folders {
+                let candidate = folder.appending(path: relative)
+                if candidate.path.hasSuffix(tail), FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+            }
+        }
+        return nil
     }
 }

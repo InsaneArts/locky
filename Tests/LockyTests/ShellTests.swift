@@ -580,6 +580,19 @@ import Testing
         #expect(found.line == line)
     }
 
+    /// Lua shortens a long chunk name from the front, inside a folder's name: the file is the one in the config folder
+    /// whose path ends so, such as a theme of the person's own.
+    @Test func aShortenedPathFindsItsFile() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/mine.lua", "")
+        let full = sandbox.config.appending(path: "themes/mine.lua").path
+        let found = ConfigProblem("..." + full.suffix(40) + ":2: attempt to perform arithmetic on a nil value", config: sandbox.config)
+        #expect(found.file?.path == full && found.line == 2 && found.message == "Attempt to perform arithmetic on a nil value")
+        // A tail that names no file there keeps the whole text.
+        let missing = ConfigProblem("...ocky/themes/gone.lua:2: boom", config: sandbox.config)
+        #expect(missing.file == nil && missing.line == nil && missing.message == "...ocky/themes/gone.lua:2: boom")
+    }
+
     // MARK: Menus
 
     @Test func aShortcutIsAMenuKeyEquivalent() {
