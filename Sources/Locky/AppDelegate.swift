@@ -317,10 +317,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         // included: taking the main menu away is what puts Services out of reach.
         if mode == .lock {
             // A menu that is open as the lock starts closes first: it would take the keys typed at the lock, and Return would
-            // choose its highlighted item behind the lock.
-            NSApp.mainMenu?.cancelTracking()
-            statusItem?.menu?.cancelTracking()
-            trackedMenu?.cancelTracking()
+            // choose its highlighted item behind the lock. No fade: a closing menu holds the keys back until it is gone.
+            NSApp.mainMenu?.cancelTrackingWithoutAnimation()
+            statusItem?.menu?.cancelTrackingWithoutAnimation()
+            trackedMenu?.cancelTrackingWithoutAnimation()
             NSApp.mainMenu = nil
             NSApp.servicesMenu = nil
         }
