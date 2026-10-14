@@ -42,6 +42,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         if !opened {
             opened = true
             window.center()
+            window.setFrame(SettingsTabViewController.fitted(window.frame, in: (window.screen ?? NSScreen.main)?.visibleFrame), display: false)
         }
         if behind {
             window.orderBack(nil)
@@ -85,6 +86,16 @@ final class SettingsTabViewController: NSTabViewController {
         }
     }
 
+    /// `frame` moved up until its bottom edge is on the screen, and on a screen shorter than it, the screen's height:
+    /// AppKit keeps only the top edge of a window that is not resizable on screen. The pane then scrolls.
+    static func fitted(_ frame: CGRect, in visible: CGRect?) -> CGRect {
+        guard let visible else { return frame }
+        var fitted = frame
+        fitted.size.height = min(frame.height, visible.height)
+        fitted.origin.y = min(max(frame.maxY - fitted.height, visible.minY), visible.maxY - fitted.height)
+        return fitted
+    }
+
     func select(_ pane: AppModel.Section) {
         if let index = tabViewItems.firstIndex(where: { $0.identifier as? String == pane.rawValue }) { selectedTabViewItemIndex = index }
     }
@@ -102,8 +113,8 @@ final class SettingsTabViewController: NSTabViewController {
         addTabViewItem(item)
     }
 
-    /// The window takes the pane's title and size, with its top edge where it was; the resize is at once with Reduce
-    /// Motion. The first selection, while the window is put together, changes nothing.
+    /// The window takes the pane's title and size, with its top edge where it was while it then fits on the screen;
+    /// the resize is at once with Reduce Motion. The first selection, while the window is put together, changes nothing.
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)
         guard let window = view.window, let pane = (tabViewItem?.identifier as? String).flatMap(AppModel.Section.init(rawValue:)) else { return }
@@ -111,6 +122,7 @@ final class SettingsTabViewController: NSTabViewController {
         let old = window.frame
         var frame = window.frameRect(forContentRect: CGRect(origin: .zero, size: Self.size(of: pane)))
         frame.origin = CGPoint(x: old.minX, y: old.maxY - frame.height)
+        frame = Self.fitted(frame, in: (window.screen ?? NSScreen.main)?.visibleFrame)
         window.setFrame(frame, display: true, animate: window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         if !AppDelegate.isTool { UserDefaults.standard.set(pane.rawValue, forKey: Self.paneKey) }
         window.makeFirstResponder(nil)

@@ -67,6 +67,35 @@ import Testing
         #expect(welcome.frame.width > 0 && abs(welcome.frame.midX - screen.visibleFrame.midX) < 1)
     }
 
+    /// A pane change keeps the window's top edge only while the window then fits: else it moves up, and on a screen
+    /// shorter than the pane it takes the screen's height, so the pane scrolls.
+    @Test func aPaneChangeKeepsTheWindowOnScreen() throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        let controller = SettingsWindowController(model: model, onClose: {})
+        let settings = try #require(controller.window)
+        let visible = try #require((settings.screen ?? NSScreen.main)?.visibleFrame)
+        controller.show(.config, behind: true)
+        defer { settings.close() }
+        // Lua Config low on the screen: General's height no longer fits under its top edge.
+        settings.setFrameTopLeftPoint(CGPoint(x: visible.minX + 40, y: visible.minY + 500))
+        let items = try #require(settings.toolbar?.items)
+        let general = try #require(items.first)
+        NSApp.sendAction(try #require(general.action), to: general.target, from: general)
+        #expect(settings.title == "General")
+        #expect(settings.frame.minY >= visible.minY && settings.frame.maxY <= visible.maxY, "\(settings.frame) in \(visible)")
+
+        let short = CGRect(x: 0, y: 40, width: 1440, height: 600)
+        let tall = CGRect(x: 100, y: 0, width: 640, height: 833)
+        #expect(SettingsTabViewController.fitted(tall, in: short) == CGRect(x: 100, y: 40, width: 640, height: 600))
+        let low = CGRect(x: 100, y: 10, width: 640, height: 400)
+        #expect(SettingsTabViewController.fitted(low, in: short) == CGRect(x: 100, y: 40, width: 640, height: 400))
+        let fits = CGRect(x: 100, y: 100, width: 640, height: 400)
+        #expect(SettingsTabViewController.fitted(fits, in: short) == fits)
+    }
+
     /// The Message field saves when focus leaves it, and closing the window is one way focus leaves.
     @Test func theMessageSavesWhenTheSettingsWindowCloses() async throws {
         let sandbox = try Sandbox()
