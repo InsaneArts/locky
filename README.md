@@ -15,9 +15,8 @@ open Locky.app                    # the lock icon appears in the menu bar
 swift test                        # the test suite
 ```
 
-The first launch opens Locky's window on a short Welcome: pick a theme, try it, and choose when Locky locks by
-itself. The menu bar icon has Lock Now, the theme picker, Preview Theme, Settings…, which opens Locky's window at
-its Settings page, and Welcome….
+The first launch opens a one-screen Welcome: see your lock screen, try a lock, and turn on auto-lock and Open at
+login. The menu bar icon has Lock Now, Themes…, and Settings….
 
 ## Themes
 
@@ -58,21 +57,24 @@ are live wallpapers, after the most popular scenes on Wallpaper Engine's Steam W
 | Lookout | `lookout` | Firewatch-style ridges and a fire lookout, lit by the real time of day. |
 | Snowfall | `snowfall` | Snow falling on a pine forest at night, a cabin with warm windows. |
 
-Pick one in the menu's Theme submenu, or in `init.lua` with `locky.setup({ theme = "station" })`.
-`Scripts/snapshot.sh <id> out.png [1728x1117]` renders any theme to a PNG.
+Pick one in the Themes window (the menu bar icon's Themes…), or in `init.lua` with
+`locky.setup({ theme = "station" })`. `Scripts/snapshot.sh <id> out.png [1728x1117]` renders any theme to a PNG.
 
-## The window
+## The windows
 
-Settings… (⌘,) in the menu opens Locky's window: a live dashboard, a theme editor (drag widgets on the live
-preview, with a grid to snap to; change a widget's options, the background, and where the password field sits),
-every widget drawn live with Install Plugin…, plugins (install, update, remove), the config with Open in your
-editor, and settings such as the Lock Now shortcut, auto-lock, Open at Login, a lock screen message, privacy mode,
-a theme schedule, the battery saver, and a photo after wrong passwords. It saves to
-`~/.config/locky/settings.json`, which wins over init.lua key by key: see [settings.md](docs/settings.md).
+Themes… in the menu bar icon's menu opens the **Themes** window: the theme in use, live, and every theme as a
+picture. Click one to use it, or use the arrow keys. Customize… edits it on its live lock screen (drag widgets, add
+them from a live gallery, change their options, the background, and where the password field sits). Schedule (the
+clock in the toolbar) changes the theme by time of day or with Light and Dark mode, and Move to Trash removes a
+theme you made. Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, auto-lock, Open
+at login, a lock screen message, Hide personal information, Turn the display off, Touch ID, and a photo after wrong
+passwords. Plugins installs, updates, and removes plugins. Lua Config opens init.lua and shows its problems.
+Everything but Open at login saves to `~/.config/locky/settings.json`, which wins over init.lua key by key: see
+[settings.md](docs/settings.md).
 
 ## Configure
 
-`~/.config/locky/init.lua` (the window's Lua Config page creates it with examples):
+`~/.config/locky/init.lua` (Settings › Lua Config creates it with examples):
 
 ```lua
 locky.setup({ theme = "default", palette = { accent = "#ff79c6" } })
@@ -89,7 +91,7 @@ locky pack list|sync|update|clean plugins from git, pinned by locky-pack-lock.js
 locky pack check                  which plugins have updates; installs none
 locky login [on|off]              open Locky at login, or not
 locky preview --theme NAME        the lock screen in a window
-locky window [SECTION]            the Locky window, at a page
+locky window [SECTION]            the Themes window, a Settings pane, or the Welcome
 ```
 
 ## Docs
@@ -99,7 +101,7 @@ locky window [SECTION]            the Locky window, at a page
 - [widgets.md](docs/widgets.md): the core widgets and their options
 - [themes.md](docs/themes.md): themes, backgrounds, and shaders
 - [api.md](docs/api.md): the `locky` API
-- [settings.md](docs/settings.md): settings.json, which the window writes, and how it layers over init.lua
+- [settings.md](docs/settings.md): settings.json, which the windows write, and how it layers over init.lua
 - [security.md](docs/security.md): what the lock guarantees, what it does not, and how to report a vulnerability
 
 ## Layout
@@ -108,7 +110,8 @@ locky window [SECTION]            the Locky window, at a page
 Sources/CLua/                 Lua 5.5.1 (unmodified) and locky_bridge.c: time budgets, memory limit, safe calls
 Sources/Locky/Lua/            the runtime: LuaVM, LuaRuntime, the runtime path, system information
 Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the password field
-Sources/Locky/Window/         the Locky window: dashboard, theme editor, plugins, config, settings
+Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window (General, Plugins,
+                              Lua Config), the Welcome
 Sources/Locky/Settings/       settings.json, its store, and the theme schedule
 Sources/Locky/System/         the shortcut, auto-lock, login item, power, camera, editors, and the guard's Locky side
 Sources/GuardCore/            the guard's watch and the macOS lock screen call, shared by Locky and locky-guard
@@ -116,7 +119,7 @@ Sources/LockyGuard/           locky-guard, which locks the Mac if Locky dies or 
 Sources/Locky/Resources/
   runtime/                    lua/locky (core, ui), plugin/ (core widgets), themes/, shaders/, types/
   packages/                   the built-in theme packages, one folder each
-Scripts/                      packaging, snapshot.sh (a theme to PNG), window-shot.sh (a window page to PNG),
+Scripts/                      packaging, snapshot.sh (a theme to PNG), window-shot.sh (a window to PNG),
                               thumbnails.sh (the theme thumbnails), make_icon.swift (the app icon)
 Tests/LockyTests/             the test suite
 ```
