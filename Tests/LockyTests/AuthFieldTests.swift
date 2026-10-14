@@ -75,6 +75,27 @@ import Testing
                                 b: color.blueComponent * a + backdrop.b * (1 - a))
         #expect(Contrast.ratio(text, backdrop) >= 4.5)
     }
+
+    /// The glass and the scrim leave text on something lighter than the palette: the quiet color keeps 4.5:1 with 12%
+    /// of fg over the palette's backdrop. Tokyo Night's muted color needs the lift on its pill and on the screen; a
+    /// short fg ("#ccc") lifts it the same way.
+    @Test(arguments: [("#c0caf5", nil), ("#c0caf5", "surface"), ("#ccc", nil)] as [(String, String?)])
+    func theQuietColorKeepsAMarginOverThePalette(fg: String, surface: String?) throws {
+        let palette = ["bg": "#1a1b26", "fg": fg, "muted": "#565f89", "surface": "#24283bcc"]
+        let style = LockyStyle(palette: palette)
+        let color = try #require(NSColor(style.quiet(on: surface)).usingColorSpace(.sRGB))
+        let fgColor = try #require(NSColor(hex: fg))
+        let margin = String(format: "#%02x%02x%02x1f", Int((fgColor.redComponent * 255).rounded()),
+                            Int((fgColor.greenComponent * 255).rounded()), Int((fgColor.blueComponent * 255).rounded()))
+        var layers = ["#1a1b26"]
+        if let surface { layers.append(try #require(palette[surface])) }
+        layers.append(margin)
+        let backdrop = layers.reduce(Contrast.RGB(r: 0, g: 0, b: 0)) { Contrast.over($1, $0)! }
+        let a = color.alphaComponent
+        let text = Contrast.RGB(r: color.redComponent * a + backdrop.r * (1 - a), g: color.greenComponent * a + backdrop.g * (1 - a),
+                                b: color.blueComponent * a + backdrop.b * (1 - a))
+        #expect(Contrast.ratio(text, backdrop) >= 4.5)
+    }
 }
 
 /// The model, not the view, decides when a check may start.

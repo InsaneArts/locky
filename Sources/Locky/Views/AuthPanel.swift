@@ -632,11 +632,17 @@ enum Contrast {
 extension LockyStyle {
     /// The palette's muted color, lifted toward fg where it would not reach 4.5:1 on `surface` (a palette role or a
     /// color) over the screen's bg, or on bg alone when nil: the field's placeholder, the status line, the glance
-    /// hint, and the message.
+    /// hint, and the message. The backdrop it must read on has 12% of fg over it, a margin: the pill's glass renders
+    /// lighter than the palette's surface, and the scrim leaves part of the scene. Lifted to 4.5:1 on the palette
+    /// alone, Tokyo Night's placeholder read 3.7:1 on its glass.
     func quiet(on surface: String?) -> Color {
         guard let muted = palette["muted"], let fg = palette["fg"], let bg = palette["bg"] else { return color("muted") }
         var layers = [bg]
         if let surface, let hex = palette[surface] ?? (surface.hasPrefix("#") ? surface : nil) { layers.append(hex) }
+        if let margin = NSColor(hex: fg) {
+            layers.append(String(format: "#%02x%02x%02x1f", Int((margin.redComponent * 255).rounded()),
+                                 Int((margin.greenComponent * 255).rounded()), Int((margin.blueComponent * 255).rounded())))
+        }
         return Contrast.readable(muted, fg: fg, on: layers).flatMap { Color(hex: $0) } ?? color("muted")
     }
 }
