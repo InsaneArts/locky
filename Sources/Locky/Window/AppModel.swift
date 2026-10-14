@@ -79,6 +79,12 @@ final class AppModel {
     /// time, so nothing says when it ran or that the plugins are up to date.
     private(set) var updates: [PackUpdate] = []
     private(set) var lastUpdateCheck: Date?
+    /// Whether the last check reached a plugin. One that reached none, as with a git plugin listed but not installed
+    /// yet, is not a reason to say the plugins are up to date.
+    private(set) var lastCheckFound = false
+    /// Whether the footer says Up to date: the last check reached the plugins, and each is at its newest commit, also
+    /// once Update… has installed the last one it found.
+    var upToDate: Bool { lastCheckFound && PluginsPage.upToDate(updates) }
     /// Packages with a newer commit upstream than the one pinned.
     var available: [PackUpdate] { updates.filter { $0.error == nil && $0.current != nil && $0.latest != nil && $0.current != $0.latest } }
 
@@ -309,10 +315,14 @@ final class AppModel {
 
     /// Fetches every plugin the lockfile pins and compares it with the pinned commit; changes nothing and runs no Lua.
     func checkForUpdates() {
-        runPack(.check, then: { [weak self] report in
-            self?.updates = report.updates
-            self?.lastUpdateCheck = report.readLockfile ? Date() : nil
-        })
+        runPack(.check, then: { [weak self] in self?.finishCheck($0) })
+    }
+
+    /// Keeps what a check found, and when it ran if it reached the lockfile.
+    func finishCheck(_ report: PackManager.Report) {
+        updates = report.updates
+        lastUpdateCheck = report.readLockfile ? Date() : nil
+        lastCheckFound = !report.updates.isEmpty
     }
 
     func findEditors() async {

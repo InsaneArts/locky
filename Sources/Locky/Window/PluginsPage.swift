@@ -142,7 +142,7 @@ struct PluginsPage: View {
                     .controlSize(.small)
                 Text("Checking for updates…")
             } else if let checked = model.lastUpdateCheck {
-                let upToDate = Self.upToDate(model.updates)
+                let upToDate = model.upToDate
                 TimelineView(.everyMinute) { _ in
                     Text(upToDate ? "Up to date · checked \(Self.ago(checked))" : "Checked \(Self.ago(checked))")
                 }

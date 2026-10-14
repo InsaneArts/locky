@@ -84,6 +84,20 @@ import Testing
         #expect(PluginsPage.upToDate(AppModel.remaining([current, waiting], after: ["locky-transit"])))
     }
 
+    /// A check that reached no plugin, as with a git plugin listed but not installed yet, says when it ran, not that the
+    /// plugins are up to date.
+    @Test func aCheckThatReachedNoPluginIsNotUpToDate() throws {
+        let sandbox = try Sandbox()
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.finishCheck(PackManager.Report(lines: ["No plugins to check."], ok: true, readLockfile: true))
+        #expect(model.lastUpdateCheck != nil)
+        #expect(!model.upToDate)
+        let old = "3f9c2a1b7d4e5f60718293a4b5c6d7e8f9a0b1c2"
+        model.finishCheck(PackManager.Report(lines: [], ok: true, updates: [PackUpdate(name: "locky-stars", current: old, latest: old)],
+                                             readLockfile: true))
+        #expect(model.upToDate)
+    }
+
     /// A failed check shows the plugins it could not check: after another plugin's commits and diffstat, their lines
     /// would fall below the 8 lines the section shows. A check that failed as a whole, and any other run, show what
     /// they said.
