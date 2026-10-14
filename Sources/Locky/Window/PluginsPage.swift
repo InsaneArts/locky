@@ -21,6 +21,10 @@ struct PluginsPage: View {
     /// settings.json and cannot race git.
     private var isBusy: Bool { model.packRunning != nil }
 
+    /// settings.json reads without an error. While it has one nothing saves to it and a sync cannot see its plugins, so
+    /// every control that changes a plugin waits. Check Now changes nothing and stays.
+    private var canChange: Bool { model.store.problem == nil }
+
     /// The last run, when it failed. Its section stays at the top until the next run.
     private var failedRun: (action: PackManager.Action, report: PackManager.Report)? {
         model.packReport.flatMap { $0.report.ok ? nil : $0 }
@@ -33,7 +37,7 @@ struct PluginsPage: View {
                 ProgressView()
                     .controlSize(.small)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if packs.isEmpty, failedRun == nil {
+            } else if packs.isEmpty, failedRun == nil, canChange {
                 ContentUnavailableView {
                     Label("No Plugins", systemImage: "puzzlepiece.extension")
                 } description: {
@@ -49,7 +53,7 @@ struct PluginsPage: View {
                     HStack {
                         Spacer()
                         Button("Install Plugin…") { installing = true }
-                            .disabled(isBusy)
+                            .disabled(isBusy || !canChange)
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 12)
@@ -64,6 +68,7 @@ struct PluginsPage: View {
             // Plain, not destructive: the person chose Remove… on purpose.
             Button("Remove") { remove(pack) }
                 .keyboardShortcut(.defaultAction)
+                .disabled(!canChange)
         } message: { pack in
             Text(Self.removal(pack))
         }
@@ -71,6 +76,16 @@ struct PluginsPage: View {
 
     private var form: some View {
         Form {
+            if !canChange {
+                Section {
+                    HStack(spacing: 8) {
+                        WarningLabel("settings.json has an error, so plugins can't change.")
+                        // General shows the error and restores the last good settings.
+                        Button("Show General") { model.openWindow(.settings) }
+                            .buttonStyle(.link)
+                    }
+                }
+            }
             if let failedRun {
                 Section {
                     VStack(alignment: .leading, spacing: 4) {
@@ -88,12 +103,14 @@ struct PluginsPage: View {
                 PluginSection(pack: pack, allow: allowed(pack), summary: Provides.summary(model: model, folder: pack.folder),
                               theme: Provides.themes(model: model, folder: pack.folder).first,
                               update: model.available.first { $0.name == pack.name }, isRunning: isRunning(pack), isBusy: isBusy,
+                              canChange: canChange,
                               install: { model.runPack(.sync, targets: [pack.name]) }, review: { reviewing = $0 },
                               remove: { removing = pack }, grant: { grant($0, $1, to: pack) })
             }
             if packs.contains(where: { $0.dir == nil }) {
                 Section {
                     Toggle("Check for updates daily", isOn: model.store.bool("update_check", default: true))
+                        .disabled(!canChange)
                 } footer: {
                     updateStatus
                 }
@@ -103,6 +120,7 @@ struct PluginsPage: View {
         // A plugin or the failure coming or going fades and moves the rows below, so the row being watched does not jump.
         .animation(Motion.rows(reduceMotion), value: packs.map(\.name))
         .animation(Motion.rows(reduceMotion), value: failedRun != nil)
+        .animation(Motion.rows(reduceMotion), value: canChange)
     }
 
     /// The update section's footer: what the last check this session found, and Check Now.
@@ -225,6 +243,8 @@ private struct PluginSection: View {
     let isRunning: Bool
     /// A run is in progress: the controls that start one wait.
     let isBusy: Bool
+    /// False while settings.json has an error: nothing about the plugin can change, its grants included.
+    let canChange: Bool
     let install: () -> Void
     let review: (PackUpdate) -> Void
     let remove: () -> Void
@@ -243,7 +263,7 @@ private struct PluginSection: View {
                     }
                 }
                 // init.lua's plugins show the grants init.lua gives them.
-                .disabled(!pack.fromSettings)
+                .disabled(!pack.fromSettings || !canChange)
                 .help(pack.fromSettings ? "" : "Set allow = { … } for it in init.lua")
             }
         }
@@ -312,10 +332,10 @@ private struct PluginSection: View {
             ProgressView()
         } else if !pack.installed, pack.dir == nil {
             Button("Install", action: install)
-                .disabled(isBusy)
+                .disabled(isBusy || !canChange)
         } else if let update {
             Button("Update…") { review(update) }
-                .disabled(isBusy)
+                .disabled(isBusy || !canChange)
         }
     }
 
@@ -329,7 +349,7 @@ private struct PluginSection: View {
         if pack.fromSettings {
             Divider()
             Button("Remove…", action: remove)
-                .disabled(isBusy)
+                .disabled(isBusy || !canChange)
         }
     }
 
@@ -433,7 +453,7 @@ struct InstallSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Install", action: install)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(problem != nil || model.packRunning != nil)
+                    .disabled(problem != nil || model.packRunning != nil || model.store.problem != nil)
             }
         }
         .padding(20)
