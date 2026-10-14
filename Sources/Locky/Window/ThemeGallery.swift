@@ -7,7 +7,6 @@ struct ThemeGallery: View {
     let model: AppModel
     /// The theme that did not load on the last lock, until a file of it changes or Dismiss.
     @State private var failure: ThemeFailure?
-    @State private var scheduling = false
     /// Why Import Theme… failed, for its alert.
     @State private var problem: ImportProblem?
     /// Why Move to Trash left a theme where it was, for its alert.
@@ -63,9 +62,11 @@ struct ThemeGallery: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("Schedule", systemImage: "clock.arrow.2.circlepath") { scheduling = true }
+                Button("Schedule", systemImage: "clock.arrow.2.circlepath") { model.scheduling = true }
                     .help("Change the theme by time of day or with Light and Dark mode")
-                    .popover(isPresented: $scheduling, arrowEdge: .bottom) { SchedulePopover(model: model) }
+                    .popover(isPresented: Binding(get: { model.scheduling }, set: { model.scheduling = $0 }), arrowEdge: .bottom) {
+                        SchedulePopover(model: model)
+                    }
                 Button("Preview", systemImage: "play.rectangle") { model.preview(nil) }
                     .help("Show the theme in use full size")
             }

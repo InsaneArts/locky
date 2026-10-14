@@ -79,6 +79,9 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuI
     /// The theme in Customize, else the theme in use.
     @objc func previewTheme(_ sender: Any?) { model.preview(model.editingTheme) }
 
+    /// The gallery's Schedule popover, from its toolbar item.
+    @objc func scheduleThemes(_ sender: Any?) { model.scheduling = true }
+
     // The editor runs these: they need its state.
     @objc func duplicateTheme(_ sender: Any?) { model.editorRequest = .duplicate }
     @objc func exportTheme(_ sender: Any?) { model.editorRequest = .export }
@@ -121,6 +124,9 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuI
         case #selector(previewTheme(_:)):
             // The gallery previews the theme in use.
             return editing == nil || loads != nil
+        case #selector(scheduleThemes(_:)):
+            // The popover hangs from the gallery's toolbar.
+            return editing == nil
         case #selector(duplicateTheme(_:)), #selector(addWidget(_:)):
             return loads != nil
         case #selector(exportTheme(_:)):
@@ -143,8 +149,8 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuI
     /// The commands that act on a theme, which wait while a sheet is over the window.
     private static let themeCommands: Set<Selector> = [
         #selector(importTheme(_:)), #selector(customizeTheme(_:)), #selector(useTheme(_:)), #selector(previewTheme(_:)),
-        #selector(duplicateTheme(_:)), #selector(exportTheme(_:)), #selector(revertTheme(_:)), #selector(trashTheme(_:)),
-        #selector(addWidget(_:)),
+        #selector(scheduleThemes(_:)), #selector(duplicateTheme(_:)), #selector(exportTheme(_:)), #selector(revertTheme(_:)),
+        #selector(trashTheme(_:)), #selector(addWidget(_:)),
     ]
 
     private static let gridKey = "themeEditorGrid"

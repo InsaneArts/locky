@@ -332,11 +332,14 @@ import Testing
         func item(_ action: Selector) -> NSMenuItem { NSMenuItem(title: "", action: action, keyEquivalent: "") }
         func enabled(_ action: Selector) -> Bool { controller.validateMenuItem(item(action)) }
         typealias Commands = LockyWindowController
-        // The gallery: Import and Customize, nothing that needs a theme in Customize.
+        // The gallery: Import, Customize, and Schedule, nothing that needs a theme in Customize.
         #expect(enabled(#selector(Commands.importTheme(_:))) && enabled(#selector(Commands.customizeTheme(_:))))
+        #expect(enabled(#selector(Commands.scheduleThemes(_:))))
         #expect(!enabled(#selector(Commands.useTheme(_:))) && !enabled(#selector(Commands.addWidget(_:))) && !enabled(#selector(Commands.trashTheme(_:))))
+        controller.scheduleThemes(nil)
+        #expect(model.scheduling)
         model.customize("mine")
-        #expect(!enabled(#selector(Commands.customizeTheme(_:))))
+        #expect(!enabled(#selector(Commands.customizeTheme(_:))) && !enabled(#selector(Commands.scheduleThemes(_:))))
         #expect(enabled(#selector(Commands.useTheme(_:))) && enabled(#selector(Commands.trashTheme(_:))) && enabled(#selector(Commands.duplicateTheme(_:))))
         // A theme written in Lua cannot be exported, and nothing has changed it yet.
         #expect(!enabled(#selector(Commands.exportTheme(_:))) && !enabled(#selector(Commands.revertTheme(_:))))

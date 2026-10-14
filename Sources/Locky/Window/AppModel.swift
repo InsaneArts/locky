@@ -60,6 +60,8 @@ final class AppModel {
     private var askedForAddWidget = false
     /// File › Import Theme… asks the gallery to show the file importer.
     var importing = false
+    /// The Schedule popover: the gallery's toolbar item and File › Schedule Themes… open it.
+    var scheduling = false
     /// A Customize command from the main menu that needs the editor; the editor runs it and sets this back to nil.
     enum EditorRequest: Equatable { case duplicate, export, revert }
     var editorRequest: EditorRequest?

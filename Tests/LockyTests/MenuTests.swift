@@ -75,8 +75,9 @@ import Testing
         try installed { main throws in
             #expect(try layout("Locky", in: main) == ["About Locky", "—", "Settings…", "—", "Lock Now", "—", "Services", "—", "Hide Locky",
                                                       "Hide Others", "Show All", "—", "Quit Locky"])
-            #expect(try layout("File", in: main) == ["Import Theme…", "—", "Customize Theme…", "Use Theme", "Preview Theme", "—",
-                                                     "Duplicate Theme…", "Export Theme…", "Revert to Original", "Move to Trash", "—", "Close"])
+            #expect(try layout("File", in: main) == ["Import Theme…", "—", "Customize Theme…", "Use Theme", "Preview Theme",
+                                                     "Schedule Themes…", "—", "Duplicate Theme…", "Export Theme…", "Revert to Original",
+                                                     "Move to Trash", "—", "Close"])
             #expect(try layout("Edit", in: main) == ["Undo", "Redo", "—", "Cut", "Copy", "Paste", "Delete", "Select All", "—", "Add Widget…"])
             #expect(try layout("View", in: main) == ["Show Grid", "Show Inspector", "—", "Enter Full Screen"])
             // AppKit lists any titled window on screen after these, at once, so a window from another test may follow.
@@ -125,12 +126,13 @@ import Testing
         typealias Themes = LockyWindowController
         try installed { main in
             let commands = try menu("File", in: main).items.prefix { $0.action != #selector(NSWindow.performClose(_:)) }.filter { !$0.isSeparatorItem }
-            #expect(commands.map(\.title) == ["Import Theme…", "Customize Theme…", "Use Theme", "Preview Theme", "Duplicate Theme…",
-                                              "Export Theme…", "Revert to Original", "Move to Trash"])
+            #expect(commands.map(\.title) == ["Import Theme…", "Customize Theme…", "Use Theme", "Preview Theme", "Schedule Themes…",
+                                              "Duplicate Theme…", "Export Theme…", "Revert to Original", "Move to Trash"])
             #expect(commands.map(\.action) == [#selector(Themes.importTheme(_:)), #selector(Themes.customizeTheme(_:)),
                                                #selector(Themes.useTheme(_:)), #selector(Themes.previewTheme(_:)),
-                                               #selector(Themes.duplicateTheme(_:)), #selector(Themes.exportTheme(_:)),
-                                               #selector(Themes.revertTheme(_:)), #selector(Themes.trashTheme(_:))])
+                                               #selector(Themes.scheduleThemes(_:)), #selector(Themes.duplicateTheme(_:)),
+                                               #selector(Themes.exportTheme(_:)), #selector(Themes.revertTheme(_:)),
+                                               #selector(Themes.trashTheme(_:))])
             // No target: they reach the Themes window's controller only while that window is key, and are dimmed otherwise.
             #expect(commands.allSatisfy { $0.target == nil })
         }
@@ -151,7 +153,8 @@ import Testing
         typealias Themes = LockyWindowController
         try installed { main in
             let own = [#selector(AppDelegate.lockNow(_:)), #selector(Themes.importTheme(_:)), #selector(Themes.customizeTheme(_:)),
-                       #selector(Themes.useTheme(_:)), #selector(Themes.previewTheme(_:)), #selector(Themes.duplicateTheme(_:)),
+                       #selector(Themes.useTheme(_:)), #selector(Themes.previewTheme(_:)), #selector(Themes.scheduleThemes(_:)),
+                       #selector(Themes.duplicateTheme(_:)),
                        #selector(Themes.exportTheme(_:)), #selector(Themes.revertTheme(_:)), #selector(Themes.trashTheme(_:)),
                        #selector(Themes.addWidget(_:)), #selector(Themes.toggleGrid(_:)), #selector(Themes.toggleInspector(_:)),
                        #selector(AppDelegate.openWelcome(_:)), #selector(AppDelegate.openSettings(_:))]

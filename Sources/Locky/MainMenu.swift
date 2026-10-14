@@ -41,6 +41,7 @@ enum MainMenu {
             item("Customize Theme…", #selector(Themes.customizeTheme(_:)), symbol: "slider.horizontal.3"),
             item("Use Theme", #selector(Themes.useTheme(_:)), symbol: "checkmark.circle"),
             item("Preview Theme", #selector(Themes.previewTheme(_:)), symbol: "play.rectangle"),
+            item("Schedule Themes…", #selector(Themes.scheduleThemes(_:)), symbol: "clock.arrow.2.circlepath"),
             .separator(),
             item("Duplicate Theme…", #selector(Themes.duplicateTheme(_:)), symbol: "plus.square.on.square"),
             item("Export Theme…", #selector(Themes.exportTheme(_:)), symbol: "square.and.arrow.up"),
