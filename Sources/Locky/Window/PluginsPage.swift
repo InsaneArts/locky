@@ -110,8 +110,11 @@ struct PluginsPage: View {
             }
             if packs.contains(where: { $0.dir == nil }) {
                 Section {
-                    Toggle("Check for updates daily", isOn: model.store.bool("update_check", default: true))
-                        .disabled(!canChange)
+                    // Its label dims itself, as the grant switches' do.
+                    Toggle(isOn: model.store.bool("update_check", default: true)) {
+                        Text("Check for updates daily").foregroundStyle(canChange ? HierarchicalShapeStyle.primary : .secondary)
+                    }
+                    .disabled(!canChange)
                 } footer: {
                     updateStatus
                 }
