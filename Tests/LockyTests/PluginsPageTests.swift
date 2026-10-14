@@ -81,6 +81,23 @@ import Testing
         #expect(!PluginsPage.upToDate([PackUpdate(name: "locky-transit")]))
     }
 
+    /// A failed check shows the plugins it could not check: after another plugin's commits and diffstat, their lines
+    /// would fall below the 8 lines the section shows. A check that failed as a whole, and any other run, show what
+    /// they said.
+    @Test func aFailedCheckShowsThePluginsItCouldNotCheck() {
+        let old = "3f9c2a1b7d4e5f60718293a4b5c6d7e8f9a0b1c2", new = "8b1d0e4a9c7f6e5d4c3b2a1908f7e6d5c4b3a291"
+        let stars = PackUpdate(name: "locky-stars", current: old, latest: new,
+                               changes: (1...3).map { "  8b1d0e\($0) Change \($0)" } + (1...5).map { "   plugin/stars\($0).lua | 2 +-" })
+        let transit = PackUpdate(name: "locky-transit", current: old, error: "fetch failed")
+        let check = PackManager.Report(lines: [stars.line] + stars.changes + [transit.line], ok: false, updates: [stars, transit])
+        #expect(check.lines.firstIndex(of: "locky-transit: fetch failed") == 9)
+        #expect(PluginsPage.failureReport(.check, check) == "locky-transit: fetch failed")
+        let busy = PackManager.Report(lines: ["Another plugin run is in progress. Try again when it finishes."], ok: false)
+        #expect(PluginsPage.failureReport(.check, busy) == busy.text)
+        let sync = PackManager.Report(lines: ["installed locky-stars at 8b1d0e4", "locky-transit: clone failed: not found"], ok: false)
+        #expect(PluginsPage.failureReport(.sync, sync) == sync.text)
+    }
+
     /// Every card shows the sizes in one order: the Lock Screen ones, then the desktop ones.
     @Test func sizesShowInOneOrder() {
         #expect(FamilyPicker.sorted(["small", "inline", "circular", "large"]) == ["circular", "inline", "small", "large"])

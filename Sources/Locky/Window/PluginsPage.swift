@@ -92,7 +92,7 @@ struct PluginsPage: View {
                     VStack(alignment: .leading, spacing: 4) {
                         WarningLabel(Self.failure(failedRun.action))
                             .font(.body.weight(.semibold))
-                        Text(failedRun.report.text)
+                        Text(Self.failureReport(failedRun.action, failedRun.report))
                             .font(.callout.monospaced())
                             .foregroundStyle(.secondary)
                             .lineLimit(8)
@@ -200,6 +200,13 @@ struct PluginsPage: View {
         case .check: "Couldn't check for updates"
         case .list: "Couldn't list plugins"
         }
+    }
+
+    /// The failure section's report. A check lists each plugin's commits and diffstat, which can push the plugin that
+    /// failed below the 8 lines shown, so a failed check shows only the plugins it could not check.
+    static func failureReport(_ action: PackManager.Action, _ report: PackManager.Report) -> String {
+        let failed = action == .check ? report.updates.filter { $0.error != nil }.map(\.line) : []
+        return failed.isEmpty ? report.text : failed.joined(separator: "\n")
     }
 
     /// Where a plugin comes from, for its row: "someone/locky-stars" on GitHub, the address on another host, the folder
