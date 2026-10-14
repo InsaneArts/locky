@@ -249,6 +249,8 @@ private struct UnloadableTheme: View {
         .focusEffectDisabled()
         .focused($focused)
         .onAppear { DispatchQueue.main.async { focused = true } }
+        // Gives the keyboard back as it goes, or the gallery's grid takes Return but not the arrows.
+        .onDisappear { focused = false }
     }
 }
 

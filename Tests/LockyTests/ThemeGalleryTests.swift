@@ -129,10 +129,10 @@ import Testing
     }
 
     /// Whether the right arrow changes the theme in use, as it does while the grid has the keyboard.
-    private func rightArrowMoves(_ window: NSWindow, _ model: AppModel) async -> Bool {
+    private func rightArrowMoves(_ window: NSWindow, _ model: AppModel, within timeout: Double = 2) async -> Bool {
         let before = model.activeTheme
         press(window, 124, String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), function: true)
-        return await wait(2) { model.activeTheme != before }
+        return await wait(timeout) { model.activeTheme != before }
     }
 
     @Test(arguments: ["Done", "Escape"])
@@ -157,5 +157,32 @@ import Testing
         #expect(await wait { window.firstResponder !== window && !(window.firstResponder is CanvasOverlay) },
                 "first responder: \(String(describing: window.firstResponder))")
         #expect(await rightArrowMoves(window, model), "the grid takes the arrows after Customize")
+    }
+
+    /// A theme that does not load has no canvas: why it does not load takes the keyboard instead, and gives it back.
+    @Test(arguments: ["Done", "Escape"])
+    func theGridHasTheKeysAgainAfterCustomizeForAThemeThatDoesNotLoad(_ way: String) async throws {
+        _ = NSApplication.shared
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        try sandbox.write("themes/broken.lua", "error('broken')")
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.screenshots = true
+        model.refresh()
+        try #require(await wait(10) { model.inspection.loaded && model.inspection.theme("broken")?.error != nil })
+        let controller = LockyWindowController(model: model, onClose: {})
+        let window = try #require(controller.window)
+        defer { window.close() }
+        try #require(await wait { window.firstResponder !== window })
+
+        model.customize("broken")
+        try #require(await wait { window.firstResponder !== window && model.editingTheme == "broken" })
+        try await Task.sleep(for: .milliseconds(200))
+        if way == "Done" { model.finishEditing() } else { press(window, 53, "\u{1b}") }
+        #expect(await wait { model.editingTheme == nil })
+        // The grid takes the keyboard a turn after it shows; nothing in the window tells when, so the arrow tries again.
+        var moved = false
+        for _ in 0..<10 where !moved { moved = await rightArrowMoves(window, model, within: 0.3) }
+        #expect(moved, "the grid takes the arrows after Customize")
     }
 }
