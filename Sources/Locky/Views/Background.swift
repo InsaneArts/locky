@@ -6,7 +6,8 @@ import MetalKit
 
 enum Backgrounds {
     /// `overlay`: drawn above the widgets with transparency, for scanlines, grain, or a vignette.
-    /// `still` (the battery saver) draws a shader once and keeps a video on its first frame.
+    /// `still` (Low Power Mode, Reduce Motion, or battery_saver on battery) draws a shader once and keeps a video on its
+    /// first frame.
     /// `epoch` is when a shader's animation starts: a preview that replaces its session keeps it, so the
     /// animation goes on where it was.
     @MainActor

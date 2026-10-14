@@ -82,7 +82,7 @@ final class AppModel {
     /// Packages with a newer commit upstream than the one pinned.
     var available: [PackUpdate] { updates.filter { $0.error == nil && $0.current != nil && $0.latest != nil && $0.current != $0.latest } }
 
-    /// The editors and terminals on this Mac, found once when the Config page first needs them.
+    /// The editors and terminals on this Mac, found once when Lua Config or an Open first needs them.
     private(set) var editors: (editors: [Editor], terminals: [Terminal])?
 
     /// Why the Lock Now shortcut could not be registered, such as another app holding it.

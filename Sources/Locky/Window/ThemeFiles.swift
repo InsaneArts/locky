@@ -26,7 +26,7 @@ struct ThemeFile: Equatable {
         var level = ""
         while json.contains("]\(level)]") { level += "=" }
         return """
-        -- A Locky theme, made in Locky's theme editor. To add it, choose Import Theme… on Locky's Themes page.
+        -- A Locky theme, made with Customize in Locky. To add it, choose File › Import Theme… in Locky.
         return locky.theme.derive("\(base)", locky.json.decode([\(level)[
         \(json)
         ]\(level)]))
