@@ -359,6 +359,18 @@ import Testing
         #expect(controller.validateMenuItem(inspector) && inspector.title == "Hide Inspector")
     }
 
+    /// The Welcome waits for the config's first read, and for no more than its limit.
+    @Test func theFirstReadCanBeAwaited() async throws {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        let start = ContinuousClock.now
+        await model.firstRead(within: .milliseconds(100))
+        #expect(!model.inspection.loaded && ContinuousClock.now - start >= .milliseconds(100))
+        model.refresh()
+        await model.firstRead(within: .seconds(10))
+        #expect(model.inspection.loaded)
+    }
+
     /// A lock closes the Schedule popover and the Import panel, so nothing but the lock takes the keyboard. Neither comes
     /// back after it.
     @Test func aLockClosesThePopoverAndTheImportPanel() throws {

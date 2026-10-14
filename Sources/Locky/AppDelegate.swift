@@ -201,7 +201,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             model.refresh()
             let controller = welcomeWindow ?? WelcomeWindowController(model: model) { [weak self] in self?.closed(self?.welcomeWindow?.window) }
             welcomeWindow = controller
-            controller.show(behind: behind)
+            guard !model.inspection.loaded else {
+                controller.show(behind: behind)
+                return
+            }
+            // The first launch opens the Welcome before the config is read, and its preview would show Aurora before
+            // init.lua's theme: it waits for that read, a fraction of a second, a second at most.
+            Task { [weak self] in
+                await self?.model.firstRead(within: .seconds(1))
+                // A lock may have started in the wait: nothing comes up over it.
+                guard let self, session?.mode != .lock else { return }
+                controller.show(behind: behind)
+            }
         case .settings?, .plugins?, .config?:
             model.startWatching()
             model.refresh()

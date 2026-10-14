@@ -258,6 +258,12 @@ final class AppModel {
         }
     }
 
+    /// Waits until the config has been read once, `limit` at most: until then `activeTheme` cannot know init.lua's theme.
+    func firstRead(within limit: Duration) async {
+        let deadline = ContinuousClock.now + limit
+        while !inspection.loaded, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
     /// Runs `locky pack <action>` (or `work`, which reports as `action`) in the background, one run at a time, then
     /// reads the config again, unless it was a check: that changes nothing, and reading the config runs plugin code.
     /// `targets` names the plugins the run works on; none means all of them.
