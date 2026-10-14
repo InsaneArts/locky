@@ -476,6 +476,13 @@ struct InstallSheet: View {
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // settings.json did not take the plugin, such as a file that broke since the sheet opened: nothing installs.
+            if let saveProblem = model.store.problem {
+                WarningLabel(saveProblem)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
             Label("A plugin runs as you and can read your files. Install plugins only from people you trust.", systemImage: "hand.raised")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -503,6 +510,9 @@ struct InstallSheet: View {
             settings.packs.removeAll { PackSpec.name(of: $0)?.lowercased() == name }
             settings.packs.append(spec)
         }
+        // Nothing saves while settings.json has an error, so the plugin is not in it: no sync, and the sheet stays to
+        // say why, as Remove does.
+        guard model.store.problem == nil else { return }
         model.runPack(.sync)
         dismiss()
     }
