@@ -342,7 +342,8 @@ struct PackManager {
     private func changes(in dir: URL, from old: String, to new: String) -> [String] {
         guard Self.isRevision(old), Self.isRevision(new) else { return [] }
         let log = runGit(["-C", dir.path, "log", "--oneline", "--no-decorate", "--end-of-options", "\(old)..\(new)"]).output
-        let stat = runGit(["-C", dir.path, "diff", "--stat", "--end-of-options", old, new], timeout: networkTimeout).output
+        // The diffstat's lines start with a space, the first one too: only the newlines go.
+        let stat = runGit(["-C", dir.path, "diff", "--stat", "--end-of-options", old, new], timeout: networkTimeout, trimming: .newlines).output
         let clean = { (line: Substring) in "  " + String(String.UnicodeScalarView(line.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) })) }
         return (log.split(separator: "\n") + stat.split(separator: "\n")).map(clean)
     }
@@ -376,8 +377,8 @@ struct PackManager {
         (value.count == 40 || value.count == 64) && value.allSatisfy(\.isHexDigit)
     }
 
-    /// Not private: the tests call it.
-    func runGit(_ arguments: [String], timeout: Double = 30) -> (ok: Bool, output: String, error: String) {
+    /// Not private: the tests call it. `trimming` is what goes from either end of the output.
+    func runGit(_ arguments: [String], timeout: Double = 30, trimming: CharacterSet = .whitespacesAndNewlines) -> (ok: Bool, output: String, error: String) {
         // Process raises an Objective-C exception for a NUL inside an argument, which would end the app (and a
         // lock with it), and cuts the argument short at a NUL at its end.
         guard !arguments.contains(where: { $0.contains("\0") }) else {
@@ -424,11 +425,11 @@ struct PackManager {
         stderrDone.wait()
         process.waitUntilExit()
         deadline.cancel()
-        let trim = { (data: Data) in String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
+        let trim = { (data: Data, characters: CharacterSet) in String(decoding: data, as: UTF8.self).trimmingCharacters(in: characters) }
         if process.terminationReason == .uncaughtSignal {
-            return (false, trim(output), "git took longer than \(Int(timeout)) s and was stopped")
+            return (false, trim(output, trimming), "git took longer than \(Int(timeout)) s and was stopped")
         }
-        return (process.terminationStatus == 0, trim(output), trim(errors))
+        return (process.terminationStatus == 0, trim(output, trimming), trim(errors, .whitespacesAndNewlines))
     }
 }
 

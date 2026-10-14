@@ -368,6 +368,8 @@ import Testing
         #expect(update.changes.count == 3, "\(update.changes)")
         #expect(update.changes.first == "  \(new.prefix(7)) hi[31m")
         #expect(update.changes.last?.contains("1 file changed, 1 insertion(+), 1 deletion(-)") == true)
+        // The diffstat keeps git's own leading space, its first line too, so its lines line up.
+        #expect(update.changes.dropFirst().allSatisfy { $0.hasPrefix("   ") && !$0.hasPrefix("    ") }, "\(update.changes)")
         #expect(report.lines == [update.line] + update.changes)
         // locky pack update prints the same lines as it moves.
         #expect(manager.run(.update).lines == ["updated hello \(update.current!.prefix(7)) → \(new.prefix(7))\n" + update.changes.joined(separator: "\n")])
