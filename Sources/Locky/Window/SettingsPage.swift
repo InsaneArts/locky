@@ -8,7 +8,9 @@ import SwiftUI
 /// Hide personal information is the exception, and stores on all the same.
 struct SettingsPage: View {
     let model: AppModel
-    /// The intruder photos, newest first. They are read before the first frame, so the pane opens with them.
+    /// The intruder photos, newest first. They are read when the pane is built, when a lock ends, and after each config
+    /// read. The window opens after the lock that took them, so they are on its first frame; a photo still saving when
+    /// the lock ended comes with the next config read.
     @State private var photos: [(url: URL, date: Date)]
 
     init(model: AppModel) {
@@ -45,6 +47,7 @@ struct SettingsPage: View {
         }
         .formStyle(.grouped)
         .task(id: model.revision) { loadPhotos() }
+        .modifier(WhenLockEnds(model: model, action: loadPhotos))
     }
 
     private func loadPhotos() {
@@ -128,6 +131,20 @@ struct SettingsPage: View {
     /// "1 minute", "7 minutes".
     fileprivate nonisolated static func plural(_ number: Int, _ unit: String) -> String {
         number == 1 ? "1 \(unit)" : "\(number) \(unit)s"
+    }
+}
+
+/// Runs `action` when a lock ends, also while the Settings window is closed. `model.locked` is read here and not in the
+/// page's body, so a lock's start does not build the page again: building UnlockSection reads the Touch ID, Accessibility,
+/// and camera states, and during a lock the main thread runs the guard's heartbeat.
+private struct WhenLockEnds: ViewModifier {
+    let model: AppModel
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: model.locked) { _, locked in
+            if !locked { action() }
+        }
     }
 }
 
