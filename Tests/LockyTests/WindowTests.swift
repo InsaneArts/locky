@@ -26,6 +26,29 @@ import Testing
         #expect(!customizing.flatMap(\.widgets).contains { $0.name == "matrix.whisper" })
     }
 
+    /// A plugin's group is titled with its folder, whichever file of it defines the widget. A folder next to the config
+    /// folder is a plugin of its own, not Lua Config.
+    @Test func pluginGroupsTakeTheirFoldersName() {
+        func widget(_ name: String, _ path: String) -> Inspection.WidgetInfo { Inspection.WidgetInfo(name: name, file: URL(fileURLWithPath: path)) }
+        let config = RuntimePath.defaultConfig.path, packs = RuntimePath.defaultPacks.path
+        let groups = WidgetGroup.groups([
+            widget("mine", config + "/plugin/mine.lua"),
+            widget("thing", config + "-dev/plugin/thing.lua"),
+            widget("stars.graph", packs + "/locky-stars/lua/stars/init.lua"),
+            widget("stars.count", packs + "/locky-stars/plugin/stars.lua"),
+            widget("local.one", "/Users/someone/code/my-plugin/lua/my/init.lua"),
+        ])
+        #expect(groups.map(\.title) == ["Lua Config", "locky-dev", "locky-stars", "my-plugin"])
+        #expect(groups.map { $0.widgets.map(\.name) } == [["mine"], ["thing"], ["stars.graph", "stars.count"], ["local.one"]])
+        #expect(Set(groups.map(\.id)).count == groups.count)
+        // A plugin folder named like the theme being customized: two groups, each its own.
+        let sakura = Inspection.ThemeInfo(id: "sakura", name: "Sakura", directory: RuntimePath.resources.appending(path: "packages/sakura"))
+        let named = WidgetGroup.groups([widget("petals", packs + "/Sakura/plugin/petals.lua"),
+                                        widget("sakura.month", RuntimePath.resources.path + "/packages/sakura/plugin/sakura.lua")], theme: sakura)
+        #expect(named.map(\.title) == ["Sakura", "Sakura"])
+        #expect(Set(named.map(\.id)).count == 2)
+    }
+
     /// The gallery runs every widget in one runtime, once in each of its families, and hands each card the live
     /// view of the family it shows.
     @MainActor @Test func theGalleryDrawsEachWidget() async throws {

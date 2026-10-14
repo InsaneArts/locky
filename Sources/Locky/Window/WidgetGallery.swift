@@ -196,7 +196,7 @@ struct WidgetGallerySheet: View {
             let widgets = group.widgets.filter { widget in
                 [widget.name, EditorPlacement.title(widget.name), widget.description ?? ""].contains { $0.localizedStandardContains(query) }
             }
-            return widgets.isEmpty ? nil : WidgetGroup(title: group.title, widgets: widgets)
+            return widgets.isEmpty ? nil : WidgetGroup(id: group.id, title: group.title, widgets: widgets)
         }
     }
 
@@ -476,7 +476,8 @@ struct FamilyPicker: View {
 /// The Add Widget sheet's groups: Locky's own widgets, the config's, each plugin's (A to Z), then the pieces of the
 /// built-in theme being customized. Other themes' pieces are left out: each is drawn for its own theme.
 struct WidgetGroup: Identifiable {
-    var id: String { title }
+    /// Unique where titles are not: a plugin's folder can have the name of a theme.
+    var id: String
     var title: String
     var widgets: [Inspection.WidgetInfo]
 
@@ -496,14 +497,24 @@ struct WidgetGroup: Identifiable {
                 // A widget without a file (defined from a string of Lua) joins the config's.
                 config.append(widget)
             } else {
-                plugins[widget.source ?? path, default: []].append(widget)
+                plugins[plugin(of: path), default: []].append(widget)
             }
         }
-        var list = [WidgetGroup(title: "Locky", widgets: core), WidgetGroup(title: "Lua Config", widgets: config)]
+        var list = [WidgetGroup(id: "locky", title: "Locky", widgets: core), WidgetGroup(id: "config", title: "Lua Config", widgets: config)]
         for folder in plugins.keys.sorted(by: { $0.localizedStandardCompare($1) == .orderedAscending }) {
-            list.append(WidgetGroup(title: folder, widgets: plugins[folder] ?? []))
+            list.append(WidgetGroup(id: "plugin " + folder, title: folder, widgets: plugins[folder] ?? []))
         }
-        if let theme { list.append(WidgetGroup(title: theme.name, widgets: own)) }
+        if let theme { list.append(WidgetGroup(id: "theme " + theme.id, title: theme.name, widgets: own)) }
         return list.filter { !$0.widgets.isEmpty }
+    }
+
+    /// The plugin folder a widget's file is in: the folder in the pack folder, else (a local plugin) the folder that
+    /// holds its plugin/ or lua/ folder.
+    private static func plugin(of path: String) -> String {
+        let packs = RuntimePath.defaultPacks.path + "/"
+        if path.hasPrefix(packs), let folder = path.dropFirst(packs.count).split(separator: "/").first { return String(folder) }
+        let parts = path.split(separator: "/")
+        if let index = parts.lastIndex(of: "plugin") ?? parts.lastIndex(of: "lua"), index > 0 { return String(parts[index - 1]) }
+        return LuaError.shortenPaths(path)
     }
 }
