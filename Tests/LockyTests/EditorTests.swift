@@ -55,11 +55,12 @@ import Testing
         var preview: ThemePreviewView { overlay.preview! }
     }
 
-    private func open() async throws -> Page {
+    private func open(widgets: String = "{ 'box', anchor = 'center' }, { 'box', anchor = 'top-right', offset = { -30, 30 }, opts = { label = 'two' } }")
+        async throws -> Page {
         let sandbox = try Sandbox()
         try sandbox.write("themes/t.lua", """
         return { background = { color = '#203040' }, auth = { anchor = 'bottom', offset = { 0, -60 } },
-                 widgets = { { 'box', anchor = 'center' }, { 'box', anchor = 'top-right', offset = { -30, 30 }, opts = { label = 'two' } } } }
+                 widgets = { \(widgets) } }
         """)
         try sandbox.write("plugin/box.lua", """
         locky.widget.define('box', { size = { 200, 100 }, opts = { label = 'box', size = 20, bold = false, note = 'hi' },
@@ -418,6 +419,60 @@ import Testing
         #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets")[1]["opts"]["note"] == .string("hello") })
     }
 
+    /// The switch of text that can be off turns it off, also while its field holds typed text: the text goes with
+    /// the field, unsaved.
+    @Test func switchingTextOffDropsTypedText() async throws {
+        let page = try await open(widgets: "{ 'box', anchor = 'center', opts = { note = false } }")
+        let box = try #require(frame(of: .widget(0), page))
+        click(page, at: CGPoint(x: box.midX, y: box.midY))
+        func noteSwitch(_ state: NSControl.StateValue) -> NSSwitch? {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            // The note's row is the lowest switch: Show card comes before the options.
+            return Self.all(NSSwitch.self, in: page.window.contentView!).filter { $0.state == state }
+                .min { $0.convert($0.bounds, to: nil).minY < $1.convert($1.bounds, to: nil).minY }
+        }
+        #expect(await wait(page.window) { noteSwitch(.off) != nil })
+        try #require(noteSwitch(.off)).performClick(nil)
+        var found: NSTextField?
+        #expect(await wait(page.window) {
+            found = Self.textField("hi", in: page.window.contentView!)
+            return found != nil
+        })
+        #expect(saved(page).themeEdit("t", "widgets")[0]["opts"]["note"] == .string("hi"))
+        let field = try #require(found)
+        #expect(page.window.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        editor.selectAll(nil)
+        editor.insertText("hello", replacementRange: editor.selectedRange())
+        for _ in 0..<10 {
+            page.window.contentView?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try #require(noteSwitch(.on)).performClick(nil)
+        #expect(await wait(page.window) { Self.textField("hello", in: page.window.contentView!) == nil })
+        try await Task.sleep(for: .milliseconds(300))
+        page.window.contentView?.layoutSubtreeIfNeeded()
+        // Off again is the theme's own value, so nothing of the note is left to save.
+        let note = saved(page).themeEdit("t", "widgets")[0]["opts"]["note"]
+        #expect(note.isNil || note == .bool(false), "\(note)")
+        #expect(Self.textField("hello", in: page.window.contentView!) == nil)
+
+        // Undo turns the text on again without the switch, and what is typed then saves.
+        #expect(page.window.undoManager?.undoMenuItemTitle == "Undo Change Box")
+        page.window.undoManager?.undo()
+        #expect(await wait(page.window) {
+            found = Self.textField("hi", in: page.window.contentView!)
+            return found != nil
+        })
+        let again = try #require(found)
+        #expect(page.window.makeFirstResponder(again))
+        let typing = try #require(again.currentEditor() as? NSTextView)
+        typing.selectAll(nil)
+        typing.insertText("again", replacementRange: typing.selectedRange())
+        typing.insertNewline(nil)
+        #expect(await wait(page.window) { saved(page).themeEdit("t", "widgets")[0]["opts"]["note"] == .string("again") })
+    }
+
     /// A value typed for a widget that Remove Widget then takes away goes with it: the widget that moves into its
     /// place keeps where it was.
     @Test func aTypedValueGoesWithItsRemovedWidget() async throws {
@@ -490,6 +545,10 @@ import Testing
         #expect(await wait(page.window) { page.preview.canvas?.selection == nil })
         page.window.sendEvent(commandPeriod)
         #expect(await wait(page.window) { page.model.editingTheme == nil })
+    }
+
+    private static func all<T: NSView>(_ type: T.Type, in view: NSView) -> [T] {
+        ((view as? T).map { [$0] } ?? []) + view.subviews.flatMap { all(type, in: $0) }
     }
 
     private static func textField(_ value: String, in view: NSView) -> NSTextField? {

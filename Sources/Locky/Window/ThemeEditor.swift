@@ -693,14 +693,21 @@ private struct TextOrOff: View {
     let text: String?
     let own: String
     let commit: (LuaValue) -> Void
+    /// Set as the switch turns the text off: the field then goes, and the text it held does not save. Text that comes
+    /// back, by the switch or by Undo, saves again.
+    @State private var off = false
 
     var body: some View {
         HStack(spacing: 8) {
-            if let text { TextOption(text: text) { commit(.string($0)) } }
-            Toggle("", isOn: Binding(get: { text != nil }, set: { commit($0 ? .string(own) : .bool(false)) }))
+            if let text { TextOption(text: text) { if !off { commit(.string($0)) } } }
+            Toggle("", isOn: Binding(get: { text != nil }, set: { on in
+                off = !on
+                commit(on ? .string(own) : .bool(false))
+            }))
                 .labelsHidden()
                 .toggleStyle(.switch)
         }
+        .onChange(of: text != nil) { _, on in if on { off = false } }
     }
 }
 
