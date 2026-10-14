@@ -168,6 +168,8 @@ struct ThemeGallery: View {
             guard let next = Self.neighbor(of: model.activeTheme, in: themes, columns: Self.columns(width: gridWidth),
                                            direction: direction, rightToLeft: layoutDirection == .rightToLeft) else { return }
             model.use(next)
+            // While settings.json has an error the theme stays, and so does the page.
+            guard model.activeTheme == next else { return }
             proxy.scrollTo(next)
         }
         .onKeyPress(.return) {
