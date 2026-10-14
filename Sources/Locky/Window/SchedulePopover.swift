@@ -35,7 +35,9 @@ struct SchedulePopover: View {
         // While settings.json has an error nothing saves it, here as everywhere else.
         .disabled(store.problem != nil)
         .padding(20)
-        .frame(width: 420)
+        // Room for a time row with a 12-hour clock, whose "7:00 PM" makes the time picker 20 to 30 pt wider. From the
+        // leading edge too: a row wider still ends nearer the right edge, and the label column stays put.
+        .frame(width: 440, alignment: .leading)
         .animation(Motion.rows(reduceMotion), value: schedule?.mode)
     }
 
