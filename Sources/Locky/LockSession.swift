@@ -668,14 +668,6 @@ final class LockSession: NSObject, NSWindowDelegate {
                 }
             }
             if main {
-                // In every mode, so a preview shows what a lock shows.
-                func scrim() -> ScrimHost {
-                    let view = ScrimHost(rootView: LegibilityScrim(color: style.color("bg")))
-                    view.setAccessibilityElement(false)
-                    return view
-                }
-                screen.scrim = scrim()
-                screen.glanceScrim = theme.auth.reveal == "activity" ? scrim() : nil
                 screen.message = started.message.map {
                     NSHostingController(rootView: LockMessage(text: $0, model: nil, exit: false, auth: theme.auth, style: style))
                 }
@@ -973,30 +965,6 @@ final class LockScreenView: NSView {
     private var incomingBackground: NSView?
     /// The background the screen shows, or is about to: the one a change applies to.
     var latestBackground: NSView? { incomingBackground ?? background }
-    /// The legibility scrim behind the password field and its message: right above the background, so it dims neither
-    /// the widgets nor the overlay above them.
-    var scrim: NSView? {
-        didSet {
-            oldValue?.removeFromSuperview()
-            if let scrim {
-                scrim.alphaValue = authVisible ? 1 : 0
-                if let background { addSubview(scrim, positioned: .above, relativeTo: background) } else { addSubview(scrim, positioned: .below, relativeTo: nil) }
-            }
-            needsLayout = true
-        }
-    }
-    /// The scrim around the glance hint and the message, for a field that shows on activity. It trades places with
-    /// `scrim` as the hint does with the field, so while the field hides, no scrim darkens the scene where nothing shows.
-    var glanceScrim: NSView? {
-        didSet {
-            oldValue?.removeFromSuperview()
-            if let glanceScrim {
-                glanceScrim.alphaValue = authVisible ? 0 : 1
-                if let background { addSubview(glanceScrim, positioned: .above, relativeTo: background) } else { addSubview(glanceScrim, positioned: .below, relativeTo: nil) }
-            }
-            needsLayout = true
-        }
-    }
     /// What changes after the scene showed fades: a widget that measures late, a new background, a removed widget.
     /// Off in the theme editor's preview, where keys cause those changes: they happen at once.
     var fadesIn = true
@@ -1045,22 +1013,16 @@ final class LockScreenView: NSView {
     func setAuthVisible(_ visible: Bool, dim: Double, animated: Bool) {
         authVisible = visible
         let (field, hint): (CGFloat, CGFloat) = visible ? (1, 0) : (0.011, 1)
-        // The scrims go with what they lie behind.
-        let (fieldScrim, hintScrim): (CGFloat, CGFloat) = visible ? (1, 0) : (0, 1)
         if animated, !visible {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.35
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 auth?.view.animator().alphaValue = field
                 glanceHint?.animator().alphaValue = hint
-                scrim?.animator().alphaValue = fieldScrim
-                glanceScrim?.animator().alphaValue = hintScrim
             }
         } else {
             auth?.view.alphaValue = field
             glanceHint?.alphaValue = hint
-            scrim?.alphaValue = fieldScrim
-            glanceScrim?.alphaValue = hintScrim
         }
         // A brightness change eases, also when the field came at once.
         CATransaction.begin()
@@ -1272,17 +1234,6 @@ final class LockScreenView: NSView {
             let size = wayOut.sizeThatFits(in: CGSize(width: 520 * scale, height: 400 * scale))
             wayOut.view.frame = wayOutFrame(size: size, message: message?.view.frame ?? .zero, scale: scale)
         }
-        // Around the field, or the glance hint, the message, and the way out, with room to fade out. None while the field
-        // measures itself.
-        for (view, core) in [(scrim, auth?.view.frame), (glanceScrim, glanceHint?.frame)] {
-            guard let view else { continue }
-            if let core, authSize.width > 0 {
-                let text = [message?.view.frame, wayOut?.view.frame].compactMap { $0 }.filter { !$0.isEmpty }
-                view.frame = text.reduce(core) { $0.union($1) }.insetBy(dx: -48 * scale, dy: -48 * scale).integral
-            } else {
-                view.frame = .zero
-            }
-        }
         banner?.frame = CGRect(x: 16, y: 16, width: min(bounds.width - 32, 640), height: 200)
         onLayout?()
     }
@@ -1319,11 +1270,6 @@ final class LockScreenView: NSView {
         let kept = Layout.keep(CGRect(x: x, y: y, width: size.width, height: size.height), inside: bounds, margin: 16 * scale)
         return CGRect(x: kept.minX, y: y, width: size.width, height: size.height).integral
     }
-}
-
-/// The legibility scrim's view. A decoration, like the overlay: it takes no clicks.
-final class ScrimHost: NSHostingView<LegibilityScrim> {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// Preview only: what went wrong in init.lua, plugins, or the theme.

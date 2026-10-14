@@ -568,11 +568,48 @@ import Testing
     }
 }
 
+/// The theme's bg close around the lock screen's text: readable on a scene that does not match the palette, and
+/// nothing darkened around it.
 @MainActor
-@Suite struct LegibilityScrimTests {
-    /// In every mode, the theme editor's preview too: right above the background, under the widgets, around the field
-    /// and the message.
-    @Test func theScrimLiesUnderTheWidgetsAroundTheFieldAndTheMessage() async throws {
+@Suite struct LegibilityHaloTests {
+    /// The WCAG ratio between the brightest and the darkest tenth of a rendering's pixels, as the acceptance captures
+    /// measure text and what is behind it.
+    private func contrast(_ view: some View) throws -> (ratio: Double, light: Double, dark: Double) {
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        let image = try #require(renderer.cgImage)
+        let (width, height) = (image.width, image.height)
+        let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                             space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let pixels = try #require(context.data).bindMemory(to: UInt8.self, capacity: width * height * 4)
+        let luminances = (0..<(width * height)).map { index in
+            let pixel = pixels + index * 4
+            return Contrast.luminance(Contrast.RGB(r: Double(pixel[0]) / 255, g: Double(pixel[1]) / 255, b: Double(pixel[2]) / 255))
+        }.sorted()
+        let tenth = max(1, luminances.count / 10)
+        let dark = luminances.prefix(tenth).reduce(0, +) / Double(tenth), light = luminances.suffix(tenth).reduce(0, +) / Double(tenth)
+        return ((light + 0.05) / (dark + 0.05), light, dark)
+    }
+
+    /// Snowfall's status line on snow brighter than any behind its field: unreadable alone, past 4.5:1 with the halo.
+    /// The text, not the snow, is the brightest tenth, so the ratio is the text's against its halo.
+    @Test func quietTextReadsOnBrightSnow() throws {
+        let style = LockyStyle(palette: ["bg": "#0a1426", "fg": "#f4f8ff", "muted": "#dbe7f7b3"])
+        let snow = Contrast.RGB(r: 0.82, g: 0.85, b: 0.90)
+        let line = Text("Touch ID or Enter Password")
+            .font(style.font(size: 12, weight: "medium", design: nil, family: "Avenir Next", mono: false, italic: false))
+            .foregroundStyle(style.quiet(on: nil))
+        let plain = try contrast(line.background(Color(red: snow.r, green: snow.g, blue: snow.b)))
+        let halo = try contrast(line.legibilityHalo(style).background(Color(red: snow.r, green: snow.g, blue: snow.b)))
+        #expect(plain.ratio < 2)
+        #expect(halo.ratio >= 4.5 && halo.light < Contrast.luminance(snow), "\(halo)")
+    }
+
+    /// Nothing lies between the scene and the widgets: a scene that matches its palette shows as it is around the field
+    /// and its message.
+    @Test func nothingDarkensTheSceneAroundTheField() async throws {
         let sandbox = try Sandbox()
         try sandbox.write("themes/t.lua", "return { background = { color = '#101010' }, widgets = { { 'w', anchor = 'bottom' } } }")
         try sandbox.write("plugin/w.lua", "locky.widget.define('w', { render = function(self) return locky.ui.text('w') end })")
@@ -584,50 +621,14 @@ import Testing
         session.begin()
         defer { session.end("test") }
         let screen = try #require(container.subviews.first as? LockScreenView)
-        // Laid out as a window would: nothing else lays out a screen outside one.
         let deadline = Date().addingTimeInterval(3)
         while Date() < deadline {
             screen.layoutSubtreeIfNeeded()
-            if screen.scrim != nil, screen.message != nil, screen.authSize.width > 0, !screen.widgets.isEmpty { break }
+            if screen.message != nil, screen.authSize.width > 0, !screen.widgets.isEmpty { break }
             try await Task.sleep(for: .milliseconds(20))
         }
-        let scrim = try #require(screen.scrim), background = try #require(screen.background), widget = try #require(screen.widgets.first)
-        let field = try #require(screen.auth?.view.frame), message = try #require(screen.message?.view.frame)
+        let background = try #require(screen.background), widget = try #require(screen.widgets.first)
         let order = screen.subviews
-        #expect(order.firstIndex(of: scrim) == order.firstIndex(of: background).map { $0 + 1 })
-        #expect((order.firstIndex(of: scrim) ?? 99) < (order.firstIndex(of: widget) ?? -1))
-        #expect(!message.isEmpty && scrim.frame == field.union(message).insetBy(dx: -48, dy: -48).integral)
-        #expect(scrim.hitTest(CGPoint(x: scrim.frame.midX, y: scrim.frame.midY)) == nil)
-    }
-
-    /// While a field that shows on activity hides, the scrim lies around the hint, not around the field nobody sees. A
-    /// key brings the field's scrim back at once, with the field.
-    @Test func whileTheFieldHidesTheScrimLiesAroundTheHint() async throws {
-        let sandbox = try Sandbox()
-        try sandbox.write("themes/t.lua", "return { background = { color = '#101010' }, auth = { reveal = 'activity' } }")
-        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
-        var options = LockSession.Options(theme: "t", container: container)
-        options.path = sandbox.path()
-        let session = LockSession(mode: .embedded, options: options)
-        session.begin()
-        defer { session.end("test") }
-        let screen = try #require(container.subviews.first as? LockScreenView)
-        let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline {
-            screen.layoutSubtreeIfNeeded()
-            if screen.glanceScrim != nil, screen.background != nil, screen.authSize.width > 0 { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        let scrim = try #require(screen.scrim), glance = try #require(screen.glanceScrim), hint = try #require(screen.glanceHint)
-        let background = try #require(screen.background), field = try #require(screen.auth?.view)
-        #expect(!screen.authVisible)
-        #expect(scrim.alphaValue == 0 && glance.alphaValue == 1)
-        #expect(!hint.frame.isEmpty && glance.frame == hint.frame.insetBy(dx: -48, dy: -48).integral)
-        let order = screen.subviews
-        let index = { (view: NSView) in order.firstIndex(of: view) ?? -1 }
-        #expect(index(glance) > index(background) && index(glance) < index(hint) && index(glance) < index(field))
-        screen.setAuthVisible(true, dim: 0.25, animated: true)
-        #expect(scrim.alphaValue == 1 && glance.alphaValue == 0)
-        #expect(scrim.layer?.animationKeys() == nil && glance.layer?.animationKeys() == nil)
+        #expect(order.firstIndex(of: widget) == order.firstIndex(of: background).map { $0 + 1 })
     }
 }

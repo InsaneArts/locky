@@ -406,6 +406,7 @@ struct AuthPanel: View {
                 Text(note)
                     .font(font(12, "medium"))
                     .foregroundStyle(model.waitLeft > 0 ? style.quiet(on: auth.ringFill) : style.color("danger"))
+                    .legibilityHalo(style)
                     .offset(y: diameter * 0.24)
                     .accessibilityHidden(true)
             }
@@ -448,7 +449,7 @@ struct AuthPanel: View {
         VStack(alignment: auth.hintAlign == "leading" ? .leading : .center, spacing: 12 * s) {
             if auth.avatar, auth.style != "terminal", auth.style != "minimal", let picture = user.picture { avatar(picture) }
             if auth.name && !user.name.isEmpty && auth.style != "terminal" && auth.style != "minimal" {
-                Text(user.name).font(font(15, "semibold")).foregroundStyle(style.color("fg")).lineLimit(1)
+                Text(user.name).font(font(15, "semibold")).foregroundStyle(style.color("fg")).lineLimit(1).legibilityHalo(style)
             }
             // Only the shake animates: the note and the arrow change with it at once.
             field.animation(reduceMotion ? nil : .linear(duration: 0.45)) { content in
@@ -474,7 +475,7 @@ struct AuthPanel: View {
         HStack(spacing: 6 * s) {
             if listening { glyph(.mini) }
             if let statusText {
-                Text(statusText).font(font(12, "medium")).foregroundStyle(style.quiet(on: nil))
+                Text(statusText).font(font(12, "medium")).foregroundStyle(style.quiet(on: nil)).legibilityHalo(style)
             }
         }
         .frame(minHeight: touchIDOffered ? 16 : nil)
@@ -524,7 +525,10 @@ struct AuthPanel: View {
     private func secureField(slot: String, alignment: Alignment = .leading) -> some View {
         ZStack(alignment: alignment) {
             if password.isEmpty, !slot.isEmpty {
+                // The theme's glow from the letters alone, then the halo around both.
                 Text(slot).font(font(14, "regular")).foregroundStyle(style.quiet(on: fieldSurface))
+                    .shadow(color: glowColor, radius: auth.glow ?? 0)
+                    .legibilityHalo(style)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -539,8 +543,8 @@ struct AuthPanel: View {
                 .accessibilityLabel("Password")
                 // The drawn note is hidden: VoiceOver hears the wait, or "Wrong Password", on the field.
                 .accessibilityHint(note ?? "")
+                .shadow(color: glowColor, radius: auth.glow ?? 0)
         }
-        .shadow(color: glowColor, radius: auth.glow ?? 0)
     }
 
     @ViewBuilder private var field: some View {
@@ -561,8 +565,10 @@ struct AuthPanel: View {
             HStack(spacing: 0) {
                 Text(auth.prompt ?? "\(user.login)@\(user.host) ~ % ").font(font(14, "regular")).foregroundStyle(style.color("accent"))
                     .shadow(color: glowColor, radius: auth.glow ?? 0)
+                    .legibilityHalo(style)
                 Text("unlock ").font(font(14, "regular")).foregroundStyle(style.color("fg"))
                     .shadow(color: glowColor, radius: auth.glow ?? 0)
+                    .legibilityHalo(style)
                 secureField(slot: note ?? placeholderText).frame(width: width * 0.6)
             }
         case "minimal":
@@ -665,8 +671,8 @@ extension LockyStyle {
     /// The palette's muted color, lifted toward fg where it would not reach 4.5:1 on `surface` (a palette role or a
     /// color) over the screen's bg, or on bg alone when nil: the field's placeholder, the status line, the glance
     /// hint, and the message. The backdrop it must read on has 12% of fg over it, a margin: the pill's glass renders
-    /// lighter than the palette's surface, and the scrim leaves part of the scene. Lifted to 4.5:1 on the palette
-    /// alone, Tokyo Night's placeholder read 3.7:1 on its glass.
+    /// lighter than the palette's surface, and the halo leaves part of the scene at its edge. Lifted to 4.5:1 on the
+    /// palette alone, Tokyo Night's placeholder read 3.7:1 on its glass.
     func quiet(on surface: String?) -> Color {
         guard let muted = palette["muted"], let fg = palette["fg"], let bg = palette["bg"] else { return color("muted") }
         var layers = [bg]
@@ -689,22 +695,33 @@ struct GlanceHint: View {
             .font(style.font(size: 13 * auth.size / 14, weight: auth.font.weight ?? "medium", design: auth.font.design,
                              family: auth.font.family, mono: false, italic: false))
             .foregroundStyle(style.quiet(on: nil))
+            .legibilityHalo(style)
     }
 }
 
-/// The theme's bg behind the password stack, its message, and the glance hint: 70% over its inner half, gone at the
-/// edge. Where the scene matches its palette it does not show; over one that does not (bright snow under light
-/// text), it pulls the scene toward the bg that `Contrast.readable` measures the text against. A fade from the
-/// center leaves too little behind text near the stack's ends: Snowfall's status line read 3.5:1 at 70%.
-struct LegibilityScrim: View {
-    let color: Color
+/// The theme's bg close around the lock screen's text, so it reads on any scene without sampling it: each letter sits
+/// on the bg that `Contrast.readable` measured its color against, from one end of the widest line to the other. Where
+/// the scene matches its palette it does not show, Matrix's rain and Notebook's lines included. It takes the place of
+/// an area scrim, which dimmed those scenes around the field, showed as a dark oval on others, and left the ends of a
+/// long line on the scene (Snowfall's ⌃⌥⌘Q line read 3.6:1 there).
+struct LegibilityHalo: ViewModifier {
+    let style: LockyStyle
 
-    var body: some View {
-        EllipticalGradient(stops: [.init(color: color.opacity(0.7), location: 0.5), .init(color: color.opacity(0), location: 1)],
-                           center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+    func body(content: Content) -> some View {
+        let color = style.palette["bg"].flatMap { NSColor(hex: $0)?.withAlphaComponent(1) }.map { Color(nsColor: $0) } ?? .black
+        let s = style.scale
+        // Two tight passes outline the letters, the third fills their insides, the last feathers the edge.
+        content
+            .shadow(color: color, radius: s)
+            .shadow(color: color, radius: s)
+            .shadow(color: color, radius: 2 * s)
+            .shadow(color: color.opacity(0.6), radius: 5 * s)
     }
+}
+
+extension View {
+    /// The palette's bg close around this text: see LegibilityHalo.
+    func legibilityHalo(_ style: LockyStyle) -> some View { modifier(LegibilityHalo(style: style)) }
 }
 
 enum StyleWeights {

@@ -25,5 +25,6 @@ struct LockMessage: View {
                          family: auth.font.family, mono: false, italic: false))
         .foregroundStyle(style.quiet(on: nil))
         .multilineTextAlignment(auth.hintAlign == "leading" ? .leading : .center)
+        .legibilityHalo(style)
     }
 }
