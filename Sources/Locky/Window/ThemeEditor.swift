@@ -223,6 +223,7 @@ private struct UnloadableTheme: View {
     let problem: ConfigProblem
     /// Why the editor did not open, if it did not.
     @State private var openError: String?
+    @FocusState private var focused: Bool
 
     var body: some View {
         ContentUnavailableView {
@@ -242,6 +243,12 @@ private struct UnloadableTheme: View {
                 if let openError { WarningLabel(openError) }
             }
         }
+        // Nothing here takes the keyboard by itself, as the canvas does: this view does, so Esc reaches the page and
+        // ends Customize. On the next turn, once the view that had it is gone.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($focused)
+        .onAppear { DispatchQueue.main.async { focused = true } }
     }
 }
 

@@ -310,6 +310,23 @@ import Testing
         #expect(page.model.editingTheme == nil)
     }
 
+    /// A theme that does not load has no canvas: why it does not load holds the keyboard, so Esc still ends Customize.
+    @Test func escapeEndsCustomizeForAThemeThatDoesNotLoad() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/broken.lua", "error('broken')")
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.customize("broken")
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1240, height: 780), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: ThemesPage(model: model))
+        model.refresh()
+        #expect(await wait(window) { model.inspection.theme("broken")?.error != nil && window.firstResponder !== window })
+        window.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                          context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
+                                          keyCode: 53)!)
+        #expect(await wait(window) { model.editingTheme == nil })
+    }
+
     /// After an inspector row selects an item, the keys reach the canvas, here from the page itself, which has the
     /// keyboard after the gallery's grid had it.
     @Test func escapeWorksAfterAnInspectorRowSelects() async throws {
