@@ -53,7 +53,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.makeFirstResponder(nil)
     }
 
+    /// A text field that has the keyboard, such as the lock screen message, saves first: it saves when focus leaves.
     func windowWillClose(_ notification: Notification) {
+        window?.makeFirstResponder(nil)
         onClose()
     }
 }

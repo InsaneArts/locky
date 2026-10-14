@@ -67,6 +67,34 @@ import Testing
         #expect(welcome.frame.width > 0 && abs(welcome.frame.midX - screen.visibleFrame.midX) < 1)
     }
 
+    /// The Message field saves when focus leaves it, and closing the window is one way focus leaves.
+    @Test func theMessageSavesWhenTheSettingsWindowCloses() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        // AppDelegate keeps the controller, the window's delegate.
+        let controller = SettingsWindowController(model: model, onClose: {})
+        let window = try #require(controller.window)
+        func field(in view: NSView) -> NSTextField? {
+            if let field = view as? NSTextField, field.isEditable { return field }
+            return view.subviews.lazy.compactMap(field(in:)).first
+        }
+        var message: NSTextField?
+        #expect(await wait {
+            window.contentView?.layoutSubtreeIfNeeded()
+            message = field(in: window.contentView!)
+            return message != nil
+        })
+        let editing = try #require(message)
+        #expect(window.makeFirstResponder(editing))
+        let editor = try #require(editing.currentEditor() as? NSTextView)
+        editor.insertText("Call 555", replacementRange: NSRange(location: 0, length: 0))
+        // As a person types: the text reaches the page before the window closes.
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.store.settings["message"].isNil)
+        window.performClose(nil)
+        #expect(await wait { model.store.settings["message"] == .string("Call 555") })
+    }
+
     /// Any process can send a size with a request: NaN or infinity would reach AppKit, which traps on it, and a frame
     /// past Int32's range raises an exception that quits Locky.
     @Test(arguments: [("1300x800", CGSize(width: 1300, height: 800)), ("nanxinf", nil), ("0x640", nil), ("-980x640", nil), ("980", nil),
