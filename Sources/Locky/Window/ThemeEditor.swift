@@ -85,7 +85,7 @@ struct ThemeEditorPage: View {
     /// The canvas, in the space the inspector leaves; for a theme that does not load, why.
     @ViewBuilder private var content: some View {
         if let error = info.error {
-            ContentUnavailableView("Can't Edit This Theme", systemImage: "exclamationmark.triangle", description: Text(error))
+            UnloadableTheme(model: model, problem: ConfigProblem(error, config: model.store.config))
         } else {
             ThemePreview(theme: info.id, settings: draft ?? model.store.settings, sources: model.inspection.sources,
                          config: model.store.config, alwaysLive: model.screenshots, canvas: canvas, info: info)
@@ -213,6 +213,34 @@ struct ThemeEditorPage: View {
             try model.trash(info.id)
         } catch {
             problem = ("Can't Move the Theme to the Trash", error.localizedDescription)
+        }
+    }
+}
+
+/// A theme that does not load: why, in the words Lua Config uses, and Open at the file and line the error names.
+private struct UnloadableTheme: View {
+    let model: AppModel
+    let problem: ConfigProblem
+    /// Why the editor did not open, if it did not.
+    @State private var openError: String?
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Can't Edit This Theme", systemImage: "exclamationmark.triangle")
+        } description: {
+            if let file = problem.file, let line = problem.line {
+                Text("\(problem.message)\n\(file.lastPathComponent), line \(line)")
+            } else {
+                Text(problem.message)
+            }
+        } actions: {
+            if let file = problem.file, let line = problem.line {
+                Button("Open") { openError = model.open(file, line: line) }
+                    // The editors are found once, before the first Open: until then no editor is known, and Open waits.
+                    .disabled(model.editors == nil)
+                    .task { await model.findEditors() }
+                if let openError { WarningLabel(openError) }
+            }
         }
     }
 }

@@ -11,6 +11,8 @@ struct ThemeGallery: View {
     @State private var problem: ImportProblem?
     /// Why Move to Trash left a theme where it was, for its alert.
     @State private var trashError: String?
+    /// Why the editor did not open at the error of the theme in use, if it did not.
+    @State private var openError: String?
     @State private var gridWidth: CGFloat = 0
     @FocusState private var gridFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -98,9 +100,10 @@ struct ThemeGallery: View {
     private var header: some View {
         let id = model.activeTheme
         let info = model.inspection.theme(id)
-        // Why Customize… is dimmed: the theme's error, as its tile's tooltip gives it, or that no theme has the id, such
-        // as after its file was deleted in Finder.
-        let problem: String? = if let info { info.error.map { LuaError($0).summary } } else { "Locky has no theme named “\(id)”." }
+        // Why Customize… is dimmed: the theme's error, in the words Lua Config uses, or that no theme has the id, such as
+        // after its file was deleted in Finder.
+        let problem: ConfigProblem? = if let info { info.error.map { ConfigProblem($0, config: model.store.config) } }
+            else { ConfigProblem("Locky has no theme named “\(id)”.", config: model.store.config) }
         return HStack(alignment: .center, spacing: 24) {
             preview(id, info: info)
                 .aspectRatio(1.6, contentMode: .fit)
@@ -118,9 +121,19 @@ struct ThemeGallery: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     if let problem {
-                        WarningLabel(problem)
-                            .lineLimit(3)
-                            .textSelection(.enabled)
+                        HStack(spacing: 8) {
+                            WarningLabel(problem.message)
+                                .lineLimit(3)
+                                .textSelection(.enabled)
+                            if let file = problem.file, let line = problem.line {
+                                Button("Open") { openError = model.open(file, line: line) }
+                                    .buttonStyle(.link)
+                                    // The editors are found once, before the first Open: until then Open waits.
+                                    .disabled(model.editors == nil)
+                                    .task { await model.findEditors() }
+                            }
+                        }
+                        if let openError { WarningLabel(openError) }
                     } else if let description = info?.description {
                         Text(description)
                             .foregroundStyle(.secondary)
@@ -141,6 +154,8 @@ struct ThemeGallery: View {
             }
             Spacer(minLength: 0)
         }
+        // An editor that did not open belongs to the theme it was asked for.
+        .onChange(of: id) { openError = nil }
     }
 
     /// The live lock screen of `id`. `info` is set after the initializer, so this call does not depend on where

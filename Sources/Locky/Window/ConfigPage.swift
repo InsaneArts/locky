@@ -16,7 +16,8 @@ struct ConfigPage: View {
     private var file: URL { model.store.config.appending(path: "init.lua") }
 
     var body: some View {
-        let problems = Self.rows(model.inspection.problems, config: model.store.config)
+        // A theme that does not load is a problem too, after the config's own.
+        let problems = Self.rows(model.inspection.problems + model.inspection.themes.compactMap(\.error), config: model.store.config)
         Form {
             Section {
                 LabeledContent {
