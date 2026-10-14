@@ -88,9 +88,9 @@ import Testing
         #expect(Contrast.ratio(text, backdrop) >= 4.5)
     }
 
-    /// The glass and the scrim leave text on something lighter than the palette: the quiet color keeps 4.5:1 with 12%
-    /// of fg over the palette's backdrop. Tokyo Night's muted color needs the lift on its pill and on the screen; a
-    /// short fg ("#ccc") lifts it the same way.
+    /// The glass and the halo's edge leave text on something lighter than the palette: the quiet color keeps 4.5:1
+    /// with 12% of fg over the palette's backdrop. Tokyo Night's muted color needs the lift on its pill and on the
+    /// screen; a short fg ("#ccc") lifts it the same way.
     @Test(arguments: [("#c0caf5", nil), ("#c0caf5", "surface"), ("#ccc", nil)] as [(String, String?)])
     func theQuietColorKeepsAMarginOverThePalette(fg: String, surface: String?) throws {
         let palette = ["bg": "#1a1b26", "fg": fg, "muted": "#565f89", "surface": "#24283bcc"]

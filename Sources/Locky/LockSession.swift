@@ -162,7 +162,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             touchIDPicture = true
         }
 
-        // A check that hangs leaves the field disabled: the lock then names ⌃⌥⌘Q, in its own row, and VoiceOver says it.
+        // A check that hangs leaves the field disabled: the lock then names ⌃⌥⌘Q in its own row, and VoiceOver says it.
         authModel.onSlowCheck = { [weak self] in
             guard let self else { return }
             screens.first?.needsLayout = true
@@ -1253,8 +1253,8 @@ final class LockScreenView: NSView {
         return CGRect(x: kept.minX, y: y, width: size.width, height: size.height).integral
     }
 
-    /// The ⌃⌥⌘Q line: under the message, or under the field without one there, when there is room; else above the field,
-    /// or above the message when that sits there. Lined up as the message is.
+    /// The ⌃⌥⌘Q line: under the message, or under the field without one there, when there is room; else above the
+    /// field, or above the message when that sits there. Lined up as the message is.
     func wayOutFrame(size: CGSize, message: CGRect, scale: CGFloat) -> CGRect {
         let gap = 14 * scale, spacing = 4 * scale
         guard let field = auth?.view.frame, let spec = auth?.spec, authSize.width > 0 else {

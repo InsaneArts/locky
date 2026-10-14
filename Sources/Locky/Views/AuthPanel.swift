@@ -58,8 +58,8 @@ final class AuthModel {
     @ObservationIgnored var onSlowCheck: () -> Void = {}
     /// Whole seconds left in the wait before the next try (0: none). Waits outlast the lock: see PasswordAttempts.
     private(set) var waitLeft = 0
-    /// A wait has disabled the field in this lock: one after its wrong passwords, or one that a count carried over from an
-    /// earlier lock (after ⌃⌥⌘Q, or a relaunch) starts, at once or at this lock's first wrong password.
+    /// A wait has disabled the field in this lock: one after its wrong passwords, or one that a count carried over from
+    /// an earlier lock (after ⌃⌥⌘Q, or a relaunch) starts, at once or at this lock's first wrong password.
     private(set) var waited = false
     /// The user the field shows; privacy mode can change it while the field stays.
     var user = Auth.User(name: "", login: "user", host: "mac", picture: nil)
