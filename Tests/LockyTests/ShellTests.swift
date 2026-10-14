@@ -488,10 +488,24 @@ import Testing
         var schedule = ThemeSchedule(mode: .time)
         schedule.day = "default"
         schedule.night = "matrix"
-        #expect(schedule.summary(inspection) == "Day: Aurora from 07:00 · Night: Matrix from 19:00")
+        let britain = Locale(identifier: "en_GB")
+        #expect(schedule.summary(inspection, locale: britain) == "Day: Aurora from 07:00 · Night: Matrix from 19:00")
         schedule.mode = .appearance
         schedule.light = "default"
-        #expect(schedule.summary(inspection) == "Light: Aurora · Dark: the usual theme")
+        #expect(schedule.summary(inspection, locale: britain) == "Light: Aurora · Dark: the usual theme")
+    }
+
+    /// The times read as the Mac's clock reads them, as the Schedule popover's time pickers show them.
+    @Test func aTwelveHourClockReadsTheScheduleInItsOwnWay() {
+        let america = Locale(identifier: "en_US")
+        // ICU puts a narrow no-break space before AM and PM.
+        let morning = ThemeSchedule.time(7 * 60, locale: america), evening = ThemeSchedule.time(19 * 60, locale: america)
+        #expect(morning.hasPrefix("7:00") && morning.hasSuffix("AM") && evening.hasPrefix("7:00") && evening.hasSuffix("PM"))
+        var schedule = ThemeSchedule(mode: .time)
+        schedule.day = "default"
+        #expect(schedule.summary(Inspection(), locale: america) == "Day: default from \(morning) · Night: the usual theme from \(evening)")
+        // settings.json keeps its own 24-hour form.
+        #expect(ThemeSchedule.clock(19 * 60) == "19:00")
     }
 
     @Test func aValueInitLuaAlreadyGivesIsNoKey() {

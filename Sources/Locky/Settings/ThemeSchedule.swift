@@ -72,15 +72,29 @@ struct ThemeSchedule: Equatable, Sendable {
     }
 
     /// "Day: Aurora from 07:00 · Night: Matrix from 19:00", or "Light: Aurora · Dark: Matrix". A slot with no theme
-    /// reads "the usual theme".
-    func summary(_ inspection: Inspection) -> String {
+    /// reads "the usual theme". The times read as the Mac's clock reads them, as the Schedule popover's do: "7:00 PM"
+    /// with a 12-hour clock.
+    func summary(_ inspection: Inspection, locale: Locale = .current, calendar: Calendar = .current) -> String {
         let name = { (id: String?) in id.flatMap { inspection.theme($0)?.name ?? $0 } ?? "the usual theme" }
+        let time = { (minutes: Int) in Self.time(minutes, locale: locale, calendar: calendar) }
         switch mode {
         case .time:
-            return "Day: \(name(day)) from \(Self.clock(dayStarts)) · Night: \(name(night)) from \(Self.clock(nightStarts))"
+            return "Day: \(name(day)) from \(time(dayStarts)) · Night: \(name(night)) from \(time(nightStarts))"
         case .appearance:
             return "Light: \(name(light)) · Dark: \(name(dark))"
         }
+    }
+
+    /// Minutes after midnight in `locale`'s short time style, as the popover's time pickers show them: "19:00", or
+    /// "7:00 PM". `clock(_:)` is settings.json's form.
+    static func time(_ minutes: Int, locale: Locale = .current, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: calendar.date(bySettingHour: (minutes / 60) % 24, minute: minutes % 60, second: 0, of: .now) ?? .now)
     }
 
     private func isDay(at date: Date, calendar: Calendar) -> Bool {
