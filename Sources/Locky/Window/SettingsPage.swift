@@ -8,13 +8,20 @@ import SwiftUI
 /// Hide personal information is the exception, and stores on all the same.
 struct SettingsPage: View {
     let model: AppModel
-    /// The intruder photos, newest first. A screenshot run shows none.
-    @State private var photos: [(url: URL, date: Date)] = []
+    /// The intruder photos, newest first. They are read before the first frame, so the pane opens with them.
+    @State private var photos: [(url: URL, date: Date)]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(model: AppModel) {
+        self.model = model
+        _photos = State(initialValue: Self.photos(for: model))
+    }
 
     private var store: SettingsStore { model.store }
 
     var body: some View {
+        // The Photos group comes and goes at once: the grouped Form cannot slide the rows below a whole group, and
+        // cross-fades the whole pane instead.
         Form {
             if let problem = store.problem {
                 Section {
@@ -39,12 +46,16 @@ struct SettingsPage: View {
         }
         .formStyle(.grouped)
         .animation(Motion.rows(reduceMotion), value: store.problem)
-        .animation(Motion.rows(reduceMotion), value: photos.count)
         .task(id: model.revision) { loadPhotos() }
     }
 
     private func loadPhotos() {
-        photos = model.screenshots ? [] : IntruderLog().photos()
+        photos = Self.photos(for: model)
+    }
+
+    /// The photos to show. A screenshot run shows none.
+    private static func photos(for model: AppModel) -> [(url: URL, date: Date)] {
+        model.screenshots ? [] : IntruderLog().photos()
     }
 
     private func delete(_ photo: URL) {
