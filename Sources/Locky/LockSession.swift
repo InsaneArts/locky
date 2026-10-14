@@ -627,9 +627,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// The theme on every screen: the password field first (it must never wait), then backgrounds and widgets.
     private func buildScreens(_ started: LuaRuntime.Started) {
         let theme = started.theme
-        let light = (NSColor(hex: theme.palette["bg"] ?? "#000000")?.usingColorSpace(.sRGB)).map {
-            0.2126 * $0.redComponent + 0.7152 * $0.greenComponent + 0.0722 * $0.blueComponent > 0.5
-        } ?? false
+        let light = Design.isLight(theme.palette["bg"])
         windows.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) }
         if mode == .embedded { screens.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) } }
         // Under the theme's field until the scene shows: its own bg, as a lock's first frame has it.
