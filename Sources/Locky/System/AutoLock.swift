@@ -104,9 +104,10 @@ final class AutoLock: NSObject {
         super.init()
     }
 
-    /// Starts and stops the triggers to match `settings`. The same settings again change nothing, and the idle
-    /// count goes on through changes that leave idle_minutes alone.
+    /// Starts and stops the triggers to match `settings`, as `listened` reads them. The same settings again change
+    /// nothing, and the idle count goes on through changes that leave idle_minutes alone.
     func apply(_ settings: AutoLockSettings) {
+        let settings = Self.listened(settings)
         guard settings != self.settings else { return }
         if settings.idleMinutes != self.settings?.idleMinutes {
             idleCheck?.cancel()
@@ -136,6 +137,17 @@ final class AutoLock: NSObject {
             distributed.addObserver(self, selector: #selector(screenSaverDidStart), name: Self.screenSaverStarted, object: nil,
                                     suspensionBehavior: .deliverImmediately)
         }
+    }
+
+    /// The triggers `apply` listens for. The windows show display sleep and the screen saver as one switch, as macOS
+    /// treats them as one moment, so either key stored turns on both: this adds a trigger and never removes one.
+    nonisolated static func listened(_ settings: AutoLockSettings) -> AutoLockSettings {
+        var settings = settings
+        if settings.displaySleep || settings.screenSaver {
+            settings.displaySleep = true
+            settings.screenSaver = true
+        }
+        return settings
     }
 
     @objc private nonisolated func screenSaverDidStart(_: Notification) {
