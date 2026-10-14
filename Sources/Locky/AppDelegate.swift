@@ -36,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                                          lock: { [weak self] reason in self?.lock(because: reason) })
     /// While Settings records a new shortcut, the old one stays free so the recorder sees the keys.
     private var recordingShortcut = false
+    /// The menu that opened last: a pop-up or context menu in a window, the status menu, or the menu bar.
+    private weak var trackedMenu: NSMenu?
 
     /// A second launch's request to this one: its arguments, as the command line gave them.
     static let request = Notification.Name("com.tornikegomareli.Locky.request")
@@ -54,6 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         NSWindow.allowsAutomaticWindowTabbing = false
         // First: the shortcut below gives Lock Now its key, and a launch-time lock clears the menus.
         MainMenu.install(in: NSApp)
+        NotificationCenter.default.addObserver(self, selector: #selector(menuDidBeginTracking(_:)), name: NSMenu.didBeginTrackingNotification,
+                                               object: nil)
         try? Settings.createFolder(store.config)
         if !Self.isTool { store.migrateMenuTheme() }
         store.watch()
@@ -287,6 +291,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc func openSettings(_ sender: Any?) { showWindow(SettingsWindowController.lastPane) }
     @objc func openWelcome(_ sender: Any?) { showWindow(.welcome) }
 
+    /// AppKit names the root menu of the menu that opens: the menu bar, or the menu a pop-up button or a right click shows.
+    @objc private func menuDidBeginTracking(_ notification: Notification) { trackedMenu = notification.object as? NSMenu }
+
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {
         guard session == nil else { return }
         if mode == .lock { model.locked = true }
@@ -297,9 +304,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         // equivalent and no service can act. The lock's end builds the menus again. macOS 26 ignores servicesMenu once it is
         // set, nil included: taking the main menu away is what puts Services out of reach.
         if mode == .lock {
-            // A menu that is open as the lock starts closes first: nothing in it may be chosen behind the lock.
+            // A menu that is open as the lock starts closes first: it would take the keys typed at the lock, and Return would
+            // choose its highlighted item behind the lock.
             NSApp.mainMenu?.cancelTracking()
             statusItem?.menu?.cancelTracking()
+            trackedMenu?.cancelTracking()
             NSApp.mainMenu = nil
             NSApp.servicesMenu = nil
         }
