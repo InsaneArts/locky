@@ -7,7 +7,7 @@ minus what [plugins.md](plugins.md#the-rules-that-keep-the-lock-screen-safe) lis
 
 | | |
 |---|---|
-| `locky.setup(opts)` | Merges `opts` into `locky.config`: `theme`, `background`, `palette`, `widgets`, `hour24` (`true` or `false` forces a 24- or 12-hour clock in every theme), and `privacy` (`true`: `locky.sys.user()` and `locky.sys.hostname()` return generic names, `locky.herdr` gives each agent its kind as the title and no workspace, and the password field shows no name or picture; widgets that show other personal data should check `locky.config.privacy`), and `message` (a line under the password field, such as "If found, call ..."; it stays visible while a theme hides the field). A value of the wrong type is an error. The Locky window's settings.json applies before init.lua and again after the plugin scripts, so it wins. |
+| `locky.setup(opts)` | Merges `opts` into `locky.config`: `theme`, `background`, `palette`, `widgets`, `hour24` (`true` or `false` forces a 24- or 12-hour clock in every theme), and `privacy` (`true`: `locky.sys.user()` and `locky.sys.hostname()` return generic names, `locky.herdr` gives each agent its kind as the title and no workspace, and the password field shows no name or picture; widgets that show other personal data should check `locky.config.privacy`), and `message` (a line under the password field, such as "If found, call ..."; it stays visible while a theme hides the field). A value of the wrong type is an error. settings.json, which the Themes and Settings windows write, applies before init.lua and again after the plugin scripts, so it wins. |
 | `locky.config` | The current settings. Read-only once `init.lua` has run: a plugin script, theme, or widget that writes it (or calls `locky.setup`) gets an error. |
 | `locky.version` | Locky's version. |
 
@@ -15,7 +15,7 @@ minus what [plugins.md](plugins.md#the-rules-that-keep-the-lock-screen-safe) lis
 
 | | |
 |---|---|
-| `locky.widget.define(name, spec)` | Defines a widget. `spec`: `render(self)` (required), `init(self)`, `opts`, `size = { w, h }`, `card`, `description`, and `choices` (the values an option takes, such as `{ style = { "list", "dots" } }`: the Locky window's editor offers them in a menu). Names may contain letters, digits, `_`, `-`, and `.`; a package prefixes its own, such as `"synthwave.sun"`. |
+| `locky.widget.define(name, spec)` | Defines a widget. `spec`: `render(self)` (required), `init(self)`, `opts`, `size = { w, h }`, `card`, `description`, and `choices` (the values an option takes, such as `{ style = { "list", "dots" } }`: Customize offers them in a menu). Names may contain letters, digits, `_`, `-`, and `.`; a package prefixes its own, such as `"synthwave.sun"`. |
 | `locky.widget.get(name)`, `locky.widget.list()` | A definition; all names. |
 
 Inside `init` and `render`, `self` is the widget instance:

@@ -174,7 +174,7 @@ function Widget:log(...) end
 ---@field opts table?
 ---@field size number[]? { width, height }; without it the widget fits its content.
 ---@field card boolean? Sit on the theme's card unless the theme says otherwise.
----@field choices table<string, string[]>? The values an option takes, for the Locky window's editor.
+---@field choices table<string, string[]>? The values an option takes, for Customize.
 ---@field description string?
 
 ---@class locky.SystemOpts

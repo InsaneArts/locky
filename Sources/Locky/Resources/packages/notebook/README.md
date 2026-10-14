@@ -13,7 +13,7 @@ locky.setup({ theme = "notebook" })
 - `notebook.todo`: your to-do list from `~/todo.txt` ([todo.txt format](https://github.com/todotxt/todo.txt): `x `
   marks a task done, `(A) ` gives it a priority) or from a Markdown file's `- [ ]` task lines. Open tasks come first,
   by priority; done ones last, ticked in red. Read again every minute. Without the file it shows how to start one.
-  Privacy mode shows only how many tasks are left. Options: `path`, `rows`, `title`, `width`.
+  With Hide personal information on, it shows only how many tasks are left. Options: `path`, `rows`, `title`, `width`.
 
   ```lua
   locky.setup({ widgets = { ["notebook.todo"] = { path = "~/notes/today.md" } } })

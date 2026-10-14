@@ -116,7 +116,7 @@ local function require_grant(capability, what, level)
     end
     local granted = grants[lower(name)]
     if not (granted and granted[capability]) then
-      error(("%s: plugin %q may not %s. To allow it, turn on %s for it on the Plugins page, or add allow = { %q } to its locky.pack.add entry in init.lua")
+      error(("%s: plugin %q may not %s. To allow it, turn on %s for it in Settings › Plugins, or add allow = { %q } to its locky.pack.add entry in init.lua")
         :format(what, name, words[1], words[2], capability), level + 1)
     end
   end
@@ -835,7 +835,7 @@ end
 ---   size          optional: { width, height } in points; without it the widget fits its content
 ---   card          optional: true to sit on the theme's card unless the theme says otherwise
 ---   families      optional: the families it draws, such as { "circular", "small" }; render reads self.family
----   choices       optional: the values an option takes, for the Locky window's editor, such as
+---   choices       optional: the values an option takes, for Customize, such as
 ---                 { style = { "list", "dots" } }
 ---   description   optional
 function locky.widget.define(name, spec)
@@ -1083,7 +1083,7 @@ local function read_theme(name)
   return theme
 end
 
--- The Locky window's changes to themes, from settings.json: { [name] = { background = {...}, widgets = {...} } }.
+-- Customize's changes to themes, from settings.json: { [name] = { background = {...}, widgets = {...} } }.
 local settings_themes = {}
 
 local function placement_name(placement)
@@ -1238,7 +1238,7 @@ end
 -- Themes being derived, so a theme that derives from itself fails instead of looping.
 local deriving = {}
 
---- A theme made in the Locky window (Duplicate Theme, Import Theme): theme `base` with `def.edits` applied in
+--- A theme made in the Themes window (Duplicate Theme, Import Theme): theme `base` with `def.edits` applied in
 --- order, each a change as settings.json's themes.<name> holds one, and `def.name` as its name. The changes' widget
 --- options become the theme's own, so init.lua's merge over them. See docs/themes.md.
 function locky.theme.derive(base, def)
@@ -1426,7 +1426,7 @@ local function pack_spec(spec)
   return { name = name, src = src, version = spec.version, dir = spec.dir and locky.fs.expand(spec.dir), allow = allow }
 end
 
--- `from` is "settings" for the Locky window's packages (settings.json) and "config" for init.lua's.
+-- `from` is "settings" for Settings › Plugins' packages (settings.json) and "config" for init.lua's.
 local function add_packs(specs, from, level)
   for _, spec in ipairs(specs) do
     local normalized = pack_spec(spec)

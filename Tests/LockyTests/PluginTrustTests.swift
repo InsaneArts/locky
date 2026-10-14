@@ -117,8 +117,8 @@ import Testing
         let problems = runtime(sandbox).bootForTest()
         #expect(problems.count == 1)
         #expect(problems.first?.contains("""
-            plugin/evil.lua:1: locky.system: plugin "evil" may not run programs. To allow it, turn on Run programs for it on \
-            the Plugins page, or add allow = { "system" } to its locky.pack.add entry in init.lua
+            plugin/evil.lua:1: locky.system: plugin "evil" may not run programs. To allow it, turn on Run programs for it in \
+            Settings › Plugins, or add allow = { "system" } to its locky.pack.add entry in init.lua
             """) == true, "\(problems)")
 
         try thirdParty(["plugin/evil.lua": "locky.system({ 'true' })"], allow: "'system'", in: sandbox)
@@ -159,7 +159,7 @@ import Testing
         #expect(try String(contentsOfFile: path, encoding: .utf8) == "y")
     }
 
-    /// settings.json's packages (the Plugins page) grant the same way.
+    /// settings.json's packages (Settings › Plugins) grant the same way.
     @Test func settingsJsonGrants() throws {
         let sandbox = try Sandbox()
         try thirdParty(["plugin/evil.lua": "locky.system({ 'true' })"], in: sandbox)
@@ -287,7 +287,7 @@ import Testing
         #expect(specs.map(\.grants) == ["may run programs, may not change files", "may not run programs, may not change files", "your own folder, no limits"])
     }
 
-    /// The Plugins page's checkboxes write the plugin's settings.json entry.
+    /// Settings › Plugins' switches write the plugin's settings.json entry.
     @Test func togglesWriteTheSettingsEntry() {
         let granted = PackSpec.allowing("system", true, in: .string("a/b"))
         #expect(granted == .table(["src": .string("a/b"), "allow": .array([.string("system")])]))
