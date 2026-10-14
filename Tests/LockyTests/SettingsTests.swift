@@ -949,6 +949,11 @@ import Testing
         let long = String(repeating: "a", count: 250)
         SettingsPage.setMessage(long, base: .string(long), in: &settings)
         #expect(settings["message"].isNil)
+        // A cut that ends in a space reads the same the second time, so the field's second save stores no key either.
+        let spaced = String(repeating: "a", count: 199) + " " + String(repeating: "b", count: 50)
+        #expect(SettingsPage.messageText(SettingsPage.messageText(spaced)) == SettingsPage.messageText(spaced))
+        SettingsPage.setMessage(SettingsPage.messageText(spaced), base: .string(spaced), in: &settings)
+        #expect(settings["message"].isNil)
         // Empty still hides init.lua's message, and init.lua's message again is no key.
         SettingsPage.setMessage("", base: .string("Call 555 "), in: &settings)
         #expect(settings["message"] == .string(""))

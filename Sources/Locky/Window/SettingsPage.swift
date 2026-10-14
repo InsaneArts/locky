@@ -99,9 +99,10 @@ struct SettingsPage: View {
         settings["privacy"] = if on { .bool(true) } else if base == .bool(true) { .bool(false) } else { .nil }
     }
 
-    /// The lock screen message as the lock reads it: trimmed, 200 characters at most.
+    /// The lock screen message as the lock reads it: trimmed, 200 characters at most. Whitespace that the cut leaves at
+    /// the end goes too, so the text reads the same the second time.
     nonisolated static func messageText(_ text: String) -> String {
-        String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The Message field's save. init.lua's message is read as the lock reads it, so its own message stores no key, also
