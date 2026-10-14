@@ -37,8 +37,9 @@ cannot do.
 
 - **FileVault and the login window stay Apple's.** Locky does not replace the login window or FileVault's
   unlock at startup. Disk encryption is FileVault's job.
-- **Keep macOS's own screen lock on.** If macOS also asks for your password after the display turns off, you may
-  unlock twice after a long lock. Leave it on anyway: it protects the Mac whenever Locky is not running.
+- **Locky does not change macOS's own password setting.** If macOS also asks for your password after the
+  display turns off, you may unlock twice after a long lock. Keep that setting on anyway: it protects the Mac
+  whenever Locky is not running.
 - **Plugins are code that runs as you.** Like Neovim plugins, they can read your files and run programs.
   The limits in [plugins.md](plugins.md#the-rules-that-keep-the-lock-screen-safe) stop bugs from breaking
   the lock screen; they are not a sandbox against a hostile plugin. Install only plugins you trust.
