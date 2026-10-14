@@ -255,6 +255,8 @@ struct WidgetGallerySheet: View {
             .padding(.vertical, 12)
         }
         .frame(width: 760, height: 560)
+        // Esc where Cancel has no shortcut: a card has the keyboard (Keyboard navigation) and the search field has text.
+        .onExitCommand { dismiss() }
         // The runtime runs the widgets of every group, whatever the search: it never restarts on a keystroke.
         .task(id: "\(theme.id)#\(model.revision)") {
             gallery.start(widgets: groups.flatMap(\.widgets), settings: model.store.settings, config: model.store.config,
