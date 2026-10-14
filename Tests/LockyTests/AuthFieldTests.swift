@@ -331,8 +331,18 @@ import Testing
         let before = screen.wayOut?.view.frame.height ?? -1
         try await change(model)
         screen.needsLayout = true
-        try await Task.sleep(for: .milliseconds(100))
+        await shows(screen)
         return (before, screen.wayOut?.view.frame.height ?? -1)
+    }
+
+    /// Lays the screen out until the way out has a height, for up to a second. Under a full test run's load, the
+    /// off-screen window's own layout pass can come too late for a fixed wait.
+    private func shows(_ screen: LockScreenView) async {
+        let deadline = Date().addingTimeInterval(1)
+        repeat {
+            try? await Task.sleep(for: .milliseconds(20))
+            screen.layoutSubtreeIfNeeded()
+        } while (screen.wayOut?.view.frame.height ?? 0) <= 0 && Date() < deadline
     }
 
     /// Aurora's field ends 56 points over the bottom: a one-line message fits under it, the way out under that does
@@ -347,7 +357,7 @@ import Testing
         #expect(before.minY == field.maxY + 14 && before.height > 0)
         for _ in 0..<3 { model.failed() }
         screen.needsLayout = true
-        try await Task.sleep(for: .milliseconds(100))
+        await shows(screen)
         let wayOut = try #require(screen.wayOut?.view.frame)
         #expect(screen.message?.view.frame == before)
         #expect(wayOut.height > 0 && wayOut.maxY == field.minY - 14 && abs(wayOut.midX - field.midX) <= 1)
@@ -363,7 +373,7 @@ import Testing
         defer { window.orderOut(nil) }
         for _ in 0..<3 { model.failed() }
         screen.needsLayout = true
-        try await Task.sleep(for: .milliseconds(100))
+        await shows(screen)
         let field = try #require(screen.auth?.view.frame), message = try #require(screen.message?.view.frame)
         let wayOut = try #require(screen.wayOut?.view.frame)
         #expect(message.minY == field.maxY + 14)
