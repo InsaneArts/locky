@@ -707,8 +707,8 @@ private struct NumberField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 3) {
-            if let label { Text(label).font(.caption).foregroundStyle(.secondary) }
+        HStack(spacing: 4) {
+            if let label { Text(label).font(.callout).foregroundStyle(.secondary) }
             TextField(label ?? "", text: $text)
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
