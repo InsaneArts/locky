@@ -240,10 +240,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menu.addItem(note)
             menu.addItem(.separator())
         }
-        let lock = item("Lock Now", #selector(lockNow(_:)))
-        // The registered shortcut: one that another app holds is not registered, so it does not show.
-        MainMenu.setKeyEquivalent(hotkeys.shortcut, on: lock)
-        menu.addItem(lock)
+        // Its key equivalent comes from validateMenuItem, as Locky › Lock Now's does.
+        menu.addItem(item("Lock Now", #selector(lockNow(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Themes…", #selector(openThemes(_:))))
         menu.addItem(item("Settings…", #selector(openSettings(_:)), key: ","))
@@ -253,7 +251,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     /// During a lock no window may open: the items that open one are dimmed, in the status menu and the main menu.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        switch menuItem.action {
+        // Both Lock Now items show the registered shortcut, read as their menu opens: the key's character follows the
+        // keyboard layout. A shortcut that another app holds is not registered, so it does not show.
+        if menuItem.action == #selector(lockNow(_:)) { MainMenu.setKeyEquivalent(hotkeys.shortcut, on: menuItem) }
+        return switch menuItem.action {
         case #selector(openThemes(_:)), #selector(openSettings(_:)), #selector(openWelcome(_:)): session?.mode != .lock
         default: true
         }
