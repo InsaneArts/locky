@@ -6,7 +6,7 @@ import SwiftUI
 
 /// One locked (or previewed) screen: a window per display, the Lua runtime, and the way out.
 ///
-/// The password field never waits for Lua: it appears with the shield, in the last theme's style (or the
+/// The password field never waits for Lua: it appears with the shield, in the last lock's style (or the
 /// fallback's), and takes the theme's style when the theme arrives, if nothing has been typed yet.
 @MainActor
 final class LockSession: NSObject, NSWindowDelegate {
@@ -90,7 +90,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     private(set) var photos: [URL] = []
     private var capturing: Task<Void, Never>?
 
-    /// The last theme's password field look, so the next lock's field appears in it at once.
+    /// The last lock's password field look, so the next lock's shield and field appear in it at once.
     private static var lastLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec)?
     /// The last lock's palette, kept across launches as lastPrivacy is: the first lock after a relaunch starts in its
     /// bg, not black.
@@ -98,7 +98,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         get { UserDefaults.standard.dictionary(forKey: "lastPalette") as? [String: String] }
         set { UserDefaults.standard.set(newValue, forKey: "lastPalette") }
     }
-    /// The shield and the field until the theme arrives: the last theme's look, or after a relaunch its palette with
+    /// The shield and the field until the theme arrives: the last lock's look, or after a relaunch its palette with
     /// the fallback's field.
     private static var firstLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec) {
         lastLook ?? (Theme.fallback.auth, lastPalette ?? Theme.fallback.palette, Theme.fallback.font)
@@ -445,7 +445,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     private func openWindows() {
-        // From the first frame, the last theme's bg: the scene fades in over it.
+        // From the first frame, the last lock's bg: the scene fades in over it.
         let palette = Self.firstLook.palette
         let backdrop = Self.backdrop(palette)
         switch mode {
@@ -599,13 +599,11 @@ final class LockSession: NSObject, NSWindowDelegate {
             // The field may already hold typing: change the name it shows, not the field.
             authModel.user = Auth.user(privacy: privacy)
         }
-        if mode != .embedded {
+        if mode != .embedded, options.remembers { Self.lastPrivacy = started.privacy }
+        // A preview's theme may not be the one the next lock shows: only a lock sets the next one's first frame.
+        if mode == .lock {
             Self.lastLook = (theme.auth, theme.palette, theme.font)
-            if options.remembers {
-                Self.lastPrivacy = started.privacy
-                // A preview's theme may not be the one the next lock shows.
-                if mode == .lock { Self.lastPalette = theme.palette }
-            }
+            if options.remembers { Self.lastPalette = theme.palette }
         }
         buildScreens(started)
         startTouchID()
@@ -630,7 +628,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         } ?? false
         windows.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) }
         if mode == .embedded { screens.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) } }
-        // Under the theme's field until the scene shows: its own bg, as the next lock's first frame has it.
+        // Under the theme's field until the scene shows: its own bg, as a lock's first frame has it.
         let backdrop = Self.backdrop(theme.palette)
         windows.forEach { $0.backgroundColor = backdrop }
         screens.forEach { $0.layer?.backgroundColor = backdrop.cgColor }
