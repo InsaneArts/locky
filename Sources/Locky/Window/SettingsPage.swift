@@ -256,7 +256,7 @@ private struct LockScreenSection: View {
                 store.update { SettingsPage.setPrivacy(on, base: model.inspection.base["privacy"], in: &$0) }
             })) {
                 Text("Hide personal information")
-                Text("Your name and picture, this Mac's name and location, network addresses, and what you are working on.")
+                Text("Your name and picture, this Mac's name and location, network addresses, and project and task names.")
             }
             // Only while locked and nobody touches the Mac; it turns the display off even when the system's display
             // sleep is Never or another app keeps the display on.
