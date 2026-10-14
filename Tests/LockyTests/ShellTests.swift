@@ -328,6 +328,55 @@ import Testing
         #expect(controller.validateMenuItem(inspector) && inspector.title == "Hide Inspector")
     }
 
+    /// Customize shows why a theme does not load, and takes only Move to Trash for it: the menu offers no more. Use Theme
+    /// would make it the theme a lock uses.
+    @Test func aThemeThatDoesNotLoadTakesOnlyMoveToTrash() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/broken.lua", "error('broken')")
+        let model = await loaded(sandbox)
+        model.store.update { $0["themes"] = .table(["broken": .table(["widgets": .array([])])]) }
+        let controller = LockyWindowController(model: model, onClose: {})
+        func enabled(_ action: Selector) -> Bool { controller.validateMenuItem(NSMenuItem(title: "", action: action, keyEquivalent: "")) }
+        typealias Commands = LockyWindowController
+        model.customize("broken")
+        #expect(model.inspection.theme("broken")?.error != nil)
+        for action in [#selector(Commands.useTheme(_:)), #selector(Commands.previewTheme(_:)), #selector(Commands.duplicateTheme(_:)),
+                       #selector(Commands.exportTheme(_:)), #selector(Commands.revertTheme(_:)), #selector(Commands.addWidget(_:)),
+                       #selector(Commands.toggleGrid(_:)), #selector(Commands.toggleInspector(_:))] {
+            #expect(!enabled(action), "\(action)")
+        }
+        #expect(enabled(#selector(Commands.trashTheme(_:))))
+        // The gallery's Preview shows the theme in use.
+        model.finishEditing()
+        #expect(enabled(#selector(Commands.previewTheme(_:))))
+    }
+
+    /// A window with a sheet over it, as the Themes window has while Add Widget or an alert shows. (A real sheet over a
+    /// window that is not on screen runs modally and never returns.)
+    private final class WindowUnderASheet: NSWindow {
+        let over = NSWindow()
+        var covered = true
+        override var attachedSheet: NSWindow? { covered ? over : nil }
+    }
+
+    /// A sheet over the window holds the theme commands until it closes.
+    @Test func aSheetHoldsTheThemeCommands() async throws {
+        let sandbox = try Sandbox()
+        let model = await loaded(sandbox)
+        let controller = LockyWindowController(model: model, onClose: {})
+        let window = WindowUnderASheet(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
+        controller.window = window
+        func enabled(_ action: Selector) -> Bool { controller.validateMenuItem(NSMenuItem(title: "", action: action, keyEquivalent: "")) }
+        typealias Commands = LockyWindowController
+        model.customize("default")
+        for action in [#selector(Commands.importTheme(_:)), #selector(Commands.useTheme(_:)), #selector(Commands.previewTheme(_:)),
+                       #selector(Commands.duplicateTheme(_:)), #selector(Commands.exportTheme(_:)), #selector(Commands.addWidget(_:))] {
+            #expect(!enabled(action), "\(action)")
+        }
+        window.covered = false
+        #expect(enabled(#selector(Commands.duplicateTheme(_:))) && enabled(#selector(Commands.addWidget(_:))))
+    }
+
     // MARK: Plugins
 
     /// Updating one plugin keeps every other plugin's Update….

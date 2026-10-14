@@ -104,33 +104,48 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuI
     @objc func toggleInspector(_ sender: Any?) { Self.flip(Self.inspectorKey, default: true) }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        // A sheet over the window, such as Add Widget or an alert, holds the window until it closes: a theme command would
+        // act under it, or wait behind it.
+        if window?.attachedSheet != nil, menuItem.action.map(Self.themeCommands.contains) == true { return false }
         let editing = model.editingTheme
         // A theme command needs a theme that the config's read lists. Until the read does, Customize shows a spinner, and
         // an id from a request may name no theme at all.
         let listed = editing.flatMap { model.inspection.theme($0) == nil ? nil : $0 }
+        // Customize edits only a theme that loads: for one that does not, it shows why, and only Move to Trash applies.
+        let loads = listed.flatMap { model.inspection.theme($0)?.error == nil ? $0 : nil }
         switch menuItem.action {
         case #selector(customizeTheme(_:)):
             return editing == nil && model.inspection.loaded && model.inspection.theme(model.activeTheme).map { $0.error == nil } == true
         case #selector(useTheme(_:)):
-            return listed != nil && listed != model.activeTheme
+            return loads != nil && loads != model.activeTheme
+        case #selector(previewTheme(_:)):
+            // The gallery previews the theme in use.
+            return editing == nil || loads != nil
         case #selector(duplicateTheme(_:)), #selector(addWidget(_:)):
-            return listed != nil
+            return loads != nil
         case #selector(exportTheme(_:)):
-            return listed.map { model.canExport($0) } == true
+            return loads.map { model.canExport($0) } == true
         case #selector(revertTheme(_:)):
-            return listed.map { !model.store.settings["themes"][$0].isNil } == true
+            return loads.map { !model.store.settings["themes"][$0].isNil } == true
         case #selector(trashTheme(_:)):
             return listed.map { model.canTrash($0) } == true
         case #selector(toggleGrid(_:)):
             menuItem.title = Self.isOn(Self.gridKey, default: false) ? "Hide Grid" : "Show Grid"
-            return editing != nil
+            return loads != nil
         case #selector(toggleInspector(_:)):
             menuItem.title = Self.isOn(Self.inspectorKey, default: true) ? "Hide Inspector" : "Show Inspector"
-            return editing != nil
+            return loads != nil
         default:
             return true
         }
     }
+
+    /// The commands that act on a theme, which wait while a sheet is over the window.
+    private static let themeCommands: Set<Selector> = [
+        #selector(importTheme(_:)), #selector(customizeTheme(_:)), #selector(useTheme(_:)), #selector(previewTheme(_:)),
+        #selector(duplicateTheme(_:)), #selector(exportTheme(_:)), #selector(revertTheme(_:)), #selector(trashTheme(_:)),
+        #selector(addWidget(_:)),
+    ]
 
     private static let gridKey = "themeEditorGrid"
     private static let inspectorKey = "customizeInspector"
