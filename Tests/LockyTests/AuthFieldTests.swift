@@ -41,10 +41,16 @@ import Testing
         #expect(AuthPanel.note(waitLeft: waitLeft, wrongShown: wrongShown) == text)
     }
 
-    /// VoiceOver hears the wait with the wrong password, since the field refuses keys until it ends.
-    @Test(arguments: [(0, "Wrong Password"), (1, "Wrong Password. Try again in 1 second"), (300, "Wrong Password. Try again in 5 minutes")])
-    func announcement(waitLeft: Int, text: String) {
-        #expect(AuthPanel.announcement(waitLeft: waitLeft) == text)
+    /// VoiceOver hears the wait with the wrong password, since the field refuses keys until it ends, and the way out
+    /// with the wrong password that makes the lock name it.
+    @Test(arguments: [
+        (0, false, "Wrong Password"), (1, false, "Wrong Password. Try again in 1 second"),
+        (300, false, "Wrong Password. Try again in 5 minutes"),
+        (1, true, "Wrong Password. Try again in 1 second. Press Control-Option-Command-Q to switch to the macOS lock screen"),
+        (0, true, "Wrong Password. Press Control-Option-Command-Q to switch to the macOS lock screen"),
+    ])
+    func announcement(waitLeft: Int, wayOut: Bool, text: String) {
+        #expect(AuthPanel.announcement(waitLeft: waitLeft, wayOut: wayOut) == text)
     }
 
     @Test(arguments: [

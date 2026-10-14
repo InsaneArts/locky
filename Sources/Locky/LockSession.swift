@@ -162,8 +162,12 @@ final class LockSession: NSObject, NSWindowDelegate {
             touchIDPicture = true
         }
 
-        // A check that hangs leaves the field disabled: the lock then names ⌃⌥⌘Q, in its own row.
-        authModel.onSlowCheck = { [weak self] in self?.screens.first?.needsLayout = true }
+        // A check that hangs leaves the field disabled: the lock then names ⌃⌥⌘Q, in its own row, and VoiceOver says it.
+        authModel.onSlowCheck = { [weak self] in
+            guard let self else { return }
+            screens.first?.needsLayout = true
+            if mode == .lock, emergencyExit { AccessibilityNotification.Announcement(AuthPanel.wayOut).post() }
+        }
 
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
         openWindows()
@@ -549,7 +553,7 @@ final class LockSession: NSObject, NSWindowDelegate {
                                   self?.wrongPassword()
                               },
                               onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded,
-                              touchIDPicture: touchIDPicture)
+                              touchIDPicture: touchIDPicture, exit: mode == .lock && emergencyExit)
         screen.auth = (NSHostingView(rootView: panel), spec)
     }
 

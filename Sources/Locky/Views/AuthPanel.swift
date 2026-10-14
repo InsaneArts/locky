@@ -305,6 +305,8 @@ struct AuthPanel: View {
     var interactive = true
     /// Previews without Touch ID on a Mac that has it: the glyph shows as a picture, where the lock shows the live one.
     var touchIDPicture = false
+    /// The lock offers ⌃⌥⌘Q (settings.json's emergency_exit): VoiceOver hears it when the lock names it.
+    var exit = false
 
     private var password: String {
         get { model.password }
@@ -345,9 +347,14 @@ struct AuthPanel: View {
         return wrongShown ? "Wrong Password" : nil
     }
 
-    /// What VoiceOver says after a wrong password: the wait too, once there is one, since the field then refuses keys.
-    static func announcement(waitLeft: Int) -> String {
-        note(waitLeft: waitLeft, wrongShown: false).map { "Wrong Password. \($0)" } ?? "Wrong Password"
+    /// The way out as VoiceOver says it, with the keys' names in place of their symbols.
+    static let wayOut = "Press Control-Option-Command-Q to switch to the macOS lock screen"
+
+    /// What VoiceOver says after a wrong password: the wait too, once there is one, since the field then refuses keys,
+    /// and the way out when this wrong password makes the lock name it.
+    static func announcement(waitLeft: Int, wayOut: Bool = false) -> String {
+        let text = note(waitLeft: waitLeft, wrongShown: false).map { "Wrong Password. \($0)" } ?? "Wrong Password"
+        return wayOut ? "\(text). \(Self.wayOut)" : text
     }
 
     /// The line under the field says how to unlock, unless the field's placeholder says it already. nil: no text
@@ -597,8 +604,10 @@ struct AuthPanel: View {
                 model.succeeded()
                 unlock()
             } else {
+                let named = model.stuck
                 model.failed()
-                AccessibilityNotification.Announcement(Self.announcement(waitLeft: model.waitLeft)).post()
+                let wayOut = exit && !named && model.stuck
+                AccessibilityNotification.Announcement(Self.announcement(waitLeft: model.waitLeft, wayOut: wayOut)).post()
                 failed()
                 focused = true
             }

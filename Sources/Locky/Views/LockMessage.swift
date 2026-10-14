@@ -17,6 +17,7 @@ struct LockMessage: View {
             if let text { Text(text).lineLimit(3) }
             if exit, model?.stuck == true {
                 Text("Press ⌃⌥⌘Q to switch to the macOS lock screen")
+                    .accessibilityLabel(AuthPanel.wayOut)
             }
         }
         .font(style.font(size: 13 * auth.size / 14, weight: auth.font.weight ?? "medium",
