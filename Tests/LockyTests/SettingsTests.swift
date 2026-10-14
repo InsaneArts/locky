@@ -940,6 +940,27 @@ import Testing
         #expect(settings["privacy"] == .bool(true))
     }
 
+    /// The field reads init.lua's message as the lock does, so its own message stores no key even with a space after it
+    /// or past 200 characters, and the row can always go back to no key.
+    @Test func theMessageStoresNoKeyForInitLuasOwn() {
+        var settings = Settings()
+        SettingsPage.setMessage("Call 555", base: .string("Call 555 "), in: &settings)
+        #expect(settings["message"].isNil)
+        let long = String(repeating: "a", count: 250)
+        SettingsPage.setMessage(long, base: .string(long), in: &settings)
+        #expect(settings["message"].isNil)
+        // Empty still hides init.lua's message, and init.lua's message again is no key.
+        SettingsPage.setMessage("", base: .string("Call 555 "), in: &settings)
+        #expect(settings["message"] == .string(""))
+        SettingsPage.setMessage("Call 555", base: .string("Call 555 "), in: &settings)
+        #expect(settings["message"].isNil)
+        // Without a message in init.lua, empty is no key, and a message is stored as the lock shows it.
+        SettingsPage.setMessage("", base: .nil, in: &settings)
+        #expect(settings["message"].isNil)
+        SettingsPage.setMessage("  Call me  ", base: .nil, in: &settings)
+        #expect(settings["message"] == .string("Call me"))
+    }
+
     /// On is stored, so an init.lua that fails before its locky.setup still hides the name.
     @Test func privacyOnOutlivesABrokenInitLua() async throws {
         let sandbox = try Sandbox()

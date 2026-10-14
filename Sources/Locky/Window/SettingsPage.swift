@@ -96,6 +96,19 @@ struct SettingsPage: View {
         settings["privacy"] = if on { .bool(true) } else if base == .bool(true) { .bool(false) } else { .nil }
     }
 
+    /// The lock screen message as the lock reads it: trimmed, 200 characters at most.
+    nonisolated static func messageText(_ text: String) -> String {
+        String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+    }
+
+    /// The Message field's save. init.lua's message is read as the lock reads it, so its own message stores no key, also
+    /// with spaces around it or past 200 characters. An empty message over init.lua's stores "", which hides it.
+    nonisolated static func setMessage(_ text: String, base: LuaValue, in settings: inout Settings) {
+        let value = messageText(text), baseText = base.string.map(messageText)
+        settings.setLuaValue("message", value.isEmpty && (baseText ?? "").isEmpty ? .nil : .string(value),
+                             base: baseText.map(LuaValue.string) ?? .nil)
+    }
+
     /// A stored time as its pop-up's whole number, rounded up: a billion at most, so no number in the file can stop the pane.
     nonisolated static func whole(_ value: Double?) -> Int? {
         value.map { Int(min($0.rounded(.up), 1e9)) }
@@ -260,13 +273,11 @@ private struct MessageField: View {
     }
 
     private func save() {
-        let value = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        let value = SettingsPage.messageText(text)
         text = value
-        guard value != saved else { return }
-        // init.lua's own message stores no key. Cleared while init.lua has one, an empty message hides it; cleared
-        // without one, it is no key at all.
-        let base = model.inspection.base["message"]
-        model.store.update { $0.setLuaValue("message", value.isEmpty && (base.string ?? "").isEmpty ? .nil : .string(value), base: base) }
+        // Focus that leaves without an edit writes nothing.
+        guard value != SettingsPage.messageText(saved) else { return }
+        model.store.update { SettingsPage.setMessage(value, base: model.inspection.base["message"], in: &$0) }
     }
 }
 
