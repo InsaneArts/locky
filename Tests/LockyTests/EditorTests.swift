@@ -395,6 +395,21 @@ import Testing
         #expect(elements.filter { $0.isAccessibilitySelected() }.map(\.item) == [.widget(1)])
     }
 
+    /// VoiceOver outlines each item where it is drawn, and finds it there: the canvas is flipped, the screen is not.
+    @Test func voiceOverFindsEachItemWhereItIsDrawn() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.preview.editables.count == 3 })
+        let elements = try #require(page.overlay.accessibilityChildren() as? [CanvasItemElement])
+        let scale = page.overlay.bounds.width / ThemePreviewView.layoutSize.width
+        for element in elements {
+            let layout = try #require(frame(of: element.item, page))
+            let drawn = CGRect(x: layout.minX * scale, y: layout.minY * scale, width: layout.width * scale, height: layout.height * scale)
+            let onScreen = page.window.convertToScreen(page.overlay.convert(drawn, to: nil))
+            #expect(element.accessibilityFrame().contains(onScreen), "\(element.item)")
+            #expect(page.overlay.accessibilityHitTest(CGPoint(x: onScreen.midX, y: onScreen.midY)) as? CanvasItemElement === element, "\(element.item)")
+        }
+    }
+
     @Test func editDeleteRemovesTheSelectedWidgetOnly() async throws {
         let page = try await open()
         let delete = NSMenuItem(title: "Delete", action: #selector(CanvasOverlay.delete(_:)), keyEquivalent: "")

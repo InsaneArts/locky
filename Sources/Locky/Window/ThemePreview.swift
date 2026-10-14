@@ -539,7 +539,9 @@ final class CanvasOverlay: NSView {
         }
         for (element, editable) in zip(elements, items) {
             element.setAccessibilityLabel(canvas?.name(editable.item))
-            element.setAccessibilityFrameInParentSpace(viewRect(editable.frame))
+            // The parent's space starts at its bottom left, as the screen does, and this view is flipped.
+            let rect = viewRect(editable.frame)
+            element.setAccessibilityFrameInParentSpace(CGRect(x: rect.minX, y: bounds.height - rect.maxY, width: rect.width, height: rect.height))
         }
         return elements
     }
