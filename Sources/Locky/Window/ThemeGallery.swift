@@ -191,10 +191,11 @@ struct ThemeGallery: View {
     }
 
     /// The theme an arrow key moves to from `id`: the next one that loads in that direction, a row away for up and
-    /// down. nil past either end. Left and right swap for a right-to-left layout, which starts on the right.
+    /// down. nil past either end. Left and right swap for a right-to-left layout, which starts on the right. When no
+    /// tile is `id`, such as a theme whose file was deleted, a step forward finds the first theme that loads and a step
+    /// back the last, as a list with no selection does.
     static func neighbor(of id: String, in themes: [Inspection.ThemeInfo], columns: Int, direction: MoveCommandDirection,
                          rightToLeft: Bool) -> String? {
-        guard var index = themes.firstIndex(where: { $0.id == id }) else { return nil }
         let step = switch direction {
         case .left: rightToLeft ? 1 : -1
         case .right: rightToLeft ? -1 : 1
@@ -203,6 +204,9 @@ struct ThemeGallery: View {
         @unknown default: 0
         }
         guard step != 0 else { return nil }
+        guard var index = themes.firstIndex(where: { $0.id == id }) else {
+            return step > 0 ? themes.first { $0.error == nil }?.id : themes.last { $0.error == nil }?.id
+        }
         repeat {
             index += step
             guard themes.indices.contains(index) else { return nil }

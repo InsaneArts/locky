@@ -78,7 +78,19 @@ import Testing
         #expect(neighbor("haze", .right) == nil && neighbor("haze", .down) == nil)
         // No theme under Fog: the last row is short.
         #expect(neighbor("fog", .down) == nil)
-        #expect(neighbor("gone", .right) == nil)
+    }
+
+    /// No tile is in use, such as when the theme's file was deleted: a step forward finds the first theme that loads, and
+    /// a step back the last, as a list with no selection does.
+    @Test func anArrowWithNoThemeInUseStartsAtAnEnd() {
+        #expect(neighbor("gone", .right) == "aurora" && neighbor("gone", .down) == "aurora")
+        #expect(neighbor("gone", .left) == "haze" && neighbor("gone", .up) == "haze")
+        #expect(neighbor("gone", .left, rightToLeft: true) == "aurora" && neighbor("gone", .right, rightToLeft: true) == "haze")
+        // Event Horizon does not load, at either end.
+        let ends = [themes[4], themes[0], themes[1], themes[4]]
+        #expect(ThemeGallery.neighbor(of: "gone", in: ends, columns: 3, direction: .right, rightToLeft: false) == "aurora")
+        #expect(ThemeGallery.neighbor(of: "gone", in: ends, columns: 3, direction: .left, rightToLeft: false) == "bauhaus")
+        #expect(ThemeGallery.neighbor(of: "gone", in: [themes[4]], columns: 3, direction: .down, rightToLeft: false) == nil)
     }
 
     @Test func aThemeThatDoesNotLoadIsSkipped() {
