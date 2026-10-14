@@ -68,7 +68,8 @@ struct PluginsPage: View {
             // Plain, not destructive: the person chose Remove… on purpose.
             Button("Remove") { remove(pack) }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!canChange)
+                // A run can start while the alert is open, such as the daily check.
+                .disabled(isBusy || !canChange)
         } message: { pack in
             Text(Self.removal(pack))
         }
@@ -175,6 +176,8 @@ struct PluginsPage: View {
     }
 
     private func remove(_ pack: Inspection.PackInfo) {
+        // runPack ignores a second run: the entry would go and the folder stay.
+        guard model.packRunning == nil else { return }
         model.store.update { settings in
             settings.packs.removeAll { PackSpec.name(of: $0)?.lowercased() == pack.name.lowercased() }
         }
