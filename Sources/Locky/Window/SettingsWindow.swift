@@ -42,8 +42,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         if !opened {
             opened = true
             window.center()
-            tabs.place(window, window.frame, in: (window.screen ?? NSScreen.main)?.visibleFrame, animate: false)
         }
+        // The screen can have changed since the last open, as when the window moved from a short screen to a tall one.
+        tabs.fit(window, animate: false)
         if behind {
             window.orderBack(nil)
         } else {
@@ -104,6 +105,14 @@ final class SettingsTabViewController: NSTabViewController {
         window.setFrame(fitted, display: true, animate: animate)
     }
 
+    /// Gives the window the selected pane's size with its top edge where it was, fitted to its screen.
+    func fit(_ window: NSWindow, animate: Bool) {
+        guard let pane = (tabViewItems[selectedTabViewItemIndex].identifier as? String).flatMap(AppModel.Section.init(rawValue:)) else { return }
+        var frame = window.frameRect(forContentRect: CGRect(origin: .zero, size: Self.size(of: pane)))
+        frame.origin = CGPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        place(window, frame, in: (window.screen ?? NSScreen.main)?.visibleFrame, animate: animate)
+    }
+
     func select(_ pane: AppModel.Section) {
         if let index = tabViewItems.firstIndex(where: { $0.identifier as? String == pane.rawValue }) { selectedTabViewItemIndex = index }
     }
@@ -127,11 +136,7 @@ final class SettingsTabViewController: NSTabViewController {
         super.tabView(tabView, didSelect: tabViewItem)
         guard let window = view.window, let pane = (tabViewItem?.identifier as? String).flatMap(AppModel.Section.init(rawValue:)) else { return }
         window.title = pane.title
-        let old = window.frame
-        var frame = window.frameRect(forContentRect: CGRect(origin: .zero, size: Self.size(of: pane)))
-        frame.origin = CGPoint(x: old.minX, y: old.maxY - frame.height)
-        place(window, frame, in: (window.screen ?? NSScreen.main)?.visibleFrame,
-              animate: window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        fit(window, animate: window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         if !AppDelegate.isTool { UserDefaults.standard.set(pane.rawValue, forKey: Self.paneKey) }
         window.makeFirstResponder(nil)
     }

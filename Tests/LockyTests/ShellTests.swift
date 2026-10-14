@@ -128,6 +128,28 @@ import Testing
         #expect(settings.contentRect(forFrameRect: settings.frame).height == 745)
     }
 
+    /// A window fitted to a short screen gets General's full height again when it opens again on a tall one.
+    @Test func reopeningOnATallScreenGivesGeneralItsHeight() async throws {
+        _ = NSApplication.shared
+        defer { UserDefaults.standard.removeObject(forKey: SettingsTabViewController.paneKey) }
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        let controller = SettingsWindowController(model: AppModel(store: SettingsStore(config: sandbox.config)), onClose: {})
+        let settings = try #require(controller.window)
+        let tabs = try #require(settings.contentViewController as? SettingsTabViewController)
+        controller.show(.settings, behind: true)
+        defer { settings.close() }
+        let full = settings.frameRect(forContentRect: CGRect(origin: .zero, size: SettingsTabViewController.size(of: .settings)))
+        // The real screen is the tall one, so it must hold the whole window.
+        try #require((settings.screen ?? NSScreen.main).map { $0.visibleFrame.height >= full.height } == true)
+        tabs.place(settings, settings.frame, in: CGRect(x: 0, y: 40, width: 1440, height: 600), animate: false)
+        #expect(settings.frame.height == 600)
+        settings.close()
+        controller.show(nil, behind: true)
+        settings.contentView?.layoutSubtreeIfNeeded()
+        #expect(settings.contentRect(forFrameRect: settings.frame).height == 745)
+    }
+
     /// The Message field saves when focus leaves it, and closing the window is one way focus leaves.
     @Test func theMessageSavesWhenTheSettingsWindowCloses() async throws {
         let sandbox = try Sandbox()
