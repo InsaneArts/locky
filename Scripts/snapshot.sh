@@ -24,7 +24,7 @@ if [[ -z "${LOCKY_CONFIG_DIR:-}" ]]; then
   CONFIG=$(mktemp -d)
   echo '{ "privacy": true }' > "$CONFIG/settings.json"
 else
-  CONFIG=$LOCKY_CONFIG_DIR
+  CONFIG=$(cd "$LOCKY_CONFIG_DIR" && pwd)
 fi
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \
   LOCKY_APPEARANCE="${APPEARANCE:-}" "$BIN" preview --theme "$THEME" --size "$SIZE" --behind >/dev/null 2>&1 &

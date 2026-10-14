@@ -28,7 +28,7 @@ if [[ -z "${LOCKY_CONFIG_DIR:-}" ]]; then
   CONFIG=$(mktemp -d)
   echo '{ "privacy": true }' > "$CONFIG/settings.json"
 else
-  CONFIG=$LOCKY_CONFIG_DIR
+  CONFIG=$(cd "$LOCKY_CONFIG_DIR" && pwd)
 fi
 ARGS=(window "$SECTION" --behind --size "${SIZE:-1240x780}")
 [[ -n "${3:-}" ]] && ARGS+=(--theme "$3")
