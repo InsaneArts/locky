@@ -169,8 +169,10 @@ struct ThemeGallery: View {
         // The ring, drawn in .selection, already shows whether the grid has focus.
         .focusEffectDisabled()
         .focused($gridFocused)
-        // An explicit assignment moves focus where .defaultFocus does not.
-        .onAppear { gridFocused = true }
+        // An explicit assignment moves focus where .defaultFocus does not. On the next turn of the run loop: when Customize
+        // ends, its canvas has the keyboard and leaves the window after this view appears, and AppKit then gives the
+        // keyboard to the window.
+        .onAppear { DispatchQueue.main.async { gridFocused = true } }
         .onMoveCommand { direction in
             guard let next = Self.neighbor(of: model.activeTheme, in: themes, columns: Self.columns(width: gridWidth),
                                            direction: direction, rightToLeft: layoutDirection == .rightToLeft) else { return }

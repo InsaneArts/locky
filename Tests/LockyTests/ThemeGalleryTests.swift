@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -106,5 +107,55 @@ import Testing
         #expect(neighbor("bauhaus", .left, rightToLeft: true) == "deepblue")
         #expect(neighbor("bauhaus", .right, rightToLeft: true) == "aurora")
         #expect(neighbor("aurora", .down, rightToLeft: true) == "dots")
+    }
+}
+
+/// The Themes window as Locky makes it, out of sight. The grid has the keyboard when the gallery shows, and again after
+/// Customize, whose canvas takes the keyboard and leaves the window after the gallery is back.
+@MainActor
+@Suite(.serialized) struct GalleryKeyboardTests {
+    private func wait(_ timeout: Double = 5, _ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        return condition()
+    }
+
+    private func press(_ window: NSWindow, _ code: UInt16, _ text: String, function: Bool = false) {
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            window.sendEvent(NSEvent.keyEvent(with: type, location: .zero, modifierFlags: function ? [.numericPad, .function] : [], timestamp: 0,
+                                              windowNumber: window.windowNumber, context: nil, characters: text,
+                                              charactersIgnoringModifiers: text, isARepeat: false, keyCode: code)!)
+        }
+    }
+
+    /// Whether the right arrow changes the theme in use, as it does while the grid has the keyboard.
+    private func rightArrowMoves(_ window: NSWindow, _ model: AppModel) async -> Bool {
+        let before = model.activeTheme
+        press(window, 124, String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), function: true)
+        return await wait(2) { model.activeTheme != before }
+    }
+
+    @Test(arguments: ["Done", "Escape"])
+    func theGridHasTheKeysAgainAfterCustomize(_ way: String) async throws {
+        _ = NSApplication.shared
+        let sandbox = try Sandbox()
+        try sandbox.write("settings.json", #"{ "privacy": true }"#)
+        let model = AppModel(store: SettingsStore(config: sandbox.config))
+        model.screenshots = true
+        model.refresh()
+        try #require(await wait(10) { model.inspection.loaded })
+        let controller = LockyWindowController(model: model, onClose: {})
+        let window = try #require(controller.window)
+        defer { window.close() }
+        try #require(await wait { window.firstResponder !== window })
+        #expect(await rightArrowMoves(window, model), "the grid takes the arrows before Customize")
+
+        model.customize(model.activeTheme)
+        try #require(await wait { window.firstResponder is CanvasOverlay })
+        if way == "Done" { model.finishEditing() } else { press(window, 53, "\u{1b}") }
+        #expect(model.editingTheme == nil)
+        #expect(await wait { window.firstResponder !== window && !(window.firstResponder is CanvasOverlay) },
+                "first responder: \(String(describing: window.firstResponder))")
+        #expect(await rightArrowMoves(window, model), "the grid takes the arrows after Customize")
     }
 }
