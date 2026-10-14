@@ -285,6 +285,12 @@ final class ThemePreviewView: NSView {
         if visible { advance() } else { endSessions() }
     }
 
+    /// While it is a canvas, VoiceOver finds the canvas's buttons here, not the live screen under them, whose password
+    /// field takes nothing.
+    override func accessibilityChildren() -> [Any]? {
+        canvas == nil ? super.accessibilityChildren() : [overlay]
+    }
+
     override func layout() {
         super.layout()
         let size = Self.layoutSize
@@ -543,7 +549,8 @@ final class CanvasOverlay: NSView {
             let rect = viewRect(editable.frame)
             element.setAccessibilityFrameInParentSpace(CGRect(x: rect.minX, y: bounds.height - rect.maxY, width: rect.width, height: rect.height))
         }
-        return elements
+        // As people read the screen: top to bottom, then left to right.
+        return zip(elements, items).sorted { ($0.1.frame.minY, $0.1.frame.minX) < ($1.1.frame.minY, $1.1.frame.minX) }.map(\.0)
     }
 
     /// VoiceOver pressed an item's button.

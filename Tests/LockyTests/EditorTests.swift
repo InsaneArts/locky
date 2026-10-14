@@ -410,6 +410,18 @@ import Testing
         }
     }
 
+    /// While it is a canvas, VoiceOver finds only the canvas's buttons there, top to bottom: the live screen under them
+    /// has a password field that takes nothing.
+    @Test func voiceOverReadsOnlyTheCanvasTopToBottom() async throws {
+        let page = try await open()
+        #expect(await wait(page.window) { page.preview.editables.count == 3 })
+        let children = try #require(page.preview.accessibilityChildren())
+        #expect(children.count == 1 && children.first as? CanvasOverlay === page.overlay)
+        let elements = try #require(page.overlay.accessibilityChildren() as? [CanvasItemElement])
+        // The box at the top right, the one in the center, and the password field at the bottom.
+        #expect(elements.map(\.item) == [.widget(1), .widget(0), .passwordField])
+    }
+
     @Test func editDeleteRemovesTheSelectedWidgetOnly() async throws {
         let page = try await open()
         let delete = NSMenuItem(title: "Delete", action: #selector(CanvasOverlay.delete(_:)), keyEquivalent: "")
