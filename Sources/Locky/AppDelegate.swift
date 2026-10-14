@@ -1,10 +1,10 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem!
     private var session: LockSession?
-    /// settings.json: what the menu and the window change.
+    /// settings.json: what the windows change.
     /// A screenshot run (`--behind`) or one against the source tree (LOCKY_RESOURCES): a tool, not the user's
     /// Locky. It starts no auto-lock, shortcut, or update checks, and leaves the user's last good settings, the
     /// remembered privacy, and the menu's old theme choice alone.
@@ -12,12 +12,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = SettingsStore(lastGood: isTool ? nil : SettingsStore.defaultLastGood)
     private lazy var model: AppModel = {
         let model = AppModel(store: store)
-        model.lockNow = { [weak self] in self?.lockNow() }
+        model.lockNow = { [weak self] in self?.lockNow(nil) }
         model.preview = { [weak self] theme in self?.preview(theme: theme) }
         model.recordingShortcut = { [weak self] recording in
             guard let self else { return }
             recordingShortcut = recording
-            if recording { hotkeys.unregister() } else { applyShortcut() }
+            if recording {
+                hotkeys.unregister()
+                MainMenu.setLockNowShortcut(nil)
+            } else {
+                applyShortcut()
+            }
         }
         return model
     }()
@@ -26,17 +31,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var settingsWindow: SettingsWindowController?
     private var welcomeWindow: WelcomeWindowController?
     /// The Lock Now shortcut, and auto-lock's triggers, both from settings.json.
-    private lazy var hotkeys = HotkeyCenter { [weak self] in self?.lockNow() }
+    private lazy var hotkeys = HotkeyCenter { [weak self] in self?.lockNow(nil) }
     private lazy var autoLock = AutoLock(isLocked: { [weak self] in self?.session?.mode == .lock },
                                          lock: { [weak self] reason in self?.lock(because: reason) })
     /// While Settings records a new shortcut, the old one stays free so the recorder sees the keys.
     private var recordingShortcut = false
-    /// The theme picked in the menu (settings.json's theme). It wins over init.lua's until "Use init.lua's
-    /// Theme" clears it.
-    private var pickedTheme: String? {
-        get { store.settings["theme"].string }
-        set { store.update { $0["theme"] = newValue.map(LuaValue.string) ?? .nil } }
-    }
+    /// The menu that opened last: a pop-up or context menu in a window, the status menu, or the menu bar.
+    private weak var trackedMenu: NSMenu?
 
     /// A second launch's request to this one: its arguments, as the command line gave them.
     static let request = Notification.Name("com.tornikegomareli.Locky.request")
@@ -53,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         // No tabs: the windows are a main window, a settings window, and the Welcome.
         NSWindow.allowsAutomaticWindowTabbing = false
+        // First: the shortcut below gives Lock Now its key, and a launch-time lock clears the menus.
+        MainMenu.install(in: NSApp)
+        NotificationCenter.default.addObserver(self, selector: #selector(menuDidBeginTracking(_:)), name: NSMenu.didBeginTrackingNotification,
+                                               object: nil)
         try? Settings.createFolder(store.config)
         if !Self.isTool { store.migrateMenuTheme() }
         store.watch()
@@ -100,6 +105,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func applyShortcut() {
         guard !recordingShortcut else { return }
+        // Locky › Lock Now shows the shortcut registered now, as the status menu does.
+        defer { MainMenu.setLockNowShortcut(hotkeys.shortcut) }
         guard let shortcut = store.settings.shortcut else {
             hotkeys.unregister()
             model.shortcutProblem = nil
@@ -116,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func lock(because reason: String) {
         LogFile.shared.write(level: "info", message: "auto-lock: \(reason)", source: "locky")
-        lockNow()
+        lockNow(nil)
     }
 
     /// Once a day, a minute after launch first, if settings.json's update_check is not off: fetch the plugins
@@ -223,52 +230,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !themesOrSettings, !staysOpen(welcomeWindow?.window) { NSApp.setActivationPolicy(.accessory) }
     }
 
-    /// Lock Now, a quick theme change, and the window: everything else is in the window.
+    /// Lock Now, the windows, and Quit.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         if let failure = ThemeFailure.current(.standard, inspection: model.inspection, config: store.config) {
-            let note = NSMenuItem(title: failure.summary(model.inspection), action: nil, keyEquivalent: "")
-            note.isEnabled = false
+            // The Themes window's banner has the whole message, and Open.
+            let note = item(failure.menuTitle(model.inspection), #selector(openThemes(_:)))
+            note.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
             menu.addItem(note)
             menu.addItem(.separator())
         }
-        menu.addItem(item("Lock Now", #selector(lockNow)))
+        // Its key equivalent comes from validateMenuItem, as Locky › Lock Now's does.
+        menu.addItem(item("Lock Now", #selector(lockNow(_:))))
         menu.addItem(.separator())
-
-        let themes = NSMenu()
-        if store.settings.schedule != nil {
-            let note = NSMenuItem(title: "The theme schedule picks the theme", action: nil, keyEquivalent: "")
-            note.isEnabled = false
-            themes.addItem(note)
-            themes.addItem(item("Change the Schedule…", #selector(openSettings)))
-            themes.addItem(.separator())
-        }
-        let follow = item("Use init.lua's Theme", #selector(followConfig))
-        follow.state = pickedTheme == nil ? .on : .off
-        themes.addItem(follow)
-        themes.addItem(.separator())
-        // By name once the window's model has read the themes; until then (a moment after launch), by id.
-        let listed = model.inspection.loaded ? model.inspection.themes.map { ($0.id, $0.name) } : Self.builtInThemeNames().map { ($0, $0) }
-        for (id, name) in listed.sorted(by: { $0.1.localizedStandardCompare($1.1) == .orderedAscending }) {
-            let entry = item(name, #selector(pickTheme(_:)))
-            entry.representedObject = id
-            entry.state = id == pickedTheme ? .on : .off
-            themes.addItem(entry)
-        }
-        menu.addItem(submenu("Theme", themes))
-        menu.addItem(item("Preview Theme", #selector(previewTheme)))
-        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
-        menu.addItem(item("Welcome…", #selector(openWelcome)))
+        menu.addItem(item("Themes…", #selector(openThemes(_:))))
+        menu.addItem(item("Settings…", #selector(openSettings(_:)), key: ","))
         menu.addItem(.separator())
         menu.addItem(item("Quit Locky", #selector(NSApplication.terminate(_:)), key: "q"))
     }
 
-    /// Themes in the config folder and the built-in runtime and packages.
-    static func builtInThemeNames() -> [String] {
-        RuntimePath.standard().findAll("themes", suffix: ".lua").map(\.name).sorted()
+    /// During a lock no window may open: the items that open one are dimmed, in the status menu and the main menu.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        // Both Lock Now items show the registered shortcut, read as their menu opens: the key's character follows the
+        // keyboard layout. A shortcut that another app holds is not registered, so it does not show.
+        if menuItem.action == #selector(lockNow(_:)) { MainMenu.setKeyEquivalent(hotkeys.shortcut, on: menuItem) }
+        return switch menuItem.action {
+        case #selector(openThemes(_:)), #selector(openSettings(_:)), #selector(openWelcome(_:)): session?.mode != .lock
+        default: true
+        }
     }
 
-    @objc private func lockNow() {
+    @objc func lockNow(_ sender: Any?) {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
         start(.lock, options: LockSession.Options(theme: scheduledTheme(), settings: store.settings))
@@ -290,27 +282,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         start(.preview, options: LockSession.Options(theme: theme ?? scheduledTheme(), settings: store.settings))
     }
 
+    /// The Themes window on the gallery, where the failed-theme banner shows.
+    @objc private func openThemes(_ sender: Any?) {
+        showWindow(.themes)
+        model.finishEditing()
+    }
+
     /// The Settings window on the pane it showed last.
-    @objc private func openSettings() { showWindow(SettingsWindowController.lastPane) }
-    @objc private func openWelcome() { showWindow(.welcome) }
-    /// A preview of the theme a lock would use now.
-    @objc private func previewTheme() { preview(theme: nil) }
+    @objc func openSettings(_ sender: Any?) { showWindow(SettingsWindowController.lastPane) }
+    @objc func openWelcome(_ sender: Any?) { showWindow(.welcome) }
 
-    @objc private func pickTheme(_ sender: NSMenuItem) {
-        pickedTheme = sender.representedObject as? String
-        restartPreview()
+    /// AppKit names the root menu of the menu that opens: the menu bar, or the menu a pop-up button or a right click shows.
+    /// During a lock, a menu that opens closes at once: a right click or VoiceOver's VO-Shift-M on the password field opens
+    /// the field's context menu, with Paste, above the lock. The close waits for the menu's first run loop pass: a cancel
+    /// inside this notification leaves the menu on screen.
+    @objc private func menuDidBeginTracking(_ notification: Notification) {
+        trackedMenu = notification.object as? NSMenu
+        if session?.mode == .lock, let trackedMenu {
+            perform(#selector(closeMenu(_:)), with: trackedMenu, afterDelay: 0, inModes: [.common])
+        }
     }
 
-    @objc private func followConfig() {
-        pickedTheme = nil
-        restartPreview()
-    }
-
-    private func restartPreview() {
-        guard session?.mode == .preview else { return }
-        session?.end("theme changed")
-        start(.preview, options: LockSession.Options(settings: store.settings))
-    }
+    @objc private func closeMenu(_ menu: NSMenu) { menu.cancelTrackingWithoutAnimation() }
 
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {
         guard session == nil else { return }
@@ -318,10 +311,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var options = options
         if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)
+        // While locked no menu item exists, so no key equivalent and no service can act: the main menu goes (a regular app
+        // gets an empty one from AppKit in place of nil), and a menu that opens during the lock closes at once
+        // (menuDidBeginTracking). The lock's end builds the menus again. macOS 26 ignores servicesMenu once it is set, nil
+        // included: taking the main menu away is what puts Services out of reach.
+        if mode == .lock {
+            // A menu that is open as the lock starts closes first: it would take the keys typed at the lock, and Return would
+            // choose its highlighted item behind the lock. No fade: a closing menu holds the keys back until it is gone.
+            NSApp.mainMenu?.cancelTrackingWithoutAnimation()
+            statusItem?.menu?.cancelTrackingWithoutAnimation()
+            trackedMenu?.cancelTrackingWithoutAnimation()
+            NSApp.mainMenu = nil
+            NSApp.servicesMenu = nil
+        }
         session.onEnd = { [weak self, weak session] in
             guard let self else { return }
             self.session = nil
-            if mode == .lock { model.locked = false }
+            if mode == .lock {
+                model.locked = false
+                MainMenu.install(in: NSApp)
+                MainMenu.setLockNowShortcut(hotkeys.shortcut)
+            }
             model.refresh()
             if mode == .lock { autoLock.noteUnlock() }
             // Someone typed wrong passwords and the camera caught them: show the photos.
@@ -338,12 +348,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = action == #selector(NSApplication.terminate(_:)) ? NSApp : self
-        return item
-    }
-
-    private func submenu(_ title: String, _ menu: NSMenu) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.submenu = menu
         return item
     }
 }
