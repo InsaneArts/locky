@@ -16,36 +16,43 @@ struct ThemeGallery: View {
     @FocusState private var gridFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    if let failure {
-                        FailureBanner(failure: failure, model: model, dismiss: dismissFailure)
-                            .transition(.opacity)
-                    }
-                    // Nothing saves settings.json while it has an error, so a click on a tile changes nothing.
-                    if model.store.problem != nil {
-                        HStack(spacing: 8) {
-                            WarningLabel("settings.json has an error, so the theme can't change.")
-                            Button("Open Settings") { model.openWindow(.settings) }
-                                .buttonStyle(.link)
+        // Under a schedule the theme in use follows the clock and the Mac's appearance, and SwiftUI observes neither:
+        // the timeline reads the page again each minute (a slot starts on the minute), and colorScheme when the
+        // appearance changes. So In Use, the preview, and the ring change with the slot while the window stays open.
+        let _ = colorScheme
+        TimelineView(.everyMinute) { _ in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 28) {
+                        if let failure {
+                            FailureBanner(failure: failure, model: model, dismiss: dismissFailure)
+                                .transition(.opacity)
+                        }
+                        // Nothing saves settings.json while it has an error, so a click on a tile changes nothing.
+                        if model.store.problem != nil {
+                            HStack(spacing: 8) {
+                                WarningLabel("settings.json has an error, so the theme can't change.")
+                                Button("Open Settings") { model.openWindow(.settings) }
+                                    .buttonStyle(.link)
+                            }
+                        }
+                        header
+                        if model.inspection.loaded {
+                            grid(proxy)
+                        } else {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(height: 120)
+                                .frame(maxWidth: .infinity)
                         }
                     }
-                    header
-                    if model.inspection.loaded {
-                        grid(proxy)
-                    } else {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(height: 120)
-                            .frame(maxWidth: .infinity)
-                    }
+                    .padding(24)
+                    .frame(maxWidth: 1280)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(24)
-                .frame(maxWidth: 1280)
-                .frame(maxWidth: .infinity)
             }
         }
         .toolbar {
