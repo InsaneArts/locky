@@ -68,17 +68,20 @@ import Testing
         #expect(PluginsPage.removal(both) == "init.lua also adds it, so it stays installed.")
     }
 
-    /// The update footer says "Up to date" only after a check that reached every plugin and found nothing newer. A
-    /// failed check keeps its results until the next check, so a later run that succeeds does not make it up to date.
-    @Test func upToDateNeedsACheckThatReachedEveryPlugin() {
+    /// The update footer says "Up to date" when every plugin the last check found is at its newest commit. A failed check
+    /// keeps its results until the next check, so a later run that succeeds does not make it up to date. (A check that
+    /// failed as a whole leaves no time, and the footer then says nothing.)
+    @Test func upToDateNeedsEveryPluginAtItsNewestCommit() {
         let old = "3f9c2a1b7d4e5f60718293a4b5c6d7e8f9a0b1c2", new = "8b1d0e4a9c7f6e5d4c3b2a1908f7e6d5c4b3a291"
         let current = PackUpdate(name: "locky-stars", current: old, latest: old)
+        let waiting = PackUpdate(name: "locky-transit", current: old, latest: new)
         #expect(PluginsPage.upToDate([current]))
-        #expect(!PluginsPage.upToDate([PackUpdate(name: "locky-stars", current: old, latest: new)]))
+        #expect(!PluginsPage.upToDate([waiting]))
         #expect(!PluginsPage.upToDate([current, PackUpdate(name: "locky-transit", current: old, error: "fetch failed")]))
-        // A check that failed as a whole, such as one that found another run holding the lock, lists no plugin.
-        #expect(!PluginsPage.upToDate([]))
         #expect(!PluginsPage.upToDate([PackUpdate(name: "locky-transit")]))
+        // Update… installed the last update the check found, for one plugin and for one of many.
+        #expect(PluginsPage.upToDate(AppModel.remaining([waiting], after: ["locky-transit"])))
+        #expect(PluginsPage.upToDate(AppModel.remaining([current, waiting], after: ["locky-transit"])))
     }
 
     /// A failed check shows the plugins it could not check: after another plugin's commits and diffstat, their lines

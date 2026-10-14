@@ -147,11 +147,11 @@ struct PluginsPage: View {
         }
     }
 
-    /// Whether the last check found every plugin it checked at its newest commit. A check that failed for one plugin,
-    /// or as a whole (it then lists none), never reads as up to date, whatever runs after it: its results stay until the
-    /// next check.
+    /// Whether every plugin the last check found is at its newest commit, also once Update… has installed the last one
+    /// it found. A check that failed for one plugin never reads as up to date, whatever runs after it: its results stay
+    /// until the next check. One that failed as a whole leaves no time (AppModel), so the footer says nothing of it.
     static func upToDate(_ updates: [PackUpdate]) -> Bool {
-        !updates.isEmpty && updates.allSatisfy { $0.error == nil && $0.latest != nil && $0.current == $0.latest }
+        updates.allSatisfy { $0.error == nil && $0.latest != nil && $0.current == $0.latest }
     }
 
     /// Whether a run works on `pack` now: the plugins it names, and for a sync, every git plugin not installed yet.

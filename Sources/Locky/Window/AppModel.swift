@@ -73,7 +73,8 @@ final class AppModel {
     private(set) var packReport: (action: PackManager.Action, report: PackManager.Report)?
     /// The plugins a run in progress works on, so each row knows its own spinner.
     private(set) var packTargets: Set<String> = []
-    /// The last update check's results, and when it ran.
+    /// The last update check's results, and when it ran. A check that failed as a whole reached no plugin: it leaves no
+    /// time, so nothing says when it ran or that the plugins are up to date.
     private(set) var updates: [PackUpdate] = []
     private(set) var lastUpdateCheck: Date?
     /// Packages with a newer commit upstream than the one pinned.
@@ -291,11 +292,10 @@ final class AppModel {
     }
 
     /// Fetches every plugin the lockfile pins and compares it with the pinned commit; changes nothing and runs no Lua.
-    func checkForUpdates(then done: (() -> Void)? = nil) {
+    func checkForUpdates() {
         runPack(.check, then: { [weak self] report in
             self?.updates = report.updates
-            self?.lastUpdateCheck = Date()
-            done?()
+            self?.lastUpdateCheck = report.readLockfile ? Date() : nil
         })
     }
 

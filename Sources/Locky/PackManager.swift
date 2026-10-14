@@ -53,6 +53,9 @@ struct PackManager {
         var ok: Bool
         /// `check` only: what it found for each package.
         var updates: [PackUpdate] = []
+        /// Whether the run read the lockfile, so a check reached every package it pins. A run that failed as a whole
+        /// (another run held the packages, or the lockfile did not read) did not.
+        var readLockfile = false
         var text: String { lines.joined(separator: "\n") }
     }
 
@@ -188,7 +191,7 @@ struct PackManager {
                 lines.append("cannot write \(LuaError.shortenPaths(path.lockfile.path)): \(error.localizedDescription)")
             }
         }
-        return Report(lines: lines, ok: ok, updates: checked)
+        return Report(lines: lines, ok: ok, updates: checked, readLockfile: true)
     }
 
     /// What `clean` removes: the packages the lockfile lists that `specs` no longer add, other than a
