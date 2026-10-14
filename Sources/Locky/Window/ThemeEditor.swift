@@ -333,10 +333,15 @@ private struct SaveProblem: View {
     var body: some View {
         if model.store.problem != nil {
             Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    WarningLabel("settings.json has an error, so changes can't save.")
-                    Button("Open Settings") { model.openWindow(.settings) }
-                        .buttonStyle(.link)
+                // WarningLabel's look, with the link under the sentence: the inspector is too narrow for it beside.
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("settings.json has an error, so changes can't save.")
+                        Button("Open Settings") { model.openWindow(.settings) }
+                            .buttonStyle(.link)
+                    }
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
             }
         }
