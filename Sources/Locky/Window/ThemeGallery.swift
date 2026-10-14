@@ -125,13 +125,8 @@ struct ThemeGallery: View {
                             WarningLabel(problem.message)
                                 .lineLimit(3)
                                 .textSelection(.enabled)
-                            if let file = problem.file, let line = problem.line {
-                                Button("Open") { openError = model.open(file, line: line) }
-                                    .buttonStyle(.link)
-                                    // The editors are found once, before the first Open: until then Open waits.
-                                    .disabled(model.editors == nil)
-                                    .task { await model.findEditors() }
-                            }
+                            OpenProblemButton(model: model, problem: problem, error: $openError)
+                                .buttonStyle(.link)
                         }
                         if let openError { WarningLabel(openError) }
                     } else if let description = info?.description {
@@ -419,12 +414,7 @@ private struct FailureBanner: View {
                 if let openError { WarningLabel(openError) }
             }
             Spacer()
-            if let file = place.file, let line = place.line {
-                Button("Open") { openError = model.open(file, line: line) }
-                    // The editors are found once, before the first Open: until then no editor is known, and Open waits.
-                    .disabled(model.editors == nil)
-                    .task { await model.findEditors() }
-            }
+            OpenProblemButton(model: model, problem: place, error: $openError)
             Button("Dismiss", action: dismiss)
         }
         .padding(16)

@@ -231,13 +231,8 @@ private struct UnloadableTheme: View {
         } description: {
             Text(problem.described)
         } actions: {
-            if let file = problem.file, let line = problem.line {
-                Button("Open") { openError = model.open(file, line: line) }
-                    // The editors are found once, before the first Open: until then no editor is known, and Open waits.
-                    .disabled(model.editors == nil)
-                    .task { await model.findEditors() }
-                if let openError { WarningLabel(openError) }
-            }
+            OpenProblemButton(model: model, problem: problem, error: $openError)
+            if let openError { WarningLabel(openError) }
         }
         // Nothing here takes the keyboard by itself, as the canvas does: this view does, so Esc reaches the page and
         // ends Customize. On the next turn, once the view that had it is gone.

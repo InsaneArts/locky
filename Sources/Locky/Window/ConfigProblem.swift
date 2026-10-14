@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// One problem from the config as the windows show it: Lua's message with a capital first letter, and the file and line
 /// it names when they exist. Lua Config lists them; the failed-theme banner opens one.
@@ -48,5 +48,21 @@ struct ConfigProblem: Equatable {
             }
         }
         return nil
+    }
+}
+
+/// Open at a problem's file and line, when the problem names them; nothing otherwise. The editors are found once, before
+/// the first Open: until then no editor is known, and Open is dimmed. Why the editor did not open goes to `error`.
+struct OpenProblemButton: View {
+    let model: AppModel
+    let problem: ConfigProblem
+    @Binding var error: String?
+
+    var body: some View {
+        if let file = problem.file, let line = problem.line {
+            Button("Open") { error = model.open(file, line: line) }
+                .disabled(model.editors == nil)
+                .task { await model.findEditors() }
+        }
     }
 }
