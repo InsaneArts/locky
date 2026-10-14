@@ -49,10 +49,16 @@ struct ThemeGallery: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .padding(24)
+                    // 24 on every side: the top's last 7 are the scroll view's.
+                    .padding(.horizontal, 24)
+                    .padding(.top, 17)
+                    .padding(.bottom, 24)
                     .frame(maxWidth: 1280)
                     .frame(maxWidth: .infinity)
                 }
+                // An arrow key scrolls a tile only as far as its top, and the in-use ring is drawn 7 pt outside the tile:
+                // 7 pt more at the top keeps the ring clear of the toolbar.
+                .safeAreaPadding(.top, 7)
             }
         }
         .toolbar {
