@@ -10,13 +10,14 @@ import Metal
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
 ///   locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
+///   locky skill install|path       the skill that teaches coding agents to write widgets and themes
 ///   locky pack list|check|sync|update|clean
 ///   locky login [on|off]
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
 ///   locky lock [--theme NAME]
 ///   locky window [section] [--theme NAME] [--behind]   (the old sections dashboard and widgets still work)
 enum CLI {
-    static let commands: Set<String> = ["check", "health", "themes", "widgets", "pack", "login", "help", "--help", "-h", "version", "--version"]
+    static let commands: Set<String> = ["check", "health", "themes", "widgets", "render", "skill", "pack", "login", "help", "--help", "-h", "version", "--version"]
 
     /// The GUI's options, for `preview`, `lock`, and `window [section]`.
     struct GUILaunch {
@@ -109,6 +110,23 @@ enum CLI {
             case .unavailable(let message): print(message)
             }
             return 0
+        case "skill":
+            switch arguments.dropFirst().first {
+            case "path":
+                print(AgentSkill.bundled.path)
+                return 0
+            case "install":
+                do {
+                    for folder in try AgentSkill().install() { print("Installed \(LuaError.shortenPaths(folder.path))") }
+                    return 0
+                } catch {
+                    print("error: \(error.localizedDescription)")
+                    return 1
+                }
+            default:
+                print("usage: locky skill install|path")
+                return 2
+            }
         case "render":
             return MainActor.assumeIsolated { render(arguments) }
         case "version", "--version":
@@ -126,6 +144,8 @@ enum CLI {
               render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
                                      draw a theme's lock screen to a PNG, with privacy mode on;
                                      --widget draws only that widget, in the middle
+              skill install          install the agent skill in ~/.claude, ~/.codex, and ~/.agents
+              skill path             print the folder of the skill Locky ships
               pack list|check|sync|update|clean
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
