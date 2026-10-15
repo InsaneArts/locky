@@ -4,6 +4,11 @@ import AppKit
 // app and with it the lock. Ignored, the write fails with EPIPE instead and the error is handled.
 signal(SIGPIPE, SIG_IGN)
 
+// Where the Mac is, for locky.location(). Set where the app and the command line start: tests never run this file, so
+// no test has a real location to send anywhere. A tool run (screenshots) has none either: no picture shows the weather
+// where the Mac is.
+if !AppDelegate.isTool { LockSession.location = { MacLocation.current() } }
+
 // `run` programs inherit this environment. A Locky started from a herdr pane drops herdr's variables first.
 for key in ProcessInfo.processInfo.environment.keys where key.hasPrefix("HERDR_") { unsetenv(key) }
 

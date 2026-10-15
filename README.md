@@ -147,8 +147,8 @@ Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the pass
 Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window (General, Plugins),
                               the Welcome
 Sources/Locky/Settings/       settings.json, its store, and the theme schedule
-Sources/Locky/System/         the shortcut, auto-lock, login item, permissions, power, camera, editors, and the guard's
-                              Locky side
+Sources/Locky/System/         the shortcut, auto-lock, login item, permissions, location, power, camera, editors, and
+                              the guard's Locky side
 Sources/GuardCore/            the guard's watch and the macOS lock screen call, shared by Locky and locky-guard
 Sources/LockyGuard/           locky-guard, which locks the Mac if Locky dies or hangs during a lock
 Sources/Locky/Resources/
@@ -156,5 +156,10 @@ Sources/Locky/Resources/
   packages/                   the built-in theme packages, one folder each
 Scripts/                      packaging, snapshot.sh (a theme to PNG), window-shot.sh (a window to PNG),
                               thumbnails.sh (the theme thumbnails), make_icon.swift (the app icon)
-Tests/LockyTests/             the test suite
+Tests/LockyTests/             the test suite, and Fixtures/ (saved replies of the services widgets call)
 ```
+
+## Credits
+
+Weather data by [Open-Meteo.com](https://open-meteo.com), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The weather and sun widgets use it. Locky › About Locky shows this credit too.

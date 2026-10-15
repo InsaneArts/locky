@@ -9,7 +9,7 @@ locky.setup({ theme = "observatory" })
 
 ## What it shows
 
-- The time in a thin face, the date, and the weather (from wttr.in) at the top left.
+- The time in a thin face, the date, and the weather (from Open-Meteo) at the top left.
 - `moon` (top right): tonight's phase, how much is lit, and the days to the full moon, worked out on the Mac.
 - `sun` (left): today's path of the sun from sunrise to sunset, the sun on it by day, and the time to sunrise by
   night.

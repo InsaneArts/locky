@@ -1,9 +1,9 @@
 -- sun: the sun's path from sunrise to sunset, where it is now, and the day's length. Sunrise and sunset come
--- from wttr.in, like the weather widget's (one request serves both); without the network it shows nothing.
+-- from Open-Meteo, like the weather widget's (one request serves both); without the network it shows nothing.
 --   Families: inline and circular (the next sunrise or sunset), rectangular, small, and medium (with the sun's
 --   path over the whole day, after Apple Weather's sunrise and sunset).
 --   opts.width      the path's width in points (default 240); its height is a third of that
---   opts.location, opts.every   as the weather widget's
+--   opts.location, opts.place_name, opts.every   as the weather widget's
 --   opts.size, opts.color (the sun, default "warning"), opts.path (the dotted path, default "muted")
 local ui = locky.ui
 local weather = require("locky.weather")

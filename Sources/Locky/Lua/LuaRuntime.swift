@@ -23,6 +23,7 @@ final class LuaRuntime: @unchecked Sendable {
         private var _wallpaper: String?
         private var _screen = CGSize(width: 1440, height: 900)
         private var _wallpaperColors: [String]?
+        private var _location: (@Sendable () -> MacLocation.Place?)?
 
         var keyboard: LuaValue {
             get { lock.withLock { _keyboard } }
@@ -44,6 +45,13 @@ final class LuaRuntime: @unchecked Sendable {
         var screen: CGSize {
             get { lock.withLock { _screen } }
             set { lock.withLock { _screen = newValue } }
+        }
+
+        /// Where the Mac is, for locky.location(): the app passes MacLocation.current. Without it (tests, `locky check`)
+        /// there is no location, so nothing sends one anywhere.
+        var location: (@Sendable () -> MacLocation.Place?)? {
+            get { lock.withLock { _location } }
+            set { lock.withLock { _location = newValue } }
         }
 
         /// Its dominant colors, worked out on first use.
@@ -646,6 +654,7 @@ final class LuaRuntime: @unchecked Sendable {
                     "layout_width": .double(size.width / scale), "layout_height": .double(size.height / scale),
                 ])]
             },
+            "location": { [unowned self] _ in [environment.location?()?.lua ?? .nil] },
             "now": { _ in [.double(Date().timeIntervalSince1970)] },
             "date_format": { call in
                 let template = try call.string(1, "template")

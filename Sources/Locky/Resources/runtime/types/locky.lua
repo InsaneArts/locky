@@ -267,6 +267,9 @@ function locky.cancel(timer) end
 ---Seconds since 1970 with fractions.
 ---@return number
 function locky.now() end
+---Where the Mac is: Location Services' last fix once allowed, else its time zone's city. No name in privacy mode.
+---@return { lat: number, lon: number, name: string? }?
+function locky.location() end
 ---@param event locky.Event
 ---@param fn fun(data: any)
 function locky.on(event, fn) end
@@ -312,7 +315,7 @@ locky.date = {}
 ---@return string
 ---@param zone string? A time zone such as "Asia/Tokyo"; the Mac's when nil.
 function locky.date.format(template, time, zone) end
----@return { identifier: string, language: string, hour24: boolean, first_weekday: integer, weekdays: string[], weekdays_short: string[], weekdays_abbreviated: string[], months: string[], months_short: string[] }
+---@return { identifier: string, language: string, hour24: boolean, first_weekday: integer, temperature: "C"|"F", weekdays: string[], weekdays_short: string[], weekdays_abbreviated: string[], months: string[], months_short: string[] }
 function locky.date.locale() end
 
 locky.fs = {}

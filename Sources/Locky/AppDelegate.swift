@@ -78,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if !tool {
             IntruderLog().prune()
             applyAppSettings()
+            // A new fix for the weather's Current Location, if Location Services allows it: nothing asks here.
+            model.location.refresh()
             scheduleUpdateChecks()
             DistributedNotificationCenter.default().addObserver(self, selector: #selector(handleRequest(_:)), name: Self.request, object: nil,
                                                                 suspensionBehavior: .deliverImmediately)
@@ -109,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if let section = launch.window {
             // Only a launch is a screenshot run: its previews keep running behind other windows.
             model.screenshots = launch.behind
+            model.selectingWidget = launch.select
             open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, newWidget: launch.opensNewWidget, behind: launch.behind,
                  size: launch.size)
         } else if launch.mode == nil, WelcomeView.opensAtLaunch(.standard, isTool: tool) {
@@ -386,6 +389,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func start(_ mode: LockSession.Mode, options: LockSession.Options) {
         guard session == nil else { return }
         if mode == .lock { model.locked = true }
+        // The Mac may have moved since the last fix: the weather picks the new one up at its next check.
+        if mode == .lock, !Self.isTool { model.location.refresh() }
         var options = options
         if Self.isTool { options.remembers = false }
         let session = LockSession(mode: mode, options: options)

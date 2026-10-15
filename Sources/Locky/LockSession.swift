@@ -40,6 +40,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         var showsTransition = false
     }
 
+    /// Where the Mac is, for locky.location(): main.swift sets MacLocation.current. nil in tests.
+    static var location: (@Sendable () -> MacLocation.Place?)?
+
     let mode: Mode
     var onEnd: (() -> Void)?
     /// Embedded only: called once, when the theme shows with each widget drawn and the background loaded (or
@@ -165,6 +168,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         environment.keyboard = Keyboard.current()
         environment.displays = NSScreen.screens.count
         environment.wallpaper = NSScreen.screens.first.flatMap(Wallpaper.picture(for:))?.path
+        environment.location = Self.location
         if let size = (mode == .lock ? NSScreen.screens.first?.frame : CGRect(origin: .zero, size: options.previewSize))?.size {
             environment.screen = size
         }

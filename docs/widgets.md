@@ -66,12 +66,29 @@ each file in `Sources/Locky/Resources/runtime/plugin/` lists every option.
 
 | Widget | Shows | Options |
 |---|---|---|
-| `weather` | The weather from [wttr.in](https://wttr.in), which needs no key; kept for 30 minutes. | `style`: `line`, `hero`, `detail`, `forecast` (three days); `location` (default: wttr.in's guess from your address); `units`: `metric`, `imperial` (default: your region's); `place` |
-| `sun` | Today's path of the sun, where it is now, and sunrise and sunset (from wttr.in). | `width`, `location` |
+| `weather` | The weather from [Open-Meteo](https://open-meteo.com), which needs no key; kept for 30 minutes. | `style`: `line`, `hero`, `detail`, `forecast` (three days); `location`; `units`: `automatic`, `celsius`, `fahrenheit`; `place` |
+| `sun` | Today's path of the sun, where it is now, and sunrise and sunset (from Open-Meteo). | `width`, `location` |
 | `moon` | Tonight's phase, how much is lit, and the days to the full moon. No network. | `style`: `full`, `symbol`, `row`; `size` |
 
 The weather and sun widgets share one request, cached in `~/Library/Caches/Locky`. Hide personal information
 (`privacy`) leaves out the place's name.
+
+`location` is one of these:
+
+- `"lat,lon"`, such as `"41.7151,44.8271"`. Customize › Location writes this, with the place's name in `place_name`.
+- A place's name, such as `"Tbilisi"` or `"Paris, Texas"`. Locky finds it once with Open-Meteo's geocoding and keeps
+  the result.
+- `""` (the default) or `"current"`: where the Mac is. If you allow Location Services, this is the Mac's own
+  location. If not, it is the city of the Mac's time zone.
+
+In Customize, Location has a search field that suggests cities and regions as you type, and Current Location first.
+macOS asks for Location Services only when you pick Current Location, never during a lock. If you said no, the row
+under Location opens System Settings › Privacy & Security › Location Services.
+
+`units` `automatic` follows System Settings › General › Language & Region › Temperature. Fahrenheit also shows
+wind in mph; Celsius, in km/h. The notebook theme's weather takes `location` and `units` too.
+
+Weather data by [Open-Meteo.com](https://open-meteo.com), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## System
 

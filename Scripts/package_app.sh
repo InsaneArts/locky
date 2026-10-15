@@ -39,6 +39,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSUIElement</key><true/>
     <key>NSCameraUsageDescription</key><string>Locky takes a photo when someone enters too many wrong passwords, if you turn that on in Settings.</string>
+    <key>NSLocationUsageDescription</key><string>Locky shows the weather where this Mac is, if you choose Current Location for a weather widget.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>Locky shows the weather where this Mac is, if you choose Current Location for a weather widget.</string>
 </dict>
 </plist>
 PLIST
@@ -62,7 +64,7 @@ xattr -cr "$APP"
 
 # The guard first, then the app that contains it. Every mode, ad-hoc too, signs with the hardened runtime, so
 # DYLD_INSERT_LIBRARIES and other injected code cannot hook Locky or its guard. The runtime blocks the camera
-# (intruder photos) unless Locky.entitlements allows it.
+# (intruder photos) and Location Services (the weather's Current Location) unless Locky.entitlements allows them.
 if [[ "$SIGNING_MODE" == "adhoc" || -z "$APP_IDENTITY" ]]; then
   IDENTITY=- TIMESTAMP=--timestamp=none
 elif [[ "$SIGNING_MODE" == "release" ]]; then

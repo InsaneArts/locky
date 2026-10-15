@@ -1,171 +1,268 @@
--- locky.weather: the weather from wttr.in (https://wttr.in), for any widget. No key, no account: wttr.in finds
--- the place from your IP address unless you name one.
+-- locky.weather: the weather from Open-Meteo (https://open-meteo.com), for any widget. No key, no account. Weather
+-- data by Open-Meteo.com, under CC BY 4.0.
 --
 --   local weather = require("locky.weather")
 --   init = function(self)
---     weather.watch(self, { location = "", every = 30 }, function(self, data) self:set({ weather = data }) end)
+--     weather.watch(self, { location = "", every = 30 }, function(self, data) self:set({ data = data }) end)
 --   end
 --
 -- A reply is kept in ~/Library/Caches/Locky for `every` minutes (default 30), so a lock shows the last weather
 -- at once, and widgets in one lock share one request. data is false while there is none, otherwise:
---   { place, temp, feels, high, low, unit ("C" or "F"), condition, code, symbol, night, humidity, wind,
+--   { place, temp, feels, high, low, unit ("C" or "F"), condition, code (WMO), symbol, night, humidity, wind,
 --     wind_unit, wind_dir, uv, sunrise, sunset (minutes after midnight), moon_phase, moon_illumination,
 --     days = { { date, high, low, code, symbol, condition }, ... three days },
---     hours = { { at (seconds since 1970), temp, code, symbol }, ... the next five three-hour forecasts },
+--     hours = { { at (seconds since 1970), temp, code, symbol }, ... this hour and the next four },
 --     fetched (seconds since 1970) }
 -- In privacy mode (locky.config.privacy) place is nil: the city would say where the Mac is.
 local M = {}
+local sky = require("locky.sky")
 
--- wttr.in's weather codes (World Weather Online's) as SF Symbols, by day and by night.
-local symbols = {
-  [113] = { "sun.max.fill", "moon.stars.fill" },
-  [116] = { "cloud.sun.fill", "cloud.moon.fill" },
-  [119] = { "cloud.fill" }, [122] = { "smoke.fill" },
-  [143] = { "cloud.fog.fill" }, [248] = { "cloud.fog.fill" }, [260] = { "cloud.fog.fill" },
-  [200] = { "cloud.bolt.fill" }, [386] = { "cloud.bolt.rain.fill" }, [389] = { "cloud.bolt.rain.fill" },
-  [392] = { "cloud.bolt.fill" }, [395] = { "cloud.snow.fill" },
-  [227] = { "wind.snow" }, [230] = { "wind.snow" },
+-- WMO weather codes, as Open-Meteo gives them, in Apple Weather's words and SF Symbols: by day, then by night.
+local codes = {
+  [0] = { "Sunny", "sun.max.fill", "Clear", "moon.stars.fill" },
+  [1] = { "Mostly Sunny", "cloud.sun.fill", "Mostly Clear", "cloud.moon.fill" },
+  [2] = { "Partly Cloudy", "cloud.sun.fill", "Partly Cloudy", "cloud.moon.fill" },
+  [3] = { "Cloudy", "cloud.fill" },
+  [45] = { "Fog", "cloud.fog.fill" }, [48] = { "Fog", "cloud.fog.fill" },
+  [51] = { "Drizzle", "cloud.drizzle.fill" }, [53] = { "Drizzle", "cloud.drizzle.fill" }, [55] = { "Drizzle", "cloud.drizzle.fill" },
+  [56] = { "Freezing Drizzle", "cloud.sleet.fill" }, [57] = { "Freezing Drizzle", "cloud.sleet.fill" },
+  [61] = { "Rain", "cloud.rain.fill" }, [63] = { "Rain", "cloud.rain.fill" }, [65] = { "Heavy Rain", "cloud.heavyrain.fill" },
+  [66] = { "Freezing Rain", "cloud.sleet.fill" }, [67] = { "Freezing Rain", "cloud.sleet.fill" },
+  [71] = { "Snow", "cloud.snow.fill" }, [73] = { "Snow", "cloud.snow.fill" }, [75] = { "Heavy Snow", "cloud.snow.fill" },
+  [77] = { "Snow", "cloud.snow.fill" },
+  [80] = { "Showers", "cloud.sun.rain.fill", "Showers", "cloud.moon.rain.fill" },
+  [81] = { "Showers", "cloud.rain.fill" }, [82] = { "Heavy Rain", "cloud.heavyrain.fill" },
+  [85] = { "Snow Showers", "cloud.snow.fill" }, [86] = { "Snow Showers", "cloud.snow.fill" },
+  [95] = { "Thunderstorms", "cloud.bolt.rain.fill" }, [96] = { "Thunderstorms", "cloud.bolt.rain.fill" },
+  [99] = { "Thunderstorms", "cloud.bolt.rain.fill" },
 }
-for _, code in ipairs({ 176, 263, 266, 293, 296, 353 }) do symbols[code] = { "cloud.drizzle.fill" } end
-for _, code in ipairs({ 299, 302, 305, 308, 356, 359 }) do symbols[code] = { "cloud.rain.fill" } end
-for _, code in ipairs({ 179, 182, 185, 281, 284, 311, 314, 317, 320, 350, 362, 365, 374, 377 }) do symbols[code] = { "cloud.sleet.fill" } end
-for _, code in ipairs({ 323, 326, 329, 332, 335, 338, 368, 371 }) do symbols[code] = { "cloud.snow.fill" } end
 
---- The SF Symbol for a weather code, by night when `night` is true.
-function M.symbol(code, night)
-  local pair = symbols[tonumber(code)] or { "cloud.fill" }
-  return night and pair[2] or pair[1]
-end
-
--- "07:11 AM" → 431.
-local function minutes(text)
-  local h, m, half = tostring(text or ""):match("^(%d+):(%d+)%s*([AP]M)")
-  if not h then
-    return nil
+--- A WMO weather code's words and SF Symbol, by night when `night` is true.
+function M.condition(code, night)
+  local entry = codes[tonumber(code)] or { "", "cloud.fill" }
+  if night and entry[3] then
+    return entry[3], entry[4]
   end
-  h, m = tonumber(h) % 12, tonumber(m)
-  return (half == "PM" and h + 12 or h) * 60 + m
+  return entry[1], entry[2]
 end
 
-local function number(value)
-  return tonumber(value)
+--- The SF Symbol for a WMO weather code, by night when `night` is true.
+function M.symbol(code, night)
+  return select(2, M.condition(code, night))
 end
 
---- Whether to show °F and mph: opts.units "imperial" or "metric", or by the user's region.
+--- Whether to show °F and mph: opts.units "fahrenheit" or "celsius" ("imperial" and "metric" too), or else the
+--- Mac's own temperature unit (System Settings › General › Language & Region).
 function M.imperial(units)
-  if units == "imperial" then
+  if units == "fahrenheit" or units == "imperial" then
     return true
-  elseif units == "metric" then
+  elseif units == "celsius" or units == "metric" then
     return false
   end
-  local id = locky.date.locale().identifier or ""
-  return id:match("_US") ~= nil or id:match("_LR") ~= nil or id:match("_MM") ~= nil
+  return locky.date.locale().temperature == "F"
 end
 
---- wttr.in's JSON (format=j1) as the table above, or nil. `now` is the time to judge day and night by.
-function M.parse(json, imperial, now)
+local function round(value)
+  return type(value) == "number" and math.floor(value + 0.5) or nil
+end
+
+local compass = { "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW" }
+
+-- A time as minutes after midnight on the Mac's clock, as the sun widget counts them.
+local function minutes(time)
+  if type(time) ~= "number" then
+    return nil
+  end
+  local t = os.date("*t", time)
+  return t.hour * 60 + t.min
+end
+
+--- Open-Meteo's forecast (timeformat=unixtime) as the table above, without place and fetched, or nil. `now` is the
+--- time to start the hours from, and to work out the moon for.
+function M.parse(json, now)
   local ok, reply = pcall(locky.json.decode, json)
-  if not ok or type(reply) ~= "table" or type(reply.current_condition) ~= "table" then
+  if not ok or type(reply) ~= "table" or type(reply.current) ~= "table" then
     return nil
   end
-  local current = reply.current_condition[1]
-  local today = type(reply.weather) == "table" and reply.weather[1] or {}
-  if type(current) ~= "table" then
-    return nil
+  now = now or os.time()
+  local current, units = reply.current, type(reply.current_units) == "table" and reply.current_units or {}
+  local daily, hourly = type(reply.daily) == "table" and reply.daily or {}, type(reply.hourly) == "table" and reply.hourly or {}
+  local function at(list, i)
+    return type(list) == "table" and list[i] or nil
   end
-  local astronomy = type(today.astronomy) == "table" and today.astronomy[1] or {}
-  local sunrise, sunset = minutes(astronomy.sunrise), minutes(astronomy.sunset)
-  local clock = os.date("*t", now or os.time())
-  local at = clock.hour * 60 + clock.min
-  local night = sunrise and sunset and (at < sunrise or at >= sunset) or false
-  local function temp(t, c, f)
-    return number(t[imperial and f or c])
-  end
-  local function description(t)
-    return type(t.weatherDesc) == "table" and t.weatherDesc[1] and tostring(t.weatherDesc[1].value or ""):gsub("%s+$", "") or ""
-  end
+  local imperial = tostring(units.temperature_2m or ""):find("F") ~= nil
+  local night = current.is_day == 0
+  local condition, symbol = M.condition(current.weather_code, night)
   local days = {}
-  for i, day in ipairs(type(reply.weather) == "table" and reply.weather or {}) do
-    -- The forecast for midday stands for the day.
-    local noon = type(day.hourly) == "table" and (day.hourly[5] or day.hourly[1]) or {}
+  for i, time in ipairs(type(daily.time) == "table" and daily.time or {}) do
+    local words, icon = M.condition(at(daily.weather_code, i), false)
     days[i] = {
-      date = day.date, high = temp(day, "maxtempC", "maxtempF"), low = temp(day, "mintempC", "mintempF"),
-      code = number(noon.weatherCode), symbol = M.symbol(noon.weatherCode, false), condition = description(noon),
+      -- The day's date where the weather is: its midnight, in its own time zone.
+      date = os.date("!%Y-%m-%d", time + (tonumber(reply.utc_offset_seconds) or 0)),
+      high = round(at(daily.temperature_2m_max, i)), low = round(at(daily.temperature_2m_min, i)),
+      code = at(daily.weather_code, i), symbol = icon, condition = words,
     }
   end
-  -- wttr.in forecasts every three hours ("0", "300", ... "2100"); the next five from now, today's and tomorrow's.
-  local hours, at_time = {}, now or os.time()
-  for _, day in ipairs(type(reply.weather) == "table" and reply.weather or {}) do
-    local y, m, d = tostring(day.date or ""):match("^(%d+)-(%d+)-(%d+)$")
-    for _, hour in ipairs(y and type(day.hourly) == "table" and day.hourly or {}) do
-      local hhmm = tonumber(hour.time)
-      if type(hour) == "table" and hhmm then
-        local at = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = hhmm // 100, min = hhmm % 100 })
-        if at > at_time - 1800 and #hours < 5 then
-          local h = hhmm // 100 * 60
-          local dark = sunrise and sunset and (h < sunrise or h >= sunset) or false
-          hours[#hours + 1] = { at = at, temp = temp(hour, "tempC", "tempF"), code = number(hour.weatherCode), symbol = M.symbol(hour.weatherCode, dark) }
-        end
-      end
+  local hours = {}
+  for i, time in ipairs(type(hourly.time) == "table" and hourly.time or {}) do
+    if time > now - 3600 and #hours < 5 then
+      hours[#hours + 1] = {
+        at = time, temp = round(at(hourly.temperature_2m, i)), code = at(hourly.weather_code, i),
+        symbol = M.symbol(at(hourly.weather_code, i), at(hourly.is_day, i) == 0),
+      }
     end
   end
-  local area = type(reply.nearest_area) == "table" and reply.nearest_area[1] or {}
-  local place = type(area.areaName) == "table" and area.areaName[1] and area.areaName[1].value or nil
+  local direction = tonumber(current.wind_direction_10m)
+  local moon = sky.moon(now)
   return {
-    place = locky.config.privacy ~= true and place or nil,
-    temp = temp(current, "temp_C", "temp_F"), feels = temp(current, "FeelsLikeC", "FeelsLikeF"),
-    high = temp(today, "maxtempC", "maxtempF"), low = temp(today, "mintempC", "mintempF"),
+    temp = round(current.temperature_2m), feels = round(current.apparent_temperature),
+    high = days[1] and days[1].high, low = days[1] and days[1].low,
     unit = imperial and "F" or "C",
-    condition = description(current), code = number(current.weatherCode),
-    symbol = M.symbol(current.weatherCode, night), night = night,
-    humidity = number(current.humidity), uv = number(current.uvIndex),
-    wind = number(current[imperial and "windspeedMiles" or "windspeedKmph"]), wind_unit = imperial and "mph" or "km/h",
-    wind_dir = current.winddir16Point,
-    sunrise = sunrise, sunset = sunset,
-    moon_phase = astronomy.moon_phase, moon_illumination = number(astronomy.moon_illumination),
+    condition = condition, code = current.weather_code, symbol = symbol, night = night,
+    humidity = round(current.relative_humidity_2m), uv = round(current.uv_index),
+    wind = round(current.wind_speed_10m), wind_unit = imperial and "mph" or "km/h",
+    wind_dir = direction and compass[math.floor(direction / 22.5 + 0.5) % 16 + 1],
+    sunrise = minutes(at(daily.sunrise, 1)), sunset = minutes(at(daily.sunset, 1)),
+    moon_phase = moon.name, moon_illumination = moon.illumination,
     days = days,
     hours = hours,
   }
 end
 
---- wttr.in's address for a location. Spaces become "+", as wttr.in writes them; anything else that is not plain
---- (such as "?", "#", "/", or "é") is percent-encoded, so a location stays one part of the path.
-function M.url(location)
-  local path = location:gsub(" ", "+"):gsub("[^%w%-._~,+@]", function(c)
+-- Everything but letters, digits, and "-._~" percent-encoded, so text stays one value of the query.
+local function encode(text)
+  return (text:gsub("[^%w%-._~]", function(c)
     return ("%%%02X"):format(c:byte())
-  end)
-  return "https://wttr.in/" .. path .. "?format=j1"
+  end))
 end
 
-local cache_dir = locky.fs.home .. "/Library/Caches/Locky"
-
-local function cache_file(location)
-  local key = location == "" and "here" or location:lower():gsub("[^%w]+", "-")
-  return ("%s/weather-%s.json"):format(cache_dir, key)
+--- Open-Meteo's forecast address for a place, in °F and mph when `imperial`.
+function M.url(lat, lon, imperial)
+  return ("https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
+    .. "&current=temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m,wind_direction_10m,uv_index"
+    .. "&hourly=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset"
+    .. "&timezone=auto&timeformat=unixtime&forecast_days=3%s"):format(lat, lon, imperial and "&temperature_unit=fahrenheit&wind_speed_unit=mph" or "")
 end
 
-local function read_cache(location)
-  local text = locky.fs.read(cache_file(location))
-  local ok, cached = pcall(locky.json.decode, text or "")
-  if ok and type(cached) == "table" and type(cached.json) == "string" and type(cached.fetched) == "number" then
-    return cached
+--- Open-Meteo's geocoding address for a place's name: the part before the first comma, names in `language`.
+function M.geocode_url(name, language)
+  local city = locky.str.trim(name:match("^[^,]*"))
+  return ("https://geocoding-api.open-meteo.com/v1/search?name=%s&count=10&language=%s&format=json"):format(encode(city), encode(language or "en"))
+end
+
+--- Open-Meteo's geocoding reply for `name` as { lat, lon, name }, or nil. After a comma, the rest of the name picks
+--- among places with the same name: "Paris, Texas" finds the one whose state or country is Texas.
+function M.parse_place(json, name)
+  local ok, reply = pcall(locky.json.decode, json)
+  if not ok or type(reply) ~= "table" or type(reply.results) ~= "table" then
+    return nil
+  end
+  local rest = locky.str.trim(tostring(name or ""):match(",(.*)$") or ""):lower()
+  local function matches(r)
+    for _, field in ipairs({ "country", "country_code", "admin1", "admin2" }) do
+      if type(r[field]) == "string" and r[field]:lower() == rest then
+        return true
+      end
+    end
+    return false
+  end
+  local found
+  for _, result in ipairs(reply.results) do
+    if type(result) == "table" and tonumber(result.latitude) and tonumber(result.longitude) then
+      if rest == "" or matches(result) then
+        found = result
+        break
+      end
+      found = found or result
+    end
+  end
+  return found and { lat = tonumber(found.latitude), lon = tonumber(found.longitude), name = found.name } or nil
+end
+
+--- "41.7151,44.8271" (spaces allowed) as two numbers, or nil.
+function M.coordinates(text)
+  local lat, lon = tostring(text or ""):match("^%s*(%-?[%d.]+)%s*,%s*(%-?[%d.]+)%s*$")
+  lat, lon = tonumber(lat), tonumber(lon)
+  if lat and lon and math.abs(lat) <= 90 and math.abs(lon) <= 180 then
+    return lat, lon
   end
   return nil
 end
 
-local function write_cache(location, json)
-  local file = io.open(cache_file(location), "w")
-  if file then
-    file:write(locky.json.encode({ fetched = os.time(), json = json }))
-    file:close()
+--- Where the cache files go. Tests point it at their own folder.
+M.cache_dir = locky.fs.home .. "/Library/Caches/Locky"
+
+local function read_json(file)
+  local ok, value = pcall(locky.json.decode, locky.fs.read(M.cache_dir .. "/" .. file) or "")
+  return ok and type(value) == "table" and value or nil
+end
+
+local function write_json(file, value)
+  local handle = io.open(M.cache_dir .. "/" .. file, "w")
+  if handle then
+    handle:write(locky.json.encode(value))
+    handle:close()
   end
 end
 
--- Requests in flight, by location, and who waits for each.
+--- Gets `url` and calls done(self, body) with the body, or nil when it failed. Tests replace it, so no test goes to
+--- the network.
+function M.fetch(self, url, done)
+  self:system({ "mkdir", "-p", M.cache_dir }, function(self)
+    self:system({ "curl", "-sfL", "--max-time", "10", url }, { timeout = 12 }, function(self, result)
+      done(self, result.code == 0 and result.stdout or nil)
+    end)
+  end)
+end
+
+-- Requests in flight, by address, and who waits for each: widgets in one lock share one request.
 local waiting = {}
 
+local function get(self, url, done)
+  local entry = { self = self, done = done }
+  if waiting[url] then
+    table.insert(waiting[url], entry)
+    return
+  end
+  waiting[url] = { entry }
+  M.fetch(self, url, function(_, body)
+    local list = waiting[url] or {}
+    waiting[url] = nil
+    for _, entry in ipairs(list) do
+      entry.done(entry.self, body)
+    end
+  end)
+end
+
+--- Finds where `location` is and calls done(self, { lat, lon, name }) or done(self, nil). "lat,lon" is used as it
+--- is, named `name`; "" and "current" are the Mac's location (locky.location()); anything else is a place's name,
+--- looked up once with Open-Meteo's geocoding and kept.
+function M.locate(self, location, name, done)
+  local lat, lon = M.coordinates(location)
+  if lat then
+    return done(self, { lat = lat, lon = lon, name = name })
+  end
+  local key = locky.str.trim(location):lower()
+  if key == "" or key == "current" then
+    return done(self, locky.location())
+  end
+  local file = ("place-%s.json"):format((key:gsub("[^%w]+", "-")))
+  local cached = read_json(file)
+  if cached and tonumber(cached.lat) and tonumber(cached.lon) then
+    return done(self, cached)
+  end
+  get(self, M.geocode_url(location, locky.date.locale().language), function(self, body)
+    local place = body and M.parse_place(body, location)
+    if place then
+      write_json(file, place)
+    end
+    done(self, place)
+  end)
+end
+
 --- Shows the weather now (the cached reply, if any) and keeps it fresh, owned by the widget `self`. opts:
---- location (a city, an airport code, "lat,lon", or "" for wttr.in's guess), every (minutes), units.
+--- location ("lat,lon", a place's name, or "" for the Mac's location), place_name (the name for "lat,lon"), every
+--- (minutes), units ("automatic", "celsius", or "fahrenheit").
 function M.watch(self, opts, fn)
   locky.validate("opts", opts, "table")
   locky.validate("fn", fn, "callable")
@@ -173,44 +270,45 @@ function M.watch(self, opts, fn)
   local every = math.max(10, tonumber(opts.every) or 30) * 60
   local imperial = M.imperial(opts.units)
   local shown
-  local function show(self, cached)
-    if cached and cached.fetched ~= shown then
-      shown = cached.fetched
-      local data = M.parse(cached.json, imperial)
+  local function show(self, file, cached, place)
+    local key = file .. cached.fetched
+    if key ~= shown then
+      shown = key
+      local data = M.parse(cached.json)
       if data then
         data.fetched = cached.fetched
+        data.place = locky.config.privacy ~= true and place and place.name or nil
       end
       fn(self, data or false)
     end
   end
+  local function fail(self)
+    if not shown then
+      fn(self, false)
+    end
+  end
   local function refresh(self)
-    local cached = read_cache(location)
-    show(self, cached)
-    if cached and os.time() - cached.fetched < every then
-      return
-    end
-    local entry = { self = self, show = show, fail = function(self) if not shown then fn(self, false) end end }
-    if waiting[location] then
-      table.insert(waiting[location], entry)
-      return
-    end
-    waiting[location] = { entry }
-    local url = M.url(location)
-    self:system({ "mkdir", "-p", cache_dir }, function(self)
-      self:system({ "curl", "-sfL", "--max-time", "10", url }, { timeout = 12 }, function(self, result)
-        local ok = result.code == 0 and M.parse(result.stdout, imperial) ~= nil
-        if ok then
-          write_cache(location, result.stdout)
+    M.locate(self, location, opts.place_name, function(self, place)
+      if not place then
+        return fail(self)
+      end
+      -- Rounded to about a kilometre, so a location that moves a little keeps its cache.
+      local file = ("forecast-%.2f,%.2f-%s.json"):format(place.lat, place.lon, imperial and "f" or "c")
+      local cached = read_json(file)
+      cached = cached and type(cached.json) == "string" and type(cached.fetched) == "number" and cached or nil
+      if cached then
+        show(self, file, cached, place)
+        if os.time() - cached.fetched < every then
+          return
         end
-        local list = waiting[location] or {}
-        waiting[location] = nil
-        local fresh = ok and read_cache(location) or nil
-        for _, entry in ipairs(list) do
-          if fresh then
-            entry.show(entry.self, fresh)
-          else
-            entry.fail(entry.self)
-          end
+      end
+      get(self, M.url(place.lat, place.lon, imperial), function(self, body)
+        if body and M.parse(body) then
+          local fresh = { fetched = os.time(), json = body }
+          write_json(file, fresh)
+          show(self, file, fresh, place)
+        else
+          fail(self)
         end
       end)
     end)

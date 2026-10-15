@@ -8,7 +8,7 @@ locky.setup({
   -- Override any theme's colors, background, or widget options:
   -- palette = { accent = "#ff79c6" },
   -- background = { wallpaper = true, blur = 30, dim = 0.3 },
-  -- widgets = { clock = { format = "HH:mm" } },
+  -- widgets = { clock = { format = "HH:mm" }, weather = { location = "Tbilisi", units = "celsius" } },
 })
 
 -- Plugins from git, installed with `locky pack sync` and pinned in locky-pack-lock.json:

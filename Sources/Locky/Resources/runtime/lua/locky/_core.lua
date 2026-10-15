@@ -722,6 +722,16 @@ locky.sys = {
 --- Seconds since 1970 with fractions, for motion finer than os.time's whole seconds.
 locky.now = native.now
 
+--- Where the Mac is: { lat, lon, name }, or nil. Location Services' last fix once allowed (Customize asks when you pick
+--- Current Location), else the city of the Mac's time zone. In privacy mode, without the name.
+function locky.location()
+  local place = native.location()
+  if place and locky.config.privacy == true then
+    place.name = nil
+  end
+  return place
+end
+
 locky.date = {
   --- Formats a time (seconds since 1970, default now): "time" and "date" give the system's own short time
   --- and long date; a pattern such as "EEEE d MMMM" or "HH:mm" is used as it is (names in the user's

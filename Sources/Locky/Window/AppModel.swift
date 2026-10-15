@@ -48,6 +48,8 @@ final class AppModel {
 
     /// Opened behind other windows for screenshots: previews keep running although hidden.
     var screenshots = false
+    /// A widget Customize selects once its theme loads (`--select`), for screenshots of its inspector.
+    @ObservationIgnored var selectingWidget: String?
     /// The theme open in Customize; nil shows the gallery.
     private(set) var editingTheme: String?
     /// Add Widget's sheet: the Customize toolbar, Edit › Add Widget…, and `Locky window widgets` ask for it. It reads false
@@ -99,6 +101,9 @@ final class AppModel {
     var shortcutProblem: String?
     /// Accessibility, the camera, and the login item: what Locky asks macOS for.
     let permissions: Permissions
+    /// Location Services, for the weather's Current Location: made when first used, so a run that never shows it (a test)
+    /// never talks to Location Services.
+    @ObservationIgnored lazy var location = LocationAccess(isLocked: { [unowned self] in locked })
     /// Open at login, read again whenever Locky becomes active (back from System Settings).
     var loginItem: LoginItem.Status { permissions.loginItem }
     /// True for the length of a lock (AppDelegate sets it). Nothing is read on didBecomeActive then. As it turns true,

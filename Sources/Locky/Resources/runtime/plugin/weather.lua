@@ -1,10 +1,12 @@
--- weather: the weather from wttr.in, kept for 30 minutes. Needs the network; shows nothing until the first reply.
+-- weather: the weather from Open-Meteo, kept for 30 minutes. Needs the network; shows nothing until the first reply.
 --   Families: inline, circular (today's range, the temperature on it), rectangular, small, medium (with the next
 --   hours), large (with the next days).
 --   opts.style      without a family: "line" (symbol, temperature, condition), "hero" (big temperature), "detail" (hero with feels-like,
 --                   wind, humidity, sunrise and sunset), or "forecast" (three days)
---   opts.location   a city ("Tbilisi"), an airport code ("JFK"), "lat,lon", or "" (default) for wttr.in's guess
---   opts.units      "metric", "imperial", or nil to follow your region
+--   opts.location   "lat,lon" (what Customize writes), a place's name ("Tbilisi"), or "" (default) for the Mac's
+--                   location: Location Services' once allowed, else its time zone's city
+--   opts.place_name the name shown for "lat,lon"
+--   opts.units      "automatic" (default: the Mac's temperature unit), "celsius", or "fahrenheit"
 --   opts.every      minutes a reply is kept (default 30)
 --   opts.place      false hides the place's name (privacy mode always does)
 --   opts.size, opts.color, opts.multicolor (false draws the symbols in the text color)
@@ -141,9 +143,9 @@ local function family(w, o, f)
 end
 
 locky.widget.define("weather", {
-  description = "The weather where you are, from wttr.in",
-  opts = { style = "line", location = "", every = 30, size = 15, place = true, multicolor = true },
-  choices = { style = { "line", "hero", "detail", "forecast" } },
+  description = "The weather where you are, from Open-Meteo",
+  opts = { style = "line", location = "", units = "automatic", every = 30, size = 15, place = true, multicolor = true },
+  choices = { style = { "line", "hero", "detail", "forecast" }, units = { "automatic", "celsius", "fahrenheit" } },
   families = { "inline", "circular", "rectangular", "small", "medium", "large" },
   init = function(self)
     weather.watch(self, self.opts, function(self, data)
