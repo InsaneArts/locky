@@ -91,7 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if let section = launch.window {
             // Only a launch is a screenshot run: its previews keep running behind other windows.
             model.screenshots = launch.behind
-            open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: launch.behind, size: launch.size)
+            open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, newWidget: launch.opensNewWidget, behind: launch.behind,
+                 size: launch.size)
         } else if launch.mode == nil, WelcomeView.opensAtLaunch(.standard, isTool: tool) {
             showWindow(.welcome)
         }
@@ -156,14 +157,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case .preview?: preview(theme: launch.theme)
         default:
             // In front: a screenshot run takes no requests, so a request that says --behind is not from Locky.
-            open(launch.window ?? .themes, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: false, size: launch.size)
+            open(launch.window ?? .themes, theme: launch.theme, widgets: launch.opensWidgetGallery, newWidget: launch.opensNewWidget, behind: false,
+                 size: launch.size)
         }
     }
 
     /// `Locky window`: a window or a Settings pane. For the Themes window, Customize for `theme`, or for the theme in use
-    /// with Add Widget open (`widgets`); else the gallery.
-    private func open(_ section: AppModel.Section, theme: String?, widgets: Bool, behind: Bool, size: CGSize?) {
+    /// with Add Widget open (`widgets`); else the gallery. For General, the New Widget sheet with `newWidget`.
+    private func open(_ section: AppModel.Section, theme: String?, widgets: Bool, newWidget: Bool, behind: Bool, size: CGSize?) {
         showWindow(section, behind: behind, size: size)
+        if newWidget { model.newWidget = true }
         guard section == .themes else { return }
         if let theme {
             model.customize(theme)
@@ -213,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 guard let self, session?.mode != .lock else { return }
                 controller.show(behind: behind)
             }
-        case .settings?, .plugins?, .config?:
+        case .settings?, .plugins?:
             model.startWatching()
             model.refresh()
             let controller = settingsWindow ?? SettingsWindowController(model: model) { [weak self] in self?.closed(self?.settingsWindow?.window) }
@@ -267,7 +270,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if menuItem.action == #selector(lockNow(_:)) { MainMenu.setKeyEquivalent(hotkeys.shortcut, on: menuItem) }
         return switch menuItem.action {
         case #selector(openThemes(_:)), #selector(openSettings(_:)), #selector(openWelcome(_:)): session?.mode != .lock
+        // A sheet over the Themes window, such as Add Widget, holds it: the new theme would open under it.
+        case #selector(newTheme(_:)): session?.mode != .lock && themesWindow?.window?.attachedSheet == nil
         default: true
+        }
+    }
+
+    /// File › New Theme… and the Settings window's New Theme…: a new theme from the blank one, open in Customize in the
+    /// Themes window. No form comes first: the theme is named Untitled Theme, and Customize renames it.
+    @objc func newTheme(_ sender: Any?) {
+        showWindow(.themes)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await model.newTheme()
+            } catch {
+                guard session?.mode != .lock, let window = themesWindow?.window else { return }
+                let alert = NSAlert()
+                alert.messageText = "Can't Make a New Theme"
+                alert.informativeText = (error as? LuaError)?.message ?? error.localizedDescription
+                alert.beginSheetModal(for: window, completionHandler: nil)
+            }
         }
     }
 

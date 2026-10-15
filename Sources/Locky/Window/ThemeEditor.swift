@@ -245,9 +245,10 @@ private struct UnloadableTheme: View {
     }
 }
 
-/// Customize's inspector, which follows the selection. With nothing selected: the theme's background, and its widgets
-/// and password field to select. With a widget selected: where it sits, its card, and its options. With the password
-/// field selected: where it sits. Changes save to settings.json at once, and the canvas shows them as they are made.
+/// Customize's inspector, which follows the selection. With nothing selected: the person's own theme's name, the theme's
+/// background, colors, and font, and its widgets and password field to select. With a widget selected: where it sits,
+/// its card, and its options. With the password field selected: where it sits. Changes save to settings.json at once,
+/// and the canvas shows them as they are made.
 struct ThemeInspector: View {
     let model: AppModel
     let editing: ThemeEditing
@@ -284,8 +285,26 @@ struct ThemeInspector: View {
     private var overview: some View {
         Form {
             SaveProblem(model: model)
+            if let name = editing.ownName {
+                Section {
+                    NameField(name: model.inspection.theme(editing.theme.id)?.name ?? name) { try? editing.rename($0) }
+                }
+            }
             Section("Background") {
                 BackgroundEditor(model: model, editing: editing, draft: $draft)
+            }
+            Section {
+                ColorsEditor(model: model, editing: editing, draft: $draft)
+            } header: {
+                ResetHeader(title: "Colors", shown: editing.colorsChanged) {
+                    draft = nil
+                    editing.resetColors()
+                }
+            }
+            Section {
+                FontEditor(editing: editing)
+            } header: {
+                ResetHeader(title: "Font", shown: editing.fontChanged) { editing.resetFont() }
             }
             // A theme with no widgets has no header over nothing; the toolbar's + adds one.
             if !editing.placements.isEmpty {
@@ -332,6 +351,36 @@ private struct WidgetRow: View {
             Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// The name of the person's own theme. It saves when editing ends; a name that is empty or too long goes back.
+private struct NameField: View {
+    let name: String
+    let rename: (String) -> Void
+    @State private var current = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("Name", text: $current)
+            .focused($focused)
+            .focusedValue(\.typing, true)
+            .onSubmit(save)
+            .onChange(of: focused) { if !focused { save() } }
+            .onAppear { current = name }
+            .onChange(of: name) { current = name }
+            // The panel can go before the field gives up the keyboard, as after Done or a click on the canvas.
+            .onDisappear { if focused { save() } }
+    }
+
+    private func save() {
+        let typed = current.trimmingCharacters(in: .whitespaces)
+        guard typed != name else { return }
+        guard ThemeFile.isName(typed) else {
+            current = name
+            return
+        }
+        rename(typed)
     }
 }
 
@@ -827,8 +876,8 @@ private struct AnchorPicker: View {
     }
 }
 
-/// The background picker: the theme's own, or the wallpaper, an image, a video, a color, or a gradient. Sliders and
-/// colors show in the preview as they change, and save when they stop.
+/// The background picker: the theme's own, an animated one of the built-in themes', or the wallpaper, an image, a video,
+/// a color, or a gradient. Sliders and colors show in the preview as they change, and save when they stop.
 private struct BackgroundEditor: View {
     @Bindable var model: AppModel
     let editing: ThemeEditing
@@ -839,11 +888,12 @@ private struct BackgroundEditor: View {
     @State private var saving: Task<Void, Never>?
 
     enum Kind: String, CaseIterable, Identifiable {
-        case theme, wallpaper, image, video, color, gradient
+        case theme, animated, wallpaper, image, video, color, gradient
         var id: String { rawValue }
         var title: String {
             switch self {
             case .theme: "Original"
+            case .animated: "Animated"
             case .wallpaper: "Desktop Picture"
             case .image: "Image"
             case .video: "Video"
@@ -859,6 +909,7 @@ private struct BackgroundEditor: View {
 
     private var kind: Kind {
         if edit.isNil { return .theme }
+        if edit["shader"].string != nil { return .animated }
         if edit["wallpaper"].bool == true { return .wallpaper }
         if edit["image"].string != nil { return .image }
         if edit["video"].string != nil { return .video }
@@ -874,6 +925,14 @@ private struct BackgroundEditor: View {
         switch kind {
         case .theme:
             EmptyView()
+        case .animated:
+            ShaderGrid(choices: model.inspection.shaders, selected: edit["shader"].string, path: .standard(config: store.config)) { choice in
+                // The dim stays: it keeps the text readable over the new one too.
+                var table = choice.background.table ?? [:]
+                table["dim"] = edit["dim"].isNil ? nil : edit["dim"]
+                save(table, replacing: true)
+            }
+            slider("Dim", key: "dim", range: 0...0.8, fallback: 0)
         case .wallpaper:
             slider("Blur", key: "blur", range: 0...60, fallback: 30)
             slider("Dim", key: "dim", range: 0...0.8, fallback: 0.25)
@@ -901,6 +960,9 @@ private struct BackgroundEditor: View {
         let value: LuaValue?
         switch kind {
         case .theme: value = nil
+        case .animated:
+            guard let first = model.inspection.shaders.first else { return }
+            value = first.background
         case .wallpaper: value = .table(["wallpaper": .bool(true), "blur": .int(30), "dim": .double(0.25)])
         case .image, .video:
             guard let url = Self.chooseFile(types: kind == .image ? [.image] : [.movie]) else { return }
@@ -928,11 +990,11 @@ private struct BackgroundEditor: View {
         draft = settings
     }
 
-    /// Saves the change, with the colors picked so far.
-    private func save(_ fields: [String: LuaValue]) {
+    /// Saves the change, with the colors picked so far. `replacing` saves `fields` alone, as another background.
+    private func save(_ fields: [String: LuaValue], replacing: Bool = false) {
         saving?.cancel()
         saving = nil
-        let value = patched(picked.merging(fields) { $1 })
+        let value = replacing ? LuaValue.table(fields) : patched(picked.merging(fields) { $1 })
         picked = [:]
         editing.record("Change Background") { store.update { $0.setThemeEdit(theme.id, "background", value) } }
         draft = nil
@@ -987,6 +1049,159 @@ private struct BackgroundEditor: View {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         return panel.runModal() == .OK ? panel.url : nil
+    }
+}
+
+/// The animated backgrounds as pictures, as the Wallpaper settings show theirs: a click uses one.
+private struct ShaderGrid: View {
+    let choices: [Inspection.ShaderChoice]
+    /// The shader in use, by name.
+    let selected: String?
+    let path: RuntimePath
+    let pick: (Inspection.ShaderChoice) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 12, alignment: .top)], spacing: 12) {
+            ForEach(choices) { choice in
+                ShaderTile(choice: choice, selected: choice.background["shader"].string == selected, path: path) { pick(choice) }
+            }
+        }
+        // Room for the selection ring, which is drawn outside the pictures.
+        .padding(5)
+    }
+}
+
+/// One animated background: a frame of it, made in the background, and its name.
+private struct ShaderTile: View {
+    let choice: Inspection.ShaderChoice
+    let selected: Bool
+    let path: RuntimePath
+    let pick: () -> Void
+    @State private var image: CGImage?
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let first = choice.background["colors"][0].string
+        Button(action: pick) {
+            VStack(spacing: 5) {
+                // The theme's first color until the frame is made, so the tile never shows empty.
+                (first.flatMap { Color(hex: $0) } ?? .black)
+                    .aspectRatio(1.6, contentMode: .fit)
+                    .overlay {
+                        if let image {
+                            Image(decorative: image, scale: 1).resizable().scaledToFill().transition(.opacity)
+                        }
+                    }
+                    .clipShape(shape)
+                    .hairline(cornerRadius: 6)
+                    .pressOverlay(light: Design.isLight(first), in: shape)
+                    // A 2.5-pt ring outside a 2.5-pt gap, concentric with the picture's corners: 6 + 2.5 + 2.5 = 11.
+                    .overlay {
+                        if selected {
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .strokeBorder(.selection, lineWidth: 2.5)
+                                .padding(-5)
+                        }
+                    }
+                Text(choice.name)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .foregroundStyle(selected ? .primary : .secondary)
+            }
+        }
+        .buttonStyle(PressHighlightStyle())
+        .help(choice.name)
+        .accessibilityLabel(choice.name)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .animation(Motion.easeOut(duration: 0.2), value: image == nil)
+        .task { image = await ShaderThumbnails.image(for: choice, path: path) }
+    }
+}
+
+/// The theme's colors that people choose: its text, secondary text, and accent, and its cards' fill while its widgets
+/// sit on glass or solid cards. Colors show on the canvas as they are picked, and save once the picking stops.
+private struct ColorsEditor: View {
+    let model: AppModel
+    let editing: ThemeEditing
+    @Binding var draft: Settings?
+    /// Colors being picked, by role ("card" for the cards' fill): shown at once, saved once the picking stops for a
+    /// moment, or when the panel goes away.
+    @State private var picked: [String: String] = [:]
+    @State private var saving: Task<Void, Never>?
+
+    var body: some View {
+        // Each row's: whichever goes last saves what is still being picked.
+        Group {
+            ForEach(ThemeEditing.colorRoles, id: \.role) { role, title in
+                ColorWell(title: title, hex: picked[role] ?? editing.color(role), pick: { pick(role, $0) })
+            }
+            if editing.hasCardFill {
+                ColorWell(title: "Cards", hex: picked["card"] ?? editing.cardFill(), pick: { pick("card", $0) })
+            }
+        }
+        .onDisappear { if !picked.isEmpty { save() } }
+    }
+
+    private func pick(_ role: String, _ hex: String) {
+        picked[role] = hex
+        draft = editing.applying(picked, to: model.store.settings)
+        saving?.cancel()
+        saving = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            if !Task.isCancelled { save() }
+        }
+    }
+
+    private func save() {
+        saving?.cancel()
+        saving = nil
+        let colors = picked
+        picked = [:]
+        draft = nil
+        editing.setColors(colors)
+    }
+}
+
+/// The theme's font: a family (the system font first), a weight, and, for the system font, a design. Text whose widget
+/// sets its own weight or design keeps it.
+private struct FontEditor: View {
+    let editing: ThemeEditing
+
+    /// The installed families, by name; AppKit's hidden ones (".SF NS", for one) left out.
+    private static let families = NSFontManager.shared.availableFontFamilies.filter { !$0.hasPrefix(".") }
+        .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+
+    var body: some View {
+        let font = editing.font
+        Picker("Family", selection: Binding(get: { font.family ?? "" }, set: { family in
+            var next = font
+            next.family = family.isEmpty ? nil : family
+            // A design belongs to the system font only.
+            if next.family != nil { next.design = nil }
+            editing.setFont(next)
+        })) {
+            Text("System").tag("")
+            Divider()
+            // A family that is not installed stays listed, so the menu shows what the theme names.
+            ForEach(Self.families.contains(font.family ?? "") || font.family == nil ? Self.families : [font.family!] + Self.families,
+                    id: \.self) { Text($0).tag($0) }
+        }
+        Picker("Weight", selection: Binding(get: { font.weight ?? "regular" }, set: { weight in
+            var next = font
+            next.weight = weight
+            editing.setFont(next)
+        })) {
+            ForEach(OptionRow.weights, id: \.self) { Text($0.capitalizedFirst).tag($0) }
+        }
+        if font.family == nil {
+            Picker("Design", selection: Binding(get: { font.design ?? "default" }, set: { design in
+                var next = font
+                next.design = design == "default" ? nil : design
+                editing.setFont(next)
+            })) {
+                ForEach(OptionRow.designs, id: \.self) { Text($0.capitalizedFirst).tag($0) }
+            }
+        }
     }
 }
 

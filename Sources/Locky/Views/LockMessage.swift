@@ -11,6 +11,8 @@ struct LockMessage: View {
     let exit: Bool
     let auth: Theme.Auth
     let style: LockyStyle
+    /// Called when the way out's line shows or goes, so the screen measures the row again.
+    var changed: () -> Void = {}
 
     var body: some View {
         VStack(alignment: auth.hintAlign == "leading" ? .leading : .center, spacing: 4 * style.scale) {
@@ -26,5 +28,6 @@ struct LockMessage: View {
         .foregroundStyle(style.quiet(on: nil))
         .multilineTextAlignment(auth.hintAlign == "leading" ? .leading : .center)
         .legibilityHalo(style)
+        .onChange(of: exit && model?.stuck == true) { changed() }
     }
 }

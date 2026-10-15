@@ -1,8 +1,8 @@
 # settings.json
 
 Locky's windows save every change to `~/.config/locky/settings.json` at once. Open at login is not in the file:
-macOS keeps it as a login item. init.lua stays yours: the windows never change it, and Settings › Lua Config creates
-it only when it is missing.
+macOS keeps it as a login item. init.lua stays yours: the windows never change it, and Settings › General › Config
+folder creates it only when it is missing.
 
 Locky applies the layers in this order, and a later layer wins key by key:
 
@@ -28,7 +28,7 @@ says so in its windows and in `locky check`, and does not overwrite it.
 |---|---|---|
 | `theme` | A theme id, such as `"mocha"` | The Themes window (click a theme), or the menu's Themes… |
 | `schedule` | `{ "mode": "time", "day": "glass", "night": "default", "day_starts": "07:00", "night_starts": "19:00" }`, or `{ "mode": "appearance", "light": "glass", "dark": "default" }` | Themes › Schedule (the toolbar's clock, or File › Schedule Themes…) |
-| `themes` | `{ "<id>": { "background": {…}, "widgets": […], "auth": {…} } }`: see below | Themes › Customize… |
+| `themes` | `{ "<id>": { "background": {…}, "palette": {…}, "font": {…}, "card": {…}, "widgets": […], "auth": {…} } }`: see below and [themes.md](themes.md#make-and-share-themes-in-the-window) | Themes › Customize… |
 | `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, an `https://`, `ssh://`, or `git@` address, or `{ "src": …, "version": …, "name": …, "allow": ["system", "files"] }` (`allow`: what the plugin may do; see [plugins.md](plugins.md#what-a-plugin-may-do)) | Settings › Plugins › Install Plugin… |
 | `message` | A line under the password field | Settings › General › Lock Screen |
 | `hour24` | `true` or `false`: a 24- or 12-hour clock in every theme | — (the lock screen follows System Settings › General › Date & Time unless this key or init.lua sets it) |
@@ -41,7 +41,7 @@ says so in its windows and in `locky check`, and does not overwrite it.
 | `display_off` | Seconds on the lock screen without input before the displays turn off. It acts only during a lock, and also when the system's display sleep is Never or another app keeps the display on | Settings › General › Lock Screen › Turn the display off |
 | `intruder_photo` | Take a camera photo at this many wrong passwords in one lock. Locky keeps the newest 20 photos and deletes those older than 30 days | Settings › General › Unlock › Take a photo |
 | `update_check` | `false` stops the daily plugin update check, which fetches and compares commits and runs no plugin code (default `true`) | Settings › Plugins › Check for updates daily |
-| `editor`, `terminal` | What "Open in" uses: an app's bundle id, a command (`"nvim"`), or `"default"`; a terminal's bundle id | Settings › Lua Config › Open in |
+| `editor`, `terminal` | What "Open in" uses: an app's bundle id, a command (`"nvim"`), or `"default"`; a terminal's bundle id | Settings › General › Customization › Config folder › Open in |
 
 ## Theme changes
 
@@ -86,7 +86,9 @@ Dock, and its menus have Lock Now in the Locky menu.
   lock shows at the top (and first in the menu bar icon's menu) until its files or init.lua change or you dismiss
   it; Open goes to the line with the error. When the theme in use does not load, the top says why, with Open at
   the file and line. Schedule (the clock in the toolbar, or File › Schedule Themes…) changes the theme by time of
-  day or with Light and Dark mode. Right-click a theme you made for Move to Trash.
+  day or with Light and Dark mode. New Theme… (+ in the toolbar, File › New Theme…, or ⌘N) makes "Untitled Theme"
+  from a blank one and opens Customize on it ([create-theme.md](create-theme.md)). Right-click a theme you made for
+  Move to Trash.
 - **Customize:** Customize… (or Return, or a theme's right-click menu) opens the editor on that theme's live lock
   screen. Click a widget or the password field to select it, and drag it to move it. A widget lands pinned to
   the corner, edge, or center of the part of the screen it is in, so it keeps its place on other screens; View ›
@@ -94,7 +96,8 @@ Dock, and its menus have Lock Now in the Locky menu.
   grid step with Shift), Delete removes a selected widget, and Escape clears the selection; a second Escape
   returns to the themes. The inspector shows what is selected: where it is pinned (Reset puts it back where the
   theme has it), its size, its card, and its options. With nothing selected, it shows the background, the widget
-  list, and the password field. Add Widget… (+) opens a live gallery of the widgets, in each of their sizes.
+  list, and the password field, and under the background, the theme's Colors and Font; a theme you made with
+  New Theme… also shows its Name there. Add Widget… (+) opens a live gallery of the widgets, in each of their sizes.
   The More menu (and the File menu) has Duplicate Theme…, Export Theme…, Revert to Original, and, for a theme you
   made, Move to Trash (see [themes.md](themes.md#make-and-share-themes-in-the-window)). Edit › Undo (⌘Z) takes
   back each change, and Redo (⇧⌘Z) makes it again. Done returns to the themes. For a theme that does not load,
@@ -102,13 +105,22 @@ Dock, and its menus have Lock Now in the Locky menu.
 - **Settings › General:** Open at login, the Lock Now shortcut, Lock Automatically, the lock screen message, Hide
   personal information, Turn the display off, Touch ID, and Take a photo; photos taken after wrong passwords show
   at the top. The Lock Automatically footer says that you may unlock twice when macOS also asks for your password
-  after the display turns off.
+  after the display turns off. The last section, Customization, has:
+  - **Config folder:** its path, and Open in your editor for init.lua. The button's menu chooses the editor (and
+    the terminal for a terminal editor) and has Show in Finder. Without init.lua, Create init.lua makes one with
+    examples.
+  - each problem in init.lua and the plugin scripts, with Open at its file and line. A theme that does not load
+    says why in the Themes window.
+  - **Themes:** New Theme… makes a theme.
+  - **Widgets:** New Widget… explains that a coding agent writes widgets, with the agent skill, an example prompt
+    to copy, and Widget Guide ([create-widget.md](create-widget.md)).
+  - **Agent skill:** the agents that have Locky's skill. Install copies it, Update replaces an older copy, and Show
+    in Finder shows the copies. See [agents.md](agents.md).
+  - **Log:** Open shows `~/Library/Logs/Locky/locky.log`: what plugins print, and every error.
 - **Settings › Plugins:** install from git; Update… on a plugin shows its new commits and diffstat and installs
   exactly those commits; Run programs and Change files allow a plugin added here to do that; Check for updates
   daily checks in the background, and Check Now checks at once. The footer says Up to date only after a check that
   reached the plugins and found each at its newest commit. Each plugin shows the themes and widgets it adds.
-- **Settings › Lua Config:** init.lua with Open in your editor and Show in Finder, the log, and the config's
-  problems, then each theme that does not load, each with Open at its line. What the windows change is saved to
-  settings.json, next to init.lua, and wins over it.
 - **Welcome:** a window of its own. It opens by itself on the first launch, and from Help › Welcome to Locky
-  after that: a live preview and Lock Now, then a switch for auto-lock and one for Open at login. Done closes it.
+  after that. It has three pages: a live preview and Lock Now; Lock automatically, Open at login, the Lock Now
+  shortcut, and Accessibility; and what happens if something goes wrong. Done closes it.

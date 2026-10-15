@@ -2,7 +2,8 @@ import AppKit
 
 /// The menu bar while a Locky window is open: Locky, File, Edit, View, Window, and Help, built at launch and again after
 /// each lock. Items without a target go down the key window's responder chain to NSApp and its delegate, so the theme
-/// commands reach the Themes window's controller and are dimmed while another window is key.
+/// commands reach the Themes window's controller and are dimmed while another window is key. New Theme… reaches the
+/// delegate from any window.
 @MainActor
 enum MainMenu {
     /// Locky › Lock Now: its key equivalent follows the recorded shortcut.
@@ -36,6 +37,7 @@ enum MainMenu {
             item("Quit Locky", #selector(NSApplication.terminate(_:)), key: "q"),
         ])
         let file = menu("File", [
+            item("New Theme…", #selector(AppDelegate.newTheme(_:)), key: "n", symbol: "square.and.pencil"),
             item("Import Theme…", #selector(Themes.importTheme(_:)), symbol: "square.and.arrow.down"),
             .separator(),
             item("Customize Theme…", #selector(Themes.customizeTheme(_:)), symbol: "slider.horizontal.3"),

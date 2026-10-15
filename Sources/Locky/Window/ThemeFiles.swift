@@ -13,6 +13,10 @@ struct ThemeFile: Equatable {
     var edits: [LuaValue]
 
     static let maxSize = 1 << 20
+    /// The theme New Theme… starts from: a dark color, the date, the clock, and the password field.
+    static let blank = "_blank"
+    /// A new theme's name, before a number when one is taken.
+    static let untitled = "Untitled Theme"
     /// A .lua file.
     static let type = UTType(filenameExtension: "lua", conformingTo: .sourceCode) ?? .plainText
 
@@ -81,6 +85,14 @@ struct ThemeFile: Equatable {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: config.appending(path: "themes").path)) ?? []
         let edited = (settings["themes"].table ?? [:]).keys
         return Set(themes.map(\.id) + files.filter { $0.hasSuffix(".lua") }.map { String($0.dropLast(4)) } + edited)
+    }
+
+    /// A new theme for New Theme…: the blank one, under an id `taken` does not have, and the name that goes with it,
+    /// "Untitled Theme 2" for "untitled-theme-2".
+    static func untitled(taken: Set<String>) -> (id: String, file: ThemeFile) {
+        let id = id(for: untitled, taken: taken)
+        let number = id.split(separator: "-").last.flatMap { Int($0) }
+        return (id, ThemeFile(base: blank, name: number.map { "\(untitled) \($0)" } ?? untitled, edits: []))
     }
 
     /// The user's file for theme `id`.

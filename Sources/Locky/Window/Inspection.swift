@@ -51,7 +51,20 @@ struct Inspection: Sendable {
         var allow: [String] = []
     }
 
+    /// An animated background a built-in theme draws: its shader with that theme's colors, which Customize offers to
+    /// every theme.
+    struct ShaderChoice: Identifiable, Equatable, Sendable {
+        /// The theme's id.
+        var id: String
+        /// The theme's name, which names the background too.
+        var name: String
+        /// A background table: the shader, its colors as "#rrggbb", its params, speed, resolution, and fps.
+        var background: LuaValue
+    }
+
     var themes: [ThemeInfo] = []
+    /// The built-in themes' shader backgrounds, by name, one per shader.
+    var shaders: [ShaderChoice] = []
     var widgets: [WidgetInfo] = []
     var packs: [PackInfo] = []
     /// Lua's config with settings.json applied: what a lock uses.
@@ -79,12 +92,14 @@ struct Inspection: Sendable {
                 result.problems = runtime.problemsSoFar
                 result.sources = runtime.path.fingerprint()
                 result.config = (try? runtime.call("config", budget: 1).first) ?? .nil
-                result.themes = ((try? runtime.call("theme_infos", budget: 5).first?.array) ?? []).map { info in
+                let infos = (try? runtime.call("theme_infos", budget: 5).first?.array) ?? []
+                result.themes = infos.map { info in
                     ThemeInfo(id: info["id"].string ?? "?", name: info["name"].string ?? info["id"].string ?? "?",
                               description: info["description"].string,
                               directory: info["dir"].string.map { URL(fileURLWithPath: $0) },
                               palette: (info["palette"].table ?? [:]).compactMapValues(\.string), error: info["error"].string)
                 }
+                result.shaders = ShaderChoice.list(infos)
                 let lockfile = try? PackManager.readLockfile(path.lockfile)
                 result.packs = ((try? runtime.call("pack_specs", budget: 1).first?.array) ?? []).map { spec in
                     let name = spec["name"].string ?? "?"
@@ -131,9 +146,14 @@ struct Inspection: Sendable {
                 do {
                     try runtime.boot()
                     let value = try runtime.call("theme_layout", [.string(theme)], budget: 1).first ?? .nil
+                    let font = value["font"]
                     return .success(ThemeLayout(id: theme, name: value["name"].string ?? theme, background: value["background"],
                                                 widgets: value["widgets"].array ?? [], auth: value["auth"],
-                                                cardStyle: value["card_style"].string ?? "glass"))
+                                                cardStyle: value["card_style"].string ?? "glass",
+                                                palette: (value["palette"].table ?? [:]).compactMapValues(\.string),
+                                                font: FontSpec(family: font["family"].string, design: font["design"].string,
+                                                               weight: font["weight"].string),
+                                                cardFill: value["card_fill"].string))
                 } catch {
                     return .failure(LuaError(LuaError(String(describing: error)).summary))
                 }
@@ -192,8 +212,28 @@ extension Inspection.WidgetInfo {
     }
 }
 
+extension Inspection.ShaderChoice {
+    /// The shader backgrounds of the themes Locky ships, from theme_infos' rows: the first theme by name for each
+    /// shader. Each color is the theme's role as "#rrggbb", so it draws the same in any theme.
+    static func list(_ infos: [LuaValue]) -> [Self] {
+        var seen = Set<String>()
+        let choices = infos.compactMap { info -> Self? in
+            let background = info["background"]
+            guard let id = info["id"].string, let shader = background["shader"].string, ThemeFile.isBuiltIn(id) else { return nil }
+            let palette = Theme.fallback.palette.merging((info["palette"].table ?? [:]).compactMapValues(\.string)) { $1 }
+            var table: [String: LuaValue] = ["shader": .string(shader)]
+            let colors = background["colors"].array?.compactMap(\.string) ?? ["bg", "accent", "fg"]
+            table["colors"] = .array(colors.map { .string(palette[$0] ?? $0) })
+            for key in ["params", "speed", "resolution", "fps"] where !background[key].isNil { table[key] = background[key] }
+            return Self(id: id, name: info["name"].string ?? id, background: .table(table))
+        }
+        return choices.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            .filter { seen.insert($0.background["shader"].string ?? "").inserted }
+    }
+}
+
 /// A theme's own background and widget placements (widget, anchor, offset, size, align, card, display, and the
-/// options before settings.json's), its password field's place, and its card style.
+/// options before settings.json's), its password field's place, its card style, palette, and font.
 struct ThemeLayout: Sendable, Equatable {
     var id: String
     var name: String
@@ -203,6 +243,11 @@ struct ThemeLayout: Sendable, Equatable {
     var auth: LuaValue = .nil
     /// "glass", "solid", "outline", or "none".
     var cardStyle = "glass"
+    /// Every role, the defaults and init.lua's included.
+    var palette: [String: String] = [:]
+    var font = FontSpec()
+    /// The card's fill: a palette role or a color; nil for the style's own.
+    var cardFill: String?
 }
 
 extension LuaRuntime.Delegate {

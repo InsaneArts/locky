@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// One problem from the config as the windows show it: Lua's message with a capital first letter, and the file and line
-/// it names when they exist. Lua Config lists them; the failed-theme banner opens one.
+/// it names when they exist. Settings › General lists them; the failed-theme banner opens one.
 struct ConfigProblem: Equatable {
     var message: String
     var file: URL?

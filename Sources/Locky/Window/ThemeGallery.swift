@@ -64,6 +64,9 @@ struct ThemeGallery: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                // File › New Theme…'s action, which the app's delegate answers.
+                Button("New Theme", systemImage: "plus") { NSApp.sendAction(#selector(AppDelegate.newTheme(_:)), to: nil, from: nil) }
+                    .help("Make a new theme and customize it")
                 Button("Schedule", systemImage: "clock.arrow.2.circlepath") { model.scheduling = true }
                     .help("Change the theme by time of day or with Light and Dark mode")
                     .popover(isPresented: Binding(get: { model.scheduling }, set: { model.scheduling = $0 }), arrowEdge: .bottom) {

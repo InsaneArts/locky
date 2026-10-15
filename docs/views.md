@@ -25,7 +25,7 @@ return ui.hstack {
 | `ui.symbol(name, props)` | An [SF Symbol](https://developer.apple.com/sf-symbols/), sized by `size`. |
 | `ui.image(path, props)` | An image file: absolute, `~/...`, or relative to the calling plugin's package. |
 | `ui.progress(value, props)` | A bar filled to `value` (0 to 1). `size` is its height; `background` its track. |
-| `ui.ring(value, props)` | A ring filled to `value` (0 to 1), from 12 o'clock clockwise. `size` is its diameter; `stroke` its track; `from` (0 to 1) starts the arc later, for gauges; `style = "butt"` gives square ends. |
+| `ui.ring(value, props)` | A ring filled to `value` (0 to 1), from 12 o'clock clockwise. `size` is its diameter; `color` fills the arc, `stroke` is its track, and `stroke_width` the thickness of both (default 4); `from` (0 to 1) starts the arc later, for gauges; `style = "butt"` gives square ends. |
 | `ui.gauge(value, props)` | A gauge, as on the Lock Screen, for `value` between `min` (default 0) and `max` (default 1). `style`: `"circular"` (an open arc with a marker; default), `"capacity"` (a ring filled to the value), `"linear"` (a track with a marker), `"linear-capacity"` (a filled bar). `value_label` is the text in the middle; `icon` (an SF Symbol), or `min_label` and `max_label`, sit in the arc's gap; `label` names a linear gauge. `size` is the diameter, or a linear gauge's width. `color` tints it and takes a gradient. |
 | `ui.chart(values, props)` | A chart, newest value last. `style`: `"line"` (default), `"area"`, or `"bar"`; `min`, `max`, `slots`. |
 | `ui.rect(props)`, `ui.circle(props)`, `ui.capsule(props)` | A shape, filled with `color` and/or outlined with `stroke`. |

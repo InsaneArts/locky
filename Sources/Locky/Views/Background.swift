@@ -108,7 +108,7 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
     /// Whether a frame has been drawn.
     private(set) var isLoaded = false
 
-    static let header = """
+    nonisolated static let header = """
     #include <metal_stdlib>
     using namespace metal;
 
@@ -142,7 +142,7 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
 
     """
 
-    static func footer(transparent: Bool) -> String {
+    nonisolated static func footer(transparent: Bool) -> String {
         // An overlay keeps the shader's alpha (premultiplied here); a background is opaque.
         let result = transparent ? "float4(c.rgb * c.a, c.a)" : "float4(c.rgb * (1.0 - p.dim), 1.0)"
         return """
@@ -160,7 +160,7 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
     }
 
     /// The compiled pipeline for a shader file, or the compiler's message.
-    static func compile(_ source: String, device: MTLDevice, transparent: Bool = false) throws -> MTLRenderPipelineState {
+    nonisolated static func compile(_ source: String, device: MTLDevice, transparent: Bool = false) throws -> MTLRenderPipelineState {
         let library = try device.makeLibrary(source: header + source + footer(transparent: transparent), options: nil)
         let descriptor = MTLRenderPipelineDescriptor()
         descriptor.vertexFunction = library.makeFunction(name: "locky_vertex")
@@ -203,7 +203,7 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
         }
     }
 
-    private static func makeParams(colors: [String], values: [Double], dim: Double) -> Params {
+    nonisolated private static func makeParams(colors: [String], values: [Double], dim: Double) -> Params {
         var rgb = colors.prefix(8).map { hex -> SIMD4<Float> in
             let c = NSColor(hex: hex) ?? .black
             return SIMD4(Float(c.redComponent), Float(c.greenComponent), Float(c.blueComponent), Float(c.alphaComponent))
@@ -228,10 +228,17 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        guard let pass = currentRenderPassDescriptor, let drawable = currentDrawable,
-              let buffer = queue.makeCommandBuffer(), let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-        var uniforms = Uniforms(time: Float(CACurrentMediaTime() - start) * speed,
-                                resolution: SIMD2(Float(drawableSize.width), Float(drawableSize.height)))
+        guard let pass = currentRenderPassDescriptor, let drawable = currentDrawable, let buffer = queue.makeCommandBuffer(),
+              encode(pass, in: buffer, size: drawableSize) else { return }
+        buffer.present(drawable)
+        buffer.commit()
+        isLoaded = true
+    }
+
+    /// Draws a frame of the shader at this moment into `pass`.
+    private func encode(_ pass: MTLRenderPassDescriptor, in buffer: MTLCommandBuffer, size: CGSize) -> Bool {
+        guard let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return false }
+        var uniforms = Uniforms(time: Float(CACurrentMediaTime() - start) * speed, resolution: SIMD2(Float(size.width), Float(size.height)))
         let now = Date()
         params.clock = Float(now.timeIntervalSince(Calendar.current.startOfDay(for: now)))
         encoder.setRenderPipelineState(pipeline)
@@ -239,9 +246,78 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
         encoder.setFragmentBytes(&params, length: MemoryLayout<Params>.stride, index: 1)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
-        buffer.present(drawable)
+        return true
+    }
+
+    /// This moment's frame as a picture, drawn into a texture off the screen, for `locky render`: Core Animation's
+    /// renderer draws pictures, not Metal drawables.
+    func frameImage() -> CGImage? {
+        guard let device else { return nil }
+        let scale = (window?.backingScaleFactor ?? 2) * resolutionScale
+        let width = max(Int(bounds.width * scale), 1), height = max(Int(bounds.height * scale), 1)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.renderTarget]
+        descriptor.storageMode = .managed
+        guard let texture = device.makeTexture(descriptor: descriptor), let buffer = queue.makeCommandBuffer() else { return nil }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = texture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].clearColor = clearColor
+        pass.colorAttachments[0].storeAction = .store
+        guard encode(pass, in: buffer, size: CGSize(width: width, height: height)), let blit = buffer.makeBlitCommandEncoder() else { return nil }
+        blit.synchronize(resource: texture)
+        blit.endEncoding()
         buffer.commit()
-        isLoaded = true
+        buffer.waitUntilCompleted()
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        texture.getBytes(&pixels, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        let info = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                       space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: info), provider: provider,
+                       decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+}
+
+extension ShaderView {
+    /// One frame of a shader background, `seconds` into it, `width` by `height` pixels: Customize's pictures of the
+    /// animated backgrounds. Off the main thread: a shader takes a moment to compile.
+    nonisolated static func still(url: URL, colors: [String], params values: [Double], seconds: Double, width: Int, height: Int) throws -> CGImage {
+        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { throw LuaError("No Metal device") }
+        let pipeline = try compile(String(contentsOf: url, encoding: .utf8), device: device)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = .renderTarget
+        // Managed: the frame is read back on any Mac, Intel ones included.
+        descriptor.storageMode = .managed
+        let pass = MTLRenderPassDescriptor()
+        guard let texture = device.makeTexture(descriptor: descriptor), let buffer = queue.makeCommandBuffer() else { throw LuaError("No Metal texture") }
+        pass.colorAttachments[0].texture = texture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        guard let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { throw LuaError("No Metal encoder") }
+        var uniforms = Uniforms(time: Float(seconds), resolution: SIMD2(Float(width), Float(height)))
+        var params = makeParams(colors: colors, values: values, dim: 0)
+        let now = Date()
+        params.clock = Float(now.timeIntervalSince(Calendar.current.startOfDay(for: now)))
+        encoder.setRenderPipelineState(pipeline)
+        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
+        encoder.setFragmentBytes(&params, length: MemoryLayout<Params>.stride, index: 1)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        encoder.endEncoding()
+        if let blit = buffer.makeBlitCommandEncoder() {
+            blit.synchronize(resource: texture)
+            blit.endEncoding()
+        }
+        buffer.commit()
+        buffer.waitUntilCompleted()
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        texture.getBytes(&bytes, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData), let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4, space: space,
+                                  bitmapInfo: info, provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+        else { throw LuaError("No image") }
+        return image
     }
 }
 

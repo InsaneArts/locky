@@ -4,6 +4,14 @@ Locky draws its own lock screen over your session. While it shows, the macOS loc
 session behind Locky's windows stays unlocked. This page says what Locky does about that, and what it
 cannot do.
 
+## If something goes wrong
+
+- If Locky crashes, hangs, or is killed during a lock, a second process shows the macOS lock screen within 8 seconds.
+- On the lock screen, press ⌃⌥⌘Q to switch to the macOS lock screen.
+- Locky unlocks only with your login password or Touch ID, never after a time.
+
+The Welcome's last page says the same. The sections below give the details.
+
 ## What Locky guarantees
 
 - **No unlock without you.** Only Touch ID or your login password ends a lock. Nothing opens it after a

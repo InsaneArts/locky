@@ -323,22 +323,23 @@ import Testing
         return (window, screen)
     }
 
-    /// The way out's height before and after `change`.
-    private func messageHeight(exit: Bool, model: AuthModel = AuthModel(slowAfter: .milliseconds(50)),
+    /// The way out's height before and after `change`. `within` is how long the line may take to show; a check that
+    /// it stays hidden passes a short one.
+    private func messageHeight(exit: Bool, model: AuthModel = AuthModel(slowAfter: .milliseconds(50)), within: Double = 5,
                                _ change: (AuthModel) async throws -> Void) async throws -> (before: CGFloat, after: CGFloat) {
         let (window, screen) = lockScreen(exit: exit, model: model)
         defer { window.orderOut(nil) }
         let before = screen.wayOut?.view.frame.height ?? -1
         try await change(model)
         screen.needsLayout = true
-        await shows(screen)
+        await shows(screen, within: within)
         return (before, screen.wayOut?.view.frame.height ?? -1)
     }
 
-    /// Lays the screen out until the way out has a height, for up to a second. Under a full test run's load, the
-    /// off-screen window's own layout pass can come too late for a fixed wait.
-    private func shows(_ screen: LockScreenView) async {
-        let deadline = Date().addingTimeInterval(1)
+    /// Lays the screen out until the way out has a height, for up to `within` seconds. Under a full test run's load,
+    /// other tests can hold the main actor past a fixed wait.
+    private func shows(_ screen: LockScreenView, within: Double = 5) async {
+        let deadline = Date().addingTimeInterval(within)
         repeat {
             try? await Task.sleep(for: .milliseconds(20))
             screen.layoutSubtreeIfNeeded()
@@ -381,7 +382,7 @@ import Testing
     }
 
     @Test func theThirdWrongPasswordNamesTheWayOut() async throws {
-        let twice = try await messageHeight(exit: true) { model in for _ in 0..<2 { model.failed() } }
+        let twice = try await messageHeight(exit: true, within: 0.3) { model in for _ in 0..<2 { model.failed() } }
         #expect(twice.before == 0 && twice.after == 0)
         let thrice = try await messageHeight(exit: true) { model in for _ in 0..<3 { model.failed() } }
         #expect(thrice.before == 0 && thrice.after > 0)
@@ -397,7 +398,7 @@ import Testing
     }
 
     @Test func withoutTheExitNothingIsNamed() async throws {
-        let off = try await messageHeight(exit: false) { model in for _ in 0..<3 { model.failed() } }
+        let off = try await messageHeight(exit: false, within: 0.3) { model in for _ in 0..<3 { model.failed() } }
         #expect(off.after == 0)
     }
 

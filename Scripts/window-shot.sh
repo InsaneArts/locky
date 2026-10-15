@@ -2,18 +2,19 @@
 # Renders a Locky window to a PNG, without disturbing the screen: a second Locky opens the window behind every
 # other window, and quits after the capture.
 #
-#   Scripts/window-shot.sh SECTION OUT.png [THEME]      # themes, settings, plugins, config, or welcome
+#   Scripts/window-shot.sh SECTION OUT.png [THEME]      # themes, settings, plugins, welcome, or new-widget
 #
-# themes is the Themes window (with THEME: Customize for it); settings, plugins, and config are the Settings
+# themes is the Themes window (with THEME: Customize for it); settings and plugins are the Settings
 # window's panes; welcome is the Welcome window. The old names still work: dashboard is the Themes window, and
-# widgets captures the Add Widget sheet alone, opened over Customize for the theme in use (or THEME).
+# widgets captures the Add Widget sheet alone, opened over Customize for the theme in use (or THEME). new-widget
+# captures General's New Widget sheet alone.
 #
 # SIZE (default 1240x780) is the Themes window's content size; the Settings and Welcome windows have their own
 # sizes. APPEARANCE=light or APPEARANCE=dark draws the window in that appearance (Locky reads it as
 # LOCKY_APPEARANCE); without it, the Mac's own. WAIT (seconds, default 4) is how long the window gets to load.
 # Locky's config folder is an empty one with privacy mode on unless LOCKY_CONFIG_DIR names one, and the desktop
 # picture is none unless LOCKY_WALLPAPER names one; photos after wrong passwords never show. Needs Locky.app built
-# (Scripts/package_app.sh).
+# (Scripts/package_app.sh). PAGE (1 to 3, default 1) is the Welcome's page.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SECTION=${1:?usage: window-shot.sh SECTION OUT.png [THEME]}
@@ -32,6 +33,7 @@ else
 fi
 ARGS=(window "$SECTION" --behind --size "${SIZE:-1240x780}")
 [[ -n "${3:-}" ]] && ARGS+=(--theme "$3")
+[[ -n "${PAGE:-}" ]] && ARGS+=(--page "$PAGE")
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \
   LOCKY_APPEARANCE="${APPEARANCE:-}" "$BIN" "${ARGS[@]}" >/dev/null 2>&1 &
 PID=$!
@@ -40,8 +42,8 @@ trap 'kill $PID 2>/dev/null || true' EXIT
 # pane's name), or the Welcome.
 ID=$("$TOOL" "$PID" "") || { echo "No Locky window appeared" >&2; exit 1; }
 SHEET=""
-if [[ $SECTION == widgets ]]; then
-  SHEET=$("$TOOL" "$PID" "" --sheet "$ID") || echo "No Add Widget sheet appeared; capturing the window"
+if [[ $SECTION == widgets || $SECTION == new-widget ]]; then
+  SHEET=$("$TOOL" "$PID" "" --sheet "$ID") || echo "No sheet appeared; capturing the window"
 fi
 sleep "${WAIT:-4}"
 screencapture -x -o -l "$ID" "$OUT"
