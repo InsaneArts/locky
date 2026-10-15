@@ -112,8 +112,10 @@ import Testing
     func theRowBuilds(_ trusted: Bool, _ appearance: NSAppearance.Name) throws {
         _ = NSApplication.shared
         let sandbox = try Sandbox()
-        let model = AppModel(store: SettingsStore(config: sandbox.config))
-        let view = NSHostingView(rootView: Form { LockKeyToggle(model: model, trusted: .constant(trusted)) }.formStyle(.grouped))
+        let mac = PermissionsTests.Mac()
+        mac.states[.accessibility] = trusted ? .granted : .notGranted
+        let model = AppModel(store: SettingsStore(config: sandbox.config), permissions: Permissions(system: mac.system))
+        let view = NSHostingView(rootView: Form { LockKeyToggle(model: model) }.formStyle(.grouped))
         view.appearance = NSAppearance(named: appearance)
         view.frame.size = CGSize(width: 520, height: 200)
         view.layoutSubtreeIfNeeded()

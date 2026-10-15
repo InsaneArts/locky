@@ -43,11 +43,6 @@ enum LoginItem {
         case (false, _): try SMAppService.mainApp.unregister()
         }
     }
-
-    /// For `.requiresApproval`: the Login Items list, where the user switches Locky back on.
-    static func openSystemSettings() {
-        SMAppService.openSystemSettingsLoginItems()
-    }
 }
 
 extension LoginItem.Status {

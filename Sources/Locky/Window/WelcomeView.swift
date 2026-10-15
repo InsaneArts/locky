@@ -26,8 +26,6 @@ struct WelcomeView: View {
     /// Whether this Mac can use Touch ID now, read when the window opens and each time it comes forward: an LAContext on
     /// every body pass is waste.
     @State private var biometrics = false
-    /// Accessibility, which the keyboard row asks for, read at the same times.
-    @State private var trusted = AXIsProcessTrusted()
     /// Whether this Mac has a Touch ID button, read at the same times.
     @State private var hasButton = false
     /// The first page's height, which the other pages keep, so the buttons stay in place.
@@ -72,13 +70,14 @@ struct WelcomeView: View {
                 case .safety: safetyPage
                 }
             }
-            .frame(minHeight: height, alignment: .top)
+            // The last page sits in the middle of that height. The second takes exactly that height (see lockScreenPage).
+            .frame(minHeight: height, alignment: visit.page == .welcome ? .top : .center)
             buttons
         }
         .frame(width: 560)
         .onAppear(perform: readSystem)
         // onAppear runs once for the window's life, so read again each time the window comes forward: the lid may have
-        // closed, a Touch ID keyboard gone, or Accessibility changed in System Settings since the last read.
+        // closed, or a Touch ID keyboard gone, since the last read. Permissions reads Accessibility then too.
         .onChange(of: appearsActive) { if appearsActive { readSystem() } }
     }
 
@@ -119,7 +118,6 @@ struct WelcomeView: View {
         let stored = model.store.settings.autoLock
         let broken = model.store.problem != nil
         return VStack(spacing: 0) {
-            Spacer(minLength: 16)
             hero("lock.laptopcomputer")
             title("Make Locky Your Lock Screen")
             Form {
@@ -152,32 +150,31 @@ struct WelcomeView: View {
                     if let problem = model.shortcutProblem {
                         WarningLabel(problem)
                     }
-                    // The Touch ID button's row asks for Accessibility for both: one Allow… on the page.
+                    // Asked for here, in context: Accessibility, then the switch that waits for it. The camera waits for
+                    // Settings' Take a photo, which this page does not offer.
+                    AccessibilityRow(permissions: model.permissions, hasButton: hasButton)
                     if hasButton {
-                        LockKeyToggle(model: model, trusted: $trusted)
+                        LockKeyToggle(model: model)
                             .disabled(broken)
-                    } else {
-                        KeyboardAccess(trusted: $trusted)
                     }
                 } footer: {
-                    Text(Self.lockScreenFooter(hasButton: hasButton, buttonLocks: model.store.settings.lockKey && trusted))
+                    Text(Self.lockScreenFooter(hasButton: hasButton,
+                                               buttonLocks: model.store.settings.lockKey && model.permissions.accessibility == .granted))
                 }
             }
             .formStyle(.grouped)
-            .scrollDisabled(true)
             .scrollContentBackground(.hidden)
             .frame(width: 520)
-            // At its rows' height, so the spacers center it: a Form takes all the height it is offered.
-            .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 16)
         }
-        .frame(maxHeight: .infinity)
+        .padding(.top, 16)
+        // The first page's height exactly, and the Form scrolls the rows that do not fit, such as a shortcut problem's:
+        // a Form that grew the window past it made AppKit's layout loop until the app stopped.
+        .frame(height: height > 0 ? height : nil, alignment: .top)
     }
 
     /// The safety net, in the words docs/security.md opens with.
     private var safetyPage: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 16)
             hero("lifepreserver")
             title("If Something Goes Wrong")
             VStack(alignment: .leading, spacing: 24) {
@@ -190,9 +187,8 @@ struct WelcomeView: View {
             }
             .padding(.horizontal, 48)
             .padding(.top, 28)
-            Spacer(minLength: 16)
         }
-        .frame(maxHeight: .infinity)
+        .padding(.vertical, 16)
     }
 
     /// The large symbol over a page's title, where page 1 has its preview: the page and its title read as one group.
@@ -268,7 +264,6 @@ struct WelcomeView: View {
 
     private func readSystem() {
         biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
-        trusted = AXIsProcessTrusted()
         hasButton = LockKeyToggle.hasButton()
     }
 
