@@ -28,6 +28,8 @@ struct WelcomeView: View {
     @State private var biometrics = false
     /// Accessibility, which the keyboard row asks for, read at the same times.
     @State private var trusted = AXIsProcessTrusted()
+    /// Whether this Mac has a Touch ID button, read at the same times.
+    @State private var hasButton = false
     /// The first page's height, which the other pages keep, so the buttons stay in place.
     @State private var height: CGFloat = 0
     @Environment(\.appearsActive) private var appearsActive
@@ -150,9 +152,15 @@ struct WelcomeView: View {
                     if let problem = model.shortcutProblem {
                         WarningLabel(problem)
                     }
-                    KeyboardAccess(trusted: $trusted)
+                    // The Touch ID button's row asks for Accessibility for both: one Allow… on the page.
+                    if hasButton {
+                        LockKeyToggle(model: model, trusted: $trusted)
+                            .disabled(broken)
+                    } else {
+                        KeyboardAccess(trusted: $trusted)
+                    }
                 } footer: {
-                    Text("The Apple menu's Lock Screen and ⌃⌘Q still show the macOS lock screen. Locky does not change the macOS password setting.")
+                    Text(Self.lockScreenFooter(hasButton: hasButton, buttonLocks: model.store.settings.lockKey && trusted))
                 }
             }
             .formStyle(.grouped)
@@ -261,6 +269,13 @@ struct WelcomeView: View {
     private func readSystem() {
         biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
         trusted = AXIsProcessTrusted()
+        hasButton = LockKeyToggle.hasButton()
+    }
+
+    /// What still shows the macOS lock screen: the Touch ID button too, while Locky does not take it.
+    static func lockScreenFooter(hasButton: Bool, buttonLocks: Bool) -> String {
+        let others = hasButton && !buttonLocks ? "The Apple menu's Lock Screen, ⌃⌘Q, and the Touch ID button" : "The Apple menu's Lock Screen and ⌃⌘Q"
+        return "\(others) still show the macOS lock screen. Locky does not change the macOS password setting."
     }
 
     /// On while any trigger is stored. A change goes to the file as it is now, through `setAutoLock(_:in:turnedOff:)`.

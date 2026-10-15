@@ -34,6 +34,14 @@ The Welcome's last page says the same. The sections below give the details.
   Without it, Locky switches to the macOS lock screen. It switches too when another app has secure keyboard
   entry on (Terminal's Secure Keyboard Entry, a focused password field), which hides the keys from any event
   tap.
+- **The Touch ID button locks the Mac.** With Settings › General › Lock with the Touch ID button on, a press of
+  the Touch ID button shows Locky's lock instead of the macOS lock screen. This needs Accessibility access: Locky
+  stops the press before macOS sees it, with an event tap. It stops only that one event, and passes every other
+  event on. It does not stop the press when Locky is not running, during a Locky lock (macOS then locks over
+  Locky, and you unlock twice), or while its tap is off: without Accessibility, with the switch off, or when
+  macOS turns the tap off because Locky did not answer in time. Then the button shows the macOS lock screen, as
+  before. If Locky's lock is not up within 2 seconds of a press it stopped, Locky switches to the macOS lock
+  screen.
 - **No injected code.** Locky.app and the guard are signed with the hardened runtime, so
   `DYLD_INSERT_LIBRARIES` cannot load code into them.
 - **Other launches are ignored.** While a lock is on, Locky ignores requests from another launch, such as

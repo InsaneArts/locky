@@ -19,7 +19,8 @@ The first launch opens the Welcome, three short pages:
 
 1. **Welcome to Locky:** your lock screen, live. Lock Now tries a real lock.
 2. **Make Locky Your Lock Screen:** turn on Lock automatically, Open at login, and a Lock Now shortcut, so that
-   Locky locks your Mac. The Apple menu's Lock Screen and ⌃⌘Q still show the macOS lock screen.
+   Locky locks your Mac. Lock with the Touch ID button makes that button show Locky too. The Apple menu's Lock
+   Screen and ⌃⌘Q still show the macOS lock screen.
 3. **If Something Goes Wrong:** what happens if Locky stops during a lock, and the ⌃⌥⌘Q way out
    ([security.md](docs/security.md#if-something-goes-wrong)).
 
@@ -77,7 +78,7 @@ background, the colors, the font, and where the password field sits). Schedule (
 clock in the toolbar, or File › Schedule Themes…) changes the theme by time of day or with Light and Dark mode, and
 Move to Trash removes a theme you made.
 
-Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, auto-lock, Open at login, a lock
+Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, Lock with the Touch ID button, auto-lock, Open at login, a lock
 screen message, Hide personal information, Lock animation (seven styles, with a preview), Turn the display off,
 Touch ID, and a photo after wrong passwords.
 Plugins installs, updates, and removes plugins. General's last section opens the config folder and init.lua, shows

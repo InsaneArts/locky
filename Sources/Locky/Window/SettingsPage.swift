@@ -185,28 +185,39 @@ private struct PhotosSection: View {
     }
 }
 
-/// Open at login and the Lock Now shortcut: what lets Locky lock at all.
+/// Open at login, the Lock Now shortcut, and the Touch ID button: what lets Locky lock at all.
 private struct StartSection: View {
     let model: AppModel
+    @State private var hasButton = LockKeyToggle.hasButton()
+    @State private var trusted = AXIsProcessTrusted()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Section {
-            OpenAtLoginToggle(model: model, subtitle: waitsOnLocky ? "Auto-lock and the shortcut work only while Locky is open." : nil)
+            OpenAtLoginToggle(model: model, subtitle: waitsOnLocky ? "Locky locks only while it's open." : nil)
             ShortcutRecorder("Lock Now shortcut", shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
                 model.store.update { $0.shortcut = shortcut }
             }), onRecordingChange: model.recordingShortcut)
             if let problem = model.shortcutProblem {
                 WarningLabel(problem)
             }
+            if hasButton {
+                LockKeyToggle(model: model, trusted: $trusted)
+            }
         }
         .animation(Motion.rows(reduceMotion), value: model.loginItem)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // A lock activates Locky at its start and at each keyboard reclaim: nothing is read then.
+            guard !model.locked else { return }
+            hasButton = LockKeyToggle.hasButton()
+            trusted = AXIsProcessTrusted()
+        }
     }
 
-    /// Locky does not open at login, and auto-lock or the shortcut needs it running.
+    /// Locky does not open at login, and auto-lock, the shortcut, or the Touch ID button needs it running.
     private var waitsOnLocky: Bool {
         let settings = model.store.settings
-        return model.loginItem == .notRegistered && (settings.autoLock != AutoLockSettings() || settings.shortcut != nil)
+        return model.loginItem == .notRegistered && (settings.autoLock != AutoLockSettings() || settings.shortcut != nil || settings.lockKey)
     }
 }
 
@@ -446,16 +457,51 @@ struct KeyboardAccess: View {
     var body: some View {
         if !trusted {
             LabeledContent {
-                Button("Allow…") {
-                    // Shows macOS's prompt, which leads to Privacy & Security › Accessibility.
-                    trusted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-                }
+                Button("Allow…") { trusted = Self.ask() }
             } label: {
                 Text("Keep the keyboard on the lock screen")
                 Text("Needs Accessibility access.")
             }
         }
     }
+
+    /// Shows macOS's prompt, which leads to Privacy & Security › Accessibility. Returns whether Locky has it now.
+    static func ask() -> Bool {
+        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+    }
+}
+
+/// Lock with the Touch ID button (settings.json's lock_key). Without Accessibility the line under the switch asks for
+/// it, and the switch still saves: the button follows as soon as Locky has it. That Allow… also keeps the keyboard on
+/// the lock screen.
+struct LockKeyToggle: View {
+    let model: AppModel
+    @Binding var trusted: Bool
+
+    static let title = "Lock with the Touch ID button"
+    static let subtitle = "Pressing the Touch ID button shows Locky instead of the macOS lock screen."
+    static let needsAccess = "Needs Accessibility access."
+
+    var body: some View {
+        Toggle(isOn: model.store.bool("lock_key", default: false)) {
+            Text(Self.title)
+            if trusted {
+                Text(Self.subtitle)
+            } else {
+                // In the subtitle's font, as OpenAtLoginToggle's approval line, so the row keeps its height.
+                HStack(spacing: 8) {
+                    Text(Self.needsAccess)
+                        .foregroundStyle(.secondary)
+                    Button("Allow…") { trusted = KeyboardAccess.ask() }
+                        .buttonStyle(.link)
+                }
+                .font(.subheadline)
+            }
+        }
+    }
+
+    /// Whether this Mac has a Touch ID button: also with its lid closed, as Unlock with Touch ID reads it.
+    static func hasButton() -> Bool { UnlockSection.touchIDHardware() }
 }
 
 extension SettingsStore {
