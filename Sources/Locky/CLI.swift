@@ -1,3 +1,4 @@
+import AppKit
 import CLua
 import Foundation
 import LocalAuthentication
@@ -8,6 +9,7 @@ import Metal
 ///   locky check [--theme NAME]     run init.lua, plugins, and a theme; report every error
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
+///   locky render --theme NAME --out FILE.png [--size 1440x900] [--appearance light|dark]
 ///   locky pack list|check|sync|update|clean
 ///   locky login [on|off]
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
@@ -107,6 +109,8 @@ enum CLI {
             case .unavailable(let message): print(message)
             }
             return 0
+        case "render":
+            return MainActor.assumeIsolated { render(arguments) }
         case "version", "--version":
             print("Locky \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"), \(String(cString: locky_lua_release()))")
             return 0
@@ -117,6 +121,8 @@ enum CLI {
               health                 check Locky, Lua, plugins, Touch ID, and git
               themes                 list themes
               widgets                list widgets
+              render --theme NAME --out FILE.png [--size 1440x900] [--appearance light|dark]
+                                     draw a theme's lock screen to a PNG, with privacy mode on
               pack list|check|sync|update|clean
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
@@ -125,6 +131,44 @@ enum CLI {
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2
+        }
+    }
+
+    /// `locky render`: the theme's lock screen as a PNG, drawn off the screen (Render). It waits on the main run loop,
+    /// which the lock screen's views need, for 10 seconds at most.
+    @MainActor private static func render(_ arguments: [String]) -> Int32 {
+        let appearanceWord = value("--appearance", in: arguments)
+        guard let theme = value("--theme", in: arguments), let out = value("--out", in: arguments),
+              [nil, "light", "dark"].contains(appearanceWord) else {
+            print("usage: locky render --theme NAME --out FILE.png [--size 1440x900] [--appearance light|dark]")
+            return 2
+        }
+        let size = GUILaunch.parse(arguments).size ?? CGSize(width: 1440, height: 900)
+        let appearance: NSAppearance.Name? = appearanceWord.map { $0 == "light" ? .aqua : .darkAqua }
+        // No Dock icon and no menu bar: nothing shows while it draws.
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        var result: Result<CGImage, any Error>?
+        Task {
+            do { result = .success(try await Render.image(theme: theme, size: size, appearance: appearance)) } catch { result = .failure(error) }
+        }
+        let deadline = Date().addingTimeInterval(10)
+        while result == nil, Date() < deadline { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
+        switch result {
+        case .success(let image)?:
+            let url = URL(fileURLWithPath: out)
+            guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil),
+                  { CGImageDestinationAddImage(destination, image, nil); return CGImageDestinationFinalize(destination) }() else {
+                print("error: cannot write \(LuaError.shortenPaths(url.path))")
+                return 1
+            }
+            print(url.path)
+            return 0
+        case .failure(let error)?:
+            print("error: \(error)")
+            return 1
+        case nil:
+            print("error: theme \(theme) did not draw within 10 seconds")
+            return 1
         }
     }
 
