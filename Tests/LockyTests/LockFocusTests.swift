@@ -202,7 +202,7 @@ func waitUntil(_ condition: () -> Bool) async -> Bool {
 }
 
 /// The `preview` window, as a lock has its screen: the field has the keyboard from the first frame and after a wake;
-/// the first key of a hidden field shows it and lands in it.
+/// the first key of a hidden field shows it and lands in it; Caps Lock shows.
 @MainActor
 @Suite(.serialized) struct PreviewFocusTests {
     private func preview(_ theme: String = "return { background = { color = '#101010' } }",
@@ -263,5 +263,16 @@ func waitUntil(_ condition: () -> Bool) async -> Bool {
         try send(.keyDown, "p", to: window)
         #expect(screen.authVisible)
         #expect(model(screen)?.password == "p")
+    }
+
+    /// Caps Lock shows from each modifier change the lock sees.
+    @Test func capsLockFollowsTheModifierKeys() throws {
+        let (session, window, screen, sandbox) = try preview()
+        defer { session.end("test"); _ = sandbox }
+        try send(.flagsChanged, flags: [.capsLock], to: window)
+        #expect(model(screen)?.capsLock == true)
+        try send(.flagsChanged, flags: [], to: window)
+        #expect(model(screen)?.capsLock == false)
+        #expect(screen.fieldHasKeyboard)
     }
 }

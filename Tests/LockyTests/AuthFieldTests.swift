@@ -643,3 +643,46 @@ import Testing
         #expect(order.firstIndex(of: widget) == order.firstIndex(of: background).map { $0 + 1 })
     }
 }
+
+/// Caps Lock shows as ⇪ in the field, in every style, without moving anything.
+@MainActor
+@Suite(.serialized) struct CapsLockTests {
+    /// The field in `style` with Caps Lock on or off: its size, and its picture, far off the screen.
+    private func field(_ style: String, capsLock: Bool, interactive: Bool = true) throws -> (size: CGSize, picture: Data) {
+        _ = NSApplication.shared
+        var auth = Theme.Auth()
+        auth.style = style
+        let model = AuthModel()
+        model.capsLock = capsLock
+        let palette = ["bg": "#101010", "fg": "#f0f0f0", "muted": "#a0a0a0", "surface": "#303030", "accent": "#4080ff", "border": "#606060"]
+        let view = NSHostingView(rootView: AuthPanel(auth: auth, style: LockyStyle(palette: palette), touchID: nil, model: model, unlock: {},
+                                                     failed: {}, interactive: interactive))
+        let window = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 600, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.orderOut(nil) }
+        window.contentView = view
+        window.orderBack(nil)
+        view.layoutSubtreeIfNeeded()
+        let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return (view.fittingSize, try #require(rep.representation(using: .png, properties: [:])))
+    }
+
+    @Test(arguments: ["pill", "underline", "box", "terminal", "minimal", "ring"])
+    func everyStyleShowsItWithoutALayoutJump(style: String) throws {
+        let off = try field(style, capsLock: false), on = try field(style, capsLock: true)
+        #expect(on.size == off.size)
+        // The pill's glass does not draw into a cached picture, the ⇪ in it with it: the capture shows it.
+        if style != "pill" { #expect(on.picture != off.picture, "⇪ shows in \(style)") }
+    }
+
+    /// The theme editor's preview never shows it: its field takes no typing.
+    @Test func theEditorsPreviewDoesNotShowIt() throws {
+        #expect(try field("box", capsLock: true, interactive: false).picture == field("box", capsLock: false, interactive: false).picture)
+    }
+
+    @Test func capsLockIsReadFromTheModifierFlags() {
+        #expect(LockSession.capsLock([.capsLock, .shift]))
+        #expect(!LockSession.capsLock([.shift, .command]))
+    }
+}

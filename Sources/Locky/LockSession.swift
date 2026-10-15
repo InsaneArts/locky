@@ -93,6 +93,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var powerObserver: PowerObserver?
     /// settings.json's display_off: the displays go dark after that many seconds without input.
     private var displayOff: DisplayOff?
+    /// Every input to the lock or the preview: it keeps the displays on, and reads Caps Lock.
     private var inputMonitor: Any?
     /// Asks to activate Locky at the lock's first input, so its kiosk options apply.
     private var activationMonitor: Any?
@@ -199,10 +200,13 @@ final class LockSession: NSObject, NSWindowDelegate {
                 return nil
             }
         }
+        if mode != .embedded {
+            authModel.capsLock = Self.capsLock(NSEvent.modifierFlags)
+            watchInput()
+        }
         if mode == .lock {
             installEmergencyExit()
             reclaimKeyboardSoon()
-            startDisplayOff()
             // The kiosk options (no app switching, no Force Quit) apply only while Locky is the active app, and a
             // non-activating shield does not activate it, even when clicked. Input to the lock is the moment macOS
             // grants an activation: ask then.
@@ -408,9 +412,11 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
     }
 
-    /// After a wake or the screen saver: the lock asks for the keyboard again, and the field takes it.
+    /// After a wake or the screen saver: the lock asks for the keyboard again, the field takes it, and Caps Lock is read
+    /// anew, since its key may have changed while nothing reached the lock.
     private func refocus() {
         guard mode != .embedded else { return }
+        authModel.capsLock = Self.capsLock(NSEvent.modifierFlags)
         if mode == .lock { reclaimKeyboard() } else { screens.first?.focusField() }
     }
 
@@ -519,7 +525,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             handOver("⌃⌥⌘Q")
             return true
         }
-        displayOff?.noteActivity()
+        noteInput(key)
         if activityMonitor != nil, key.type == .keyDown { activity() }
         windows.first?.sendEvent(key)
         return true
@@ -1066,15 +1072,28 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock { rebuildForDisplays() }
     }
 
-    private func startDisplayOff() {
-        guard let seconds = options.settings.displayOff, seconds > 0 else { return }
-        let off = DisplayOff(after: seconds, sleep: { Power.sleepDisplays() })
-        displayOff = off
-        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel]) {
-            [weak off] event in
-            off?.noteActivity()
+    /// The timer that input restarts: display_off (lock only). Input also tells the field whether Caps Lock is on.
+    private func watchInput() {
+        if mode == .lock, let seconds = options.settings.displayOff {
+            displayOff = DisplayOff(after: seconds, sleep: { Power.sleepDisplays() })
+        }
+        inputMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+        ) { [weak self] event in
+            self?.noteInput(event)
             return event
         }
+    }
+
+    /// Input to the lock, from the event monitor or the event tap.
+    private func noteInput(_ event: NSEvent) {
+        displayOff?.noteActivity()
+        if event.type == .flagsChanged { authModel.capsLock = Self.capsLock(event.modifierFlags) }
+    }
+
+    /// Whether Caps Lock is on in `flags`. A tool run (screenshots) can say it is with LOCKY_CAPS_LOCK=on.
+    static func capsLock(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.contains(.capsLock) || (AppDelegate.isTool && ProcessInfo.processInfo.environment["LOCKY_CAPS_LOCK"] == "on")
     }
 
     // MARK: Safety
