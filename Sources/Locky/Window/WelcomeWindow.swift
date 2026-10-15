@@ -5,10 +5,12 @@ import SwiftUI
 @MainActor
 final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
     private let onClose: () -> Void
+    /// The page shown and the switch's memory, until the window closes.
+    let visit = WelcomeVisit()
 
     init(model: AppModel, onClose: @escaping () -> Void) {
         self.onClose = onClose
-        let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+        let window = WelcomeWindow(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         // Hidden in the title bar, the title still names the window in the Window menu and Mission Control.
@@ -19,7 +21,7 @@ final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         super.init(window: window)
-        let hosting = NSHostingController(rootView: WelcomeView(model: model, close: { [weak self] in self?.close() }))
+        let hosting = NSHostingController(rootView: WelcomeView(model: model, visit: visit, close: { [weak self] in self?.close() }))
         // The view sets the size.
         hosting.sizingOptions = .preferredContentSize
         window.contentViewController = hosting
@@ -30,9 +32,16 @@ final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
         window.setContentSize(hosting.preferredContentSize)
         window.setContentSize(hosting.preferredContentSize)
         window.center()
+        // After the first page has set the height that the other pages keep.
+        if AppDelegate.isTool { visit.page = Self.firstPage(CommandLine.arguments) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// A screenshot run's page: `--page 2` opens on the second. The first without it, or for a page that does not exist.
+    static func firstPage(_ arguments: [String]) -> WelcomeView.Page {
+        CLI.value("--page", in: arguments).flatMap(Int.init).flatMap { WelcomeView.Page(rawValue: $0 - 1) } ?? .welcome
+    }
 
     /// Brings the window up. `behind` keeps it behind other windows, for screenshots.
     func show(behind: Bool) {
@@ -46,6 +55,19 @@ final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        visit.end()
         onClose()
     }
+}
+
+/// Esc closes the Welcome, as its close button does: Esc that no view takes reaches the window as a key, or from a view
+/// that reads keys as cancelOperation, which ⌘. sends too. The Lock Now shortcut's recorder takes Esc itself while it
+/// records.
+private final class WelcomeWindow: NSWindow {
+    override func keyDown(with event: NSEvent) {
+        guard event.keyCode == 53, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty else { return super.keyDown(with: event) }
+        performClose(nil)
+    }
+
+    override func cancelOperation(_ sender: Any?) { performClose(sender) }
 }

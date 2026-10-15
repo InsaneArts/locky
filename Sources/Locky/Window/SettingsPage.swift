@@ -404,7 +404,7 @@ private struct CameraStatus: View {
 
 /// Accessibility, which lets the lock screen keep the keyboard when another app takes it, while Locky does not have it.
 /// Nothing once it does.
-private struct KeyboardAccess: View {
+struct KeyboardAccess: View {
     @Binding var trusted: Bool
 
     var body: some View {

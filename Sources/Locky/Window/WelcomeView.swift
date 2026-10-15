@@ -1,19 +1,44 @@
+import AppKit
 import LocalAuthentication
 import SwiftUI
 
-/// The first launch's one screen: the lock screen in use, a real lock to try, the two switches that make Locky lock by
-/// itself, and where Locky lives. Each switch saves at once. Done and the close button close the window; Help › Welcome
-/// to Locky opens it again.
+/// One visit to the Welcome: the page it shows, and the triggers its switch turned off. The window keeps it; closing
+/// the window ends the visit, so the next one starts on the first page.
+@MainActor @Observable
+final class WelcomeVisit {
+    var page = WelcomeView.Page.welcome
+    /// The triggers the switch turned off during this visit, which turning it on again restores.
+    var turnedOff: AutoLockSettings?
+
+    func end() {
+        page = .welcome
+        turnedOff = nil
+    }
+}
+
+/// The first launch's three pages: the lock screen in use with a real lock to try; what makes Locky lock instead of
+/// macOS; and what happens if something goes wrong. Each switch saves at once. Done and the close button close the
+/// window; Help › Welcome to Locky opens it again.
 struct WelcomeView: View {
     let model: AppModel
+    let visit: WelcomeVisit
     let close: () -> Void
-    /// The triggers the switch turned off during this visit, which turning it on again restores. Closing the window ends
-    /// the visit.
-    @State private var turnedOff: AutoLockSettings?
     /// Whether this Mac can use Touch ID now, read when the window opens and each time it comes forward: an LAContext on
     /// every body pass is waste.
     @State private var biometrics = false
+    /// Accessibility, which the keyboard row asks for, read at the same times.
+    @State private var trusted = AXIsProcessTrusted()
+    /// The first page's height, which the other pages keep, so the buttons stay in place.
+    @State private var height: CGFloat = 0
     @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    enum Page: Int, CaseIterable {
+        case welcome, lockScreen, safety
+
+        var next: Page? { Page(rawValue: rawValue + 1) }
+        var previous: Page? { Page(rawValue: rawValue - 1) }
+    }
 
     /// Set once the Welcome has opened by itself.
     static let shownKey = "welcomeShown"
@@ -29,15 +54,42 @@ struct WelcomeView: View {
     /// What turning on "Lock automatically" stores when it has nothing of its own to restore.
     static let defaultAutoLock = AutoLockSettings(idleMinutes: 5, systemSleep: true)
 
+    // The last page's lines. docs/security.md opens with the same words, and a test keeps the two the same.
+    static let guardLine = "If Locky crashes, hangs, or is killed during a lock, a second process shows the macOS lock screen within 8 seconds."
+    static let wayOutLine = "On the lock screen, press ⌃⌥⌘Q to switch to the macOS lock screen."
+    static let unlockOnlyLine = "Locky unlocks only with your login password or Touch ID, never after a time."
+
     var body: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .top) {
+                switch visit.page {
+                case .welcome:
+                    welcomePage
+                        .onGeometryChange(for: CGFloat.self, of: \.size.height) { height = $0 }
+                case .lockScreen: lockScreenPage
+                case .safety: safetyPage
+                }
+            }
+            .frame(minHeight: height, alignment: .top)
+            buttons
+        }
+        .frame(width: 560)
+        .onAppear(perform: readSystem)
+        // onAppear runs once for the window's life, so read again each time the window comes forward: the lid may have
+        // closed, a Touch ID keyboard gone, or Accessibility changed in System Settings since the last read.
+        .onChange(of: appearsActive) { if appearsActive { readSystem() } }
+    }
+
+    // MARK: Pages
+
+    private var welcomePage: some View {
         let theme = model.activeTheme
         let info = model.inspection.theme(theme)
-        let stored = model.store.settings.autoLock
-        VStack(spacing: 0) {
-            Text("Welcome to Locky")
-                .font(.largeTitle.bold())
-                .accessibilityAddTraits(.isHeader)
-                .padding(.top, 12)
+        return VStack(spacing: 0) {
+            title("Welcome to Locky")
+            Text("Locky is a lock screen for your Mac, with themes and widgets you choose.")
+                .foregroundStyle(.secondary)
+                .padding(.top, 6)
             ThemePreview(theme: theme, settings: model.store.settings, sources: model.inspection.sources, config: model.store.config,
                          alwaysLive: model.screenshots, info: info)
                 .frame(width: 480, height: 300)
@@ -56,11 +108,22 @@ struct WelcomeView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.top, 8)
+                .padding(.bottom, 16)
+        }
+    }
+
+    /// What makes Locky lock instead of macOS, and what stays Apple's.
+    private var lockScreenPage: some View {
+        let stored = model.store.settings.autoLock
+        let broken = model.store.problem != nil
+        return VStack(spacing: 0) {
+            title("Make Locky Your Lock Screen")
+            Spacer(minLength: 16)
             Form {
                 Section {
                     Toggle(isOn: autoLock) {
                         Text("Lock automatically")
-                        if model.store.problem != nil {
+                        if broken {
                             // The store saves nothing while the file has an error. The switch shows what Locky still uses.
                             // In the subtitle's font and color, as the Form gives a Text here, so the row keeps its height.
                             HStack(spacing: 8) {
@@ -74,51 +137,124 @@ struct WelcomeView: View {
                             .font(.subheadline)
                         } else {
                             // While it is off: what turning it on stores.
-                            Text(Self.autoLockSummary(stored != AutoLockSettings() ? stored : turnedOff ?? Self.defaultAutoLock))
+                            Text(Self.autoLockSummary(stored != AutoLockSettings() ? stored : visit.turnedOff ?? Self.defaultAutoLock))
                         }
                     }
-                    .disabled(model.store.problem != nil)
-                    OpenAtLoginToggle(model: model, subtitle: "Locky locks by itself only while it's open.")
+                    .disabled(broken)
+                    OpenAtLoginToggle(model: model, subtitle: "Locky locks only while it's open.")
+                    ShortcutRecorder("Lock Now shortcut", shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
+                        model.store.update { $0.shortcut = shortcut }
+                    }), onRecordingChange: model.recordingShortcut)
+                    .disabled(broken)
+                    if let problem = model.shortcutProblem {
+                        WarningLabel(problem)
+                    }
+                    KeyboardAccess(trusted: $trusted)
+                } footer: {
+                    Text("The Apple menu's Lock Screen and ⌃⌘Q still show the macOS lock screen. Locky does not change the macOS password setting.")
                 }
             }
             .formStyle(.grouped)
             .scrollDisabled(true)
             .scrollContentBackground(.hidden)
             .frame(width: 520)
-            HStack {
+            // At its rows' height, so the spacers center it: a Form takes all the height it is offered.
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 16)
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    /// The safety net, in the words docs/security.md opens with.
+    private var safetyPage: some View {
+        VStack(spacing: 0) {
+            title("If Something Goes Wrong")
+            Spacer(minLength: 32)
+            VStack(alignment: .leading, spacing: 24) {
+                row("lock.trianglebadge.exclamationmark", Self.guardLine)
+                // The lock's own rule: settings.json can turn the way out off.
+                if model.store.settings["emergency_exit"].bool != false {
+                    row("keyboard", Self.wayOutLine)
+                }
+                row("touchid", Self.unlockOnlyLine)
+            }
+            .padding(.horizontal, 48)
+            Spacer(minLength: 32)
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private func title(_ text: String) -> some View {
+        Text(text)
+            .font(.largeTitle.bold())
+            .accessibilityAddTraits(.isHeader)
+            .padding(.top, 12)
+    }
+
+    /// A symbol and one sentence, read by VoiceOver as the sentence.
+    private func row(_ symbol: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: symbol)
+                .font(.title)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.tint)
+                .frame(width: 40)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(.title3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Back, and Continue or Done at the bottom right. Return is Continue and Done, ⌘[ is Back, and Esc closes (the window's).
+    private var buttons: some View {
+        HStack {
+            if visit.page == .safety {
                 // The symbol is the menu bar icon's.
                 Text("Find Locky in the menu bar \(Image(systemName: "lock.fill"))")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Find Locky in the menu bar")
-                Spacer()
-                Button("Done") { close() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .keyboardShortcut(.defaultAction)
             }
-            .padding(.horizontal, 40)
-            .padding(.bottom, 20)
+            Spacer()
+            // The actions read the page when they run: a keyboard shortcut can keep the action of the page it was made on.
+            if visit.page.previous != nil {
+                Button("Back") { go(to: visit.page.previous) }
+                    .controlSize(.large)
+                    .keyboardShortcut("[")
+            }
+            Group {
+                if visit.page.next != nil {
+                    Button("Continue") { go(to: visit.page.next) }
+                } else {
+                    Button("Done") { close() }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.defaultAction)
         }
-        .frame(width: 560)
-        .onAppear(perform: readBiometrics)
-        // onAppear runs once for the window's life, so read again each time the window comes forward: the lid may have
-        // closed, or a Touch ID keyboard gone, since the last read.
-        .onChange(of: appearsActive) { if appearsActive { readBiometrics() } }
-        // AppDelegate keeps the window, and this view, for the next visit.
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-            if (note.object as? NSWindow)?.contentViewController is NSHostingController<WelcomeView> { turnedOff = nil }
-        }
+        .padding(.horizontal, 40)
+        .padding(.bottom, 20)
     }
 
-    private func readBiometrics() {
+    /// A short cross-fade for a click; none for a key (Motion) or with Reduce Motion.
+    private func go(to page: Page?) {
+        guard let page else { return }
+        let key = NSApp.currentEvent?.type == .keyDown
+        withAnimation(key || reduceMotion ? nil : Motion.easeOut(duration: 0.25)) { visit.page = page }
+    }
+
+    private func readSystem() {
         biometrics = LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        trusted = AXIsProcessTrusted()
     }
 
     /// On while any trigger is stored. A change goes to the file as it is now, through `setAutoLock(_:in:turnedOff:)`.
     private var autoLock: Binding<Bool> {
         Binding(get: { model.store.settings.autoLock != AutoLockSettings() },
-                set: { on in model.store.update { Self.setAutoLock(on, in: &$0, turnedOff: &turnedOff) } })
+                set: { on in model.store.update { Self.setAutoLock(on, in: &$0, turnedOff: &visit.turnedOff) } })
     }
 
     /// Turns "Lock automatically" on or off in `settings`. Off keeps the triggers it clears in `turnedOff`; on restores
