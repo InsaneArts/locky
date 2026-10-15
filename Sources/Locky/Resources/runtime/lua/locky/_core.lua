@@ -1087,7 +1087,7 @@ local function read_theme(name)
   return theme
 end
 
--- Customize's changes to themes, from settings.json: { [name] = { background = {...}, widgets = {...} } }.
+-- Customize's changes to themes, from settings.json: { [name] = { background = {...}, palette = {...}, widgets = {...}, ... } }.
 local settings_themes = {}
 
 local function placement_name(placement)
@@ -1109,6 +1109,9 @@ local background_fields = {
   noise = "number", tint_amount = "number",
 }
 local background_lists = { colors = "string", gradient = "string", params = "number" }
+
+-- The fields of a settings.json font: the theme's whole font, as docs/themes.md has it.
+local font_fields = { family = "string", weight = "string", design = "string" }
 
 -- A settings.json background with the fields Locky knows, each checked. Any other field is left out: it means
 -- nothing to this version, and one nested deep enough would stop the theme from reaching the host.
@@ -1136,19 +1139,46 @@ local function settings_background(where, background)
   return result
 end
 
--- What Customize changed in `theme`: its background, its widget list, and where its password field sits. A
--- widget entry with `ref` is the theme's own placement number `ref` (keeping its options) with the entry's
--- fields on top; an entry without `ref` adds a widget. Returns nil for no change; raises on a bad entry, so
--- nothing half-applies.
+-- What Customize changed in `theme`: its background, palette, font, card fill, widget list, and where its
+-- password field sits. A widget entry with `ref` is the theme's own placement number `ref` (keeping its options)
+-- with the entry's fields on top; an entry without `ref` adds a widget. Returns nil for no change; raises on a bad
+-- entry, so nothing half-applies.
 local function settings_edit(name, theme, edit)
   local where = "settings.json themes." .. name
   validate(where, edit, "table", true)
-  if edit == nil or (edit.background == nil and edit.widgets == nil and edit.auth == nil) then
+  if edit == nil or (edit.background == nil and edit.widgets == nil and edit.auth == nil and edit.palette == nil
+      and edit.font == nil and edit.card == nil) then
     return nil
   end
   local result = {}
   if edit.background ~= nil then
     result.background = settings_background(where .. ".background", edit.background)
+  end
+  if edit.palette ~= nil then
+    validate(where .. ".palette", edit.palette, function(v)
+      for key, color in pairs(v) do
+        if type(key) ~= "string" or type(color) ~= "string" then
+          return false, "expected roles and colors, such as { \"accent\": \"#ff9f0a\" }"
+        end
+      end
+      return true
+    end)
+    result.palette = tbl.deepcopy(edit.palette)
+  end
+  if edit.font ~= nil then
+    validate(where .. ".font", edit.font, "table")
+    -- The theme's whole font: a field left out is the system font's, so "System" can replace a family.
+    result.font = {}
+    for key, kind in pairs(font_fields) do
+      validate(where .. ".font." .. key, edit.font[key], kind, true)
+      result.font[key] = edit.font[key]
+    end
+  end
+  if edit.card ~= nil then
+    validate(where .. ".card", edit.card, "table")
+    validate(where .. ".card.fill", edit.card.fill, "string", true)
+    -- The fill only: the rest of the card is the theme's.
+    result.card = { fill = edit.card.fill }
   end
   if edit.auth ~= nil then
     validate(where .. ".auth", edit.auth, "table")
@@ -1263,6 +1293,13 @@ function locky.theme.derive(base, def)
     local change = settings_edit(base, theme, edit)
     if change then
       theme.background = change.background or theme.background
+      if change.palette then
+        theme.palette = tbl.deep_extend("force", type(theme.palette) == "table" and theme.palette or {}, change.palette)
+      end
+      theme.font = change.font or theme.font
+      if change.card then
+        theme.card = tbl.deep_extend("force", type(theme.card) == "table" and theme.card or {}, change.card)
+      end
       if change.widgets then
         for _, placement in ipairs(change.widgets) do
           placement.opts = tbl.deep_extend("force", placement.opts or {}, placement.settings_opts or {})
@@ -1301,21 +1338,27 @@ local function load_theme(name, with_edit)
     end
   end
   if edit then
-    local background, widgets, auth = theme.background, theme.widgets, theme.auth
+    local background, widgets, auth, font, card = theme.background, theme.widgets, theme.auth, theme.font, theme.card
     theme.background = edit.background or background
     theme.widgets = edit.widgets or widgets
     if edit.auth then
       theme.auth = tbl.deep_extend("force", type(auth) == "table" and auth or {}, edit.auth)
     end
+    theme.font = edit.font or font
+    if edit.card then
+      theme.card = tbl.deep_extend("force", type(card) == "table" and card or {}, edit.card)
+    end
     local ok, normalized = pcall(normalize_theme, name, theme, edit.background ~= nil)
     if ok then
+      -- Over init.lua's palette too: the window's change is the last word, as everywhere.
+      normalized.palette = tbl.deep_extend("force", normalized.palette, edit.palette or {})
       normalized.edited = true
       normalized.problems = problems
       return normalized
     end
     -- Checked above, so this should not happen; if it does, the theme still loads.
     problems[#problems + 1] = ("settings.json themes.%s: %s"):format(name, without_core_position(normalized))
-    theme.background, theme.widgets, theme.auth = background, widgets, auth
+    theme.background, theme.widgets, theme.auth, theme.font, theme.card = background, widgets, auth, font, card
   end
   local normalized = normalize_theme(name, theme, false)
   normalized.edited = false
@@ -1691,7 +1734,7 @@ return {
         local theme = read_theme(name)
         return {
           id = name, name = text(theme.name) or name, description = text(theme.description), author = text(theme.author),
-          dir = text(theme.dir), palette = plain(theme.palette),
+          dir = text(theme.dir), palette = plain(theme.palette), background = plain(theme.background),
         }
       end)
       list[#list + 1] = ok and info or { id = name, name = name, error = error_text(info) }
@@ -1715,6 +1758,7 @@ return {
     return {
       id = name, name = theme.name, background = plain(theme.background), widgets = widgets_list,
       auth = { anchor = theme.auth.anchor, offset = plain(theme.auth.offset) }, card_style = text(theme.card.style),
+      palette = plain(theme.palette), font = plain(theme.font), card_fill = text(theme.card.fill),
     }
   end,
 

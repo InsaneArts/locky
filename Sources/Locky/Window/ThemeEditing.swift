@@ -10,6 +10,9 @@ final class ThemeEditing {
     /// The theme as init.lua and plugins leave it: what each change starts from, and what Reset goes back to.
     private(set) var layout: ThemeLayout?
     private(set) var layoutError: String?
+    /// The name of the person's own theme, which Customize can change; nil for a theme Locky or a package ships, or one
+    /// written in Lua.
+    private(set) var ownName: String?
     /// The window's: each change is a step Edit ▸ Undo takes back.
     @ObservationIgnored weak var undoManager: UndoManager?
 
@@ -21,6 +24,7 @@ final class ThemeEditing {
     private var store: SettingsStore { model.store }
 
     func load() async {
+        ownName = model.ownFile(theme.id)?.name
         let wallpaper = NSScreen.main.flatMap(Wallpaper.picture(for:))?.path
         switch await Inspection.layout(of: theme.id, config: store.config, wallpaper: wallpaper) {
         case .success(let value):
@@ -134,6 +138,113 @@ final class ThemeEditing {
         guard layout != nil else { return }
         let place: LuaValue = .table(["anchor": .string(anchor), "offset": .array([EditorPlacement.number(x), EditorPlacement.number(y)])])
         record("Move Password Field") { store.update { $0.setThemeEdit(theme.id, "auth", place) } }
+    }
+
+    // MARK: Colors
+
+    /// The roles Colors shows, by the names people read.
+    static let colorRoles: [(role: String, title: String)] = [("fg", "Text"), ("muted", "Secondary Text"), ("accent", "Accent")]
+
+    /// A role's color as the canvas shows it: settings.json's, else the theme's.
+    func color(_ role: String, in settings: Settings? = nil) -> String {
+        (settings ?? store.settings).themeEdit(theme.id, "palette")[role].string ?? layout?.palette[role] ?? Theme.fallback.palette[role] ?? "#ffffff"
+    }
+
+    /// Whether the theme's widgets sit on cards whose fill shows: a glass or solid card. An outline has none.
+    var hasCardFill: Bool { ["glass", "solid"].contains(layout?.cardStyle) }
+
+    /// The card's fill as "#rrggbbaa": settings.json's, else the theme's, else what the style draws without one (a solid
+    /// card's surface, a glass card's faint black).
+    func cardFill(in settings: Settings? = nil) -> String {
+        let fill = (settings ?? store.settings).themeEdit(theme.id, "card")["fill"].string ?? layout?.cardFill
+            ?? (layout?.cardStyle == "solid" ? "surface" : "#0000002e")
+        return layout?.palette[fill] ?? fill
+    }
+
+    /// settings.json with `colors` (roles and "card") over this theme's changes: what the canvas shows while a color is
+    /// picked, and what saves.
+    func applying(_ colors: [String: String], to settings: Settings) -> Settings {
+        var settings = settings
+        var palette = settings.themeEdit(theme.id, "palette").table ?? [:]
+        for (role, hex) in colors where role != "card" { palette[role] = .string(Self.keepingAlpha(hex, of: color(role))) }
+        settings.setThemeEdit(theme.id, "palette", palette.isEmpty ? nil : .table(palette))
+        if let card = colors["card"] {
+            settings.setThemeEdit(theme.id, "card", .table(["fill": .string(Self.keepingAlpha(card, of: cardFill()))]))
+        }
+        return settings
+    }
+
+    func setColors(_ colors: [String: String]) {
+        guard layout != nil, !colors.isEmpty else { return }
+        let next = applying(colors, to: store.settings)
+        record("Change Colors") { store.update { $0 = next } }
+    }
+
+    /// Whether settings.json changes the theme's colors, which Reset takes back.
+    var colorsChanged: Bool {
+        !store.settings.themeEdit(theme.id, "palette").isNil || !store.settings.themeEdit(theme.id, "card").isNil
+    }
+
+    func resetColors() {
+        record("Reset Colors") {
+            store.update {
+                $0.setThemeEdit(theme.id, "palette", nil)
+                $0.setThemeEdit(theme.id, "card", nil)
+            }
+        }
+    }
+
+    /// A color well picks "#rrggbb": a role that had transparency, such as secondary text, keeps it.
+    static func keepingAlpha(_ hex: String, of current: String) -> String {
+        guard hex.count == 7, current.hasPrefix("#"), current.count == 9 else { return hex }
+        return hex + current.suffix(2)
+    }
+
+    // MARK: Font
+
+    /// The theme's font as the canvas shows it: settings.json's, else the theme's.
+    var font: FontSpec {
+        let edit = store.settings.themeEdit(theme.id, "font")
+        guard !edit.isNil else { return layout?.font ?? FontSpec() }
+        return FontSpec(family: edit["family"].string, design: edit["design"].string, weight: edit["weight"].string)
+    }
+
+    /// Saves the theme's whole font: a field left nil is the system font's.
+    func setFont(_ font: FontSpec) {
+        guard layout != nil else { return }
+        var table: [String: LuaValue] = [:]
+        table["family"] = font.family.map(LuaValue.string)
+        table["design"] = font.design.map(LuaValue.string)
+        table["weight"] = font.weight.map(LuaValue.string)
+        record("Change Font") { store.update { $0.setThemeEdit(theme.id, "font", .table(table)) } }
+    }
+
+    var fontChanged: Bool { !store.settings.themeEdit(theme.id, "font").isNil }
+
+    func resetFont() {
+        record("Reset Font") { store.update { $0.setThemeEdit(theme.id, "font", nil) } }
+    }
+
+    // MARK: Name
+
+    /// Gives the person's own theme another name, as a step Edit ▸ Undo takes back.
+    func rename(_ name: String) throws {
+        guard let old = ownName, name != old else { return }
+        try model.rename(theme.id, to: name)
+        ownName = name
+        if let undoManager { Self.registerRename(theme.id, back: old, from: name, model: model, undoManager: undoManager) }
+    }
+
+    /// Registers the step that names the theme `back` again; taking that step registers its own inverse, the redo.
+    private static func registerRename(_ id: String, back: String, from: String, model: AppModel, undoManager: UndoManager) {
+        undoManager.registerUndo(withTarget: model) { model in
+            MainActor.assumeIsolated {
+                model.customize(id)
+                try? model.rename(id, to: back)
+                registerRename(id, back: from, from: back, model: model, undoManager: undoManager)
+            }
+        }
+        undoManager.setActionName("Rename Theme")
     }
 
     // MARK: Changes

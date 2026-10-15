@@ -53,3 +53,25 @@ enum ThemeThumbnails {
         return ["png", "jpg"].lazy.compactMap { NSImage(contentsOf: RuntimePath.resources.appending(path: "thumbnails/\(id).\($0)")) }.first
     }
 }
+
+/// Pictures of the animated backgrounds Customize offers: one frame of each shader, made once per run.
+@MainActor
+enum ShaderThumbnails {
+    private static var cache: [String: CGImage] = [:]
+
+    /// A frame of `choice`'s shader, 30 seconds in, 320 by 200 pixels; nil when it does not draw.
+    static func image(for choice: Inspection.ShaderChoice, path: RuntimePath) async -> CGImage? {
+        if let cached = cache[choice.id] { return cached }
+        let background = choice.background
+        guard let name = background["shader"].string, let url = path.find("shaders/\(name).metal") else { return nil }
+        let image = await render(url: url, colors: background["colors"].array?.compactMap(\.string) ?? [],
+                                 params: background["params"].array?.compactMap(\.number) ?? [],
+                                 seconds: 30 * (background["speed"].number ?? 1))
+        cache[choice.id] = image
+        return image
+    }
+
+    @concurrent nonisolated private static func render(url: URL, colors: [String], params: [Double], seconds: Double) async -> CGImage? {
+        try? ShaderView.still(url: url, colors: colors, params: params, seconds: seconds, width: 320, height: 200)
+    }
+}

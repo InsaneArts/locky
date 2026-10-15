@@ -217,6 +217,20 @@ final class AppModel {
         return id
     }
 
+    /// The person's own theme file for `id`, as the window writes one; nil for any other theme. Its name can change.
+    func ownFile(_ id: String) -> ThemeFile? {
+        guard canTrash(id) else { return nil }
+        return (try? String(contentsOf: ThemeFile.file(id, config: store.config), encoding: .utf8)).flatMap(ThemeFile.parse)
+    }
+
+    /// Gives the person's own theme `id` another name. The id, and so the file and every setting that names it, stays.
+    func rename(_ id: String, to name: String) throws {
+        guard var file = ownFile(id), ThemeFile.isName(name) else { throw LuaError("Use a name of 1 to 80 characters on one line.") }
+        file.name = name
+        try file.source().write(to: ThemeFile.file(id, config: store.config), atomically: true, encoding: .utf8)
+        refresh()
+    }
+
     /// Whether `id` is the person's own theme, which Move to Trash may take: a theme that the last read of the config
     /// lists, with a file in the config folder's themes/. A plugin can add any id to that list, so the id must also be a
     /// plain file name (no "/" and no leading "."): then it never leads out of themes/.
