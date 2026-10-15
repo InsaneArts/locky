@@ -296,6 +296,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock { NSApp.presentationOptions = [] }
         if let napGuard { ProcessInfo.processInfo.endActivity(napGuard) }
         observers.forEach { $0.0.removeObserver($0.1) }
+        DistributedNotificationCenter.default().removeObserver(self, name: Self.screenSaverStopped, object: nil)
         windows.forEach { $0.delegate = nil }
         if mode == .lock {
             let closing = windows
@@ -354,9 +355,17 @@ final class LockSession: NSObject, NSWindowDelegate {
             $0.runtime?.setPaused(false)
             $0.touchID?.restart()
             $0.displayOff?.noteActivity()
+            $0.refocus()
         }
-        observe(workspace, NSWorkspace.didWakeNotification) { $0.runtime?.realign() }
+        observe(workspace, NSWorkspace.didWakeNotification) {
+            $0.runtime?.realign()
+            $0.refocus()
+        }
         guard mode == .lock else { return }
+        // The screen saver can start during a lock, and takes the keyboard and Touch ID while it shows. AppKit holds
+        // distributed notifications back while Locky is inactive, unless they are delivered at once.
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(screenSaverDidStop), name: Self.screenSaverStopped,
+                                                            object: nil, suspensionBehavior: .deliverImmediately)
         // Animations stall while a display sleeps, and their clock stops while the Mac does: a lock still coming in turns
         // opaque at once, so the screen is covered when it wakes. No queue for the Mac's sleep, so this runs before it.
         observe(workspace, NSWorkspace.screensDidSleepNotification) { $0.finishComingIn() }
@@ -384,7 +393,25 @@ final class LockSession: NSObject, NSWindowDelegate {
         NSApp.activate()
         windows.first?.makeKeyAndOrderFront(nil)
         NSApp.presentationOptions = Self.kioskOptions
+        screens.first?.focusField()
         authModel.focusRequest += 1
+    }
+
+    private static let screenSaverStopped = Notification.Name("com.apple.screensaver.didstop")
+
+    @objc private nonisolated func screenSaverDidStop(_: Notification) {
+        Task { @MainActor [weak self] in
+            guard let self, !ended else { return }
+            // Touch ID gave up while the screen saver cancelled it.
+            touchID?.restart()
+            refocus()
+        }
+    }
+
+    /// After a wake or the screen saver: the lock asks for the keyboard again, and the field takes it.
+    private func refocus() {
+        guard mode != .embedded else { return }
+        if mode == .lock { reclaimKeyboard() } else { screens.first?.focusField() }
     }
 
     /// macOS treats activation as a request it may refuse: ask a few times, and check that the lock holds the
@@ -443,6 +470,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         case .keep:
             // While the tap holds the keys, another app may turn secure keyboard entry on: check each second.
             guard !holdsKeyboard else { return }
+            // And ask for the keyboard again each second: once whatever took it is gone (the screen saver, a system
+            // prompt), the shield is key again, and the field shows that it takes the typing.
+            if !handingOver { reclaimKeyboard() }
             keyboardCheck = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
@@ -732,6 +762,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                               onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded,
                               touchIDPicture: touchIDPicture, exit: mode == .lock && emergencyExit)
         screen.auth = (NSHostingView(rootView: panel), spec)
+        // From the field's first frame: no key typed before SwiftUI asks for focus is lost.
+        if mode != .embedded { screen.focusField() }
     }
 
     /// The photos this lock took, once a capture still running has finished.
@@ -999,6 +1031,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         guard let auth, let screen = screens.first else { return }
         if !screen.authVisible {
             screen.setAuthVisible(true, dim: auth.dim, animated: true)
+            screen.focusField()
             runtime?.queue.async { [runtime] in runtime?.emit("auth_shown") }
         }
         idleTimer?.cancel()
@@ -1131,6 +1164,17 @@ final class ShieldWindow: NSPanel {
     var allowsKey = true
     override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { allowsKey }
+
+    private var scene: LockScreenView? { contentView as? LockScreenView ?? (contentView as? TransitionStage)?.scene }
+
+    /// The password field takes every key, whether it comes from macOS or the lock's event tap: a key that finds the field
+    /// without the keyboard gives it the keyboard first, so its character lands there. A click anywhere leaves the field
+    /// with the keyboard too.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown { scene?.focusField() }
+        super.sendEvent(event)
+        if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) { scene?.focusField() }
+    }
 }
 
 /// One display's lock screen. Flipped, so offsets read like screen coordinates: y grows downwards.
@@ -1201,6 +1245,32 @@ final class LockScreenView: NSView {
         }
     }
     private let dimLayer = CALayer()
+
+    /// SwiftUI's text field in the password field, once it has made it.
+    private var textField: NSTextField? {
+        func find(_ view: NSView) -> NSTextField? { (view as? NSSecureTextField) ?? view.subviews.lazy.compactMap(find).first }
+        return auth.flatMap { find($0.view) }
+    }
+
+    /// The password field has its window's keyboard: its field editor is the first responder.
+    var fieldHasKeyboard: Bool {
+        guard let field = textField, let editor = window?.firstResponder as? NSText else { return false }
+        return (editor.delegate as AnyObject?) === field
+    }
+
+    /// Gives the password field its window's keyboard, unless it has it or is disabled: during a check, the wait after
+    /// wrong passwords, and always in the theme editor's preview. A hidden field (a theme that shows it on activity) takes
+    /// it too, so the first key counts. false: the field does not have the keyboard.
+    @discardableResult func focusField() -> Bool {
+        guard let window, let view = auth?.view else { return false }
+        if textField == nil {
+            // SwiftUI makes the text field at the hosting view's first layout.
+            layoutSubtreeIfNeeded()
+            view.layoutSubtreeIfNeeded()
+        }
+        guard let field = textField, field.isEnabled else { return false }
+        return fieldHasKeyboard || window.makeFirstResponder(field)
+    }
 
     /// Shows or hides the password field. Hidden, it keeps the keyboard focus, so the first key counts. The key or
     /// the mouse that shows it gets the field at once, and only the dim eases in; hiding after idle, when nobody

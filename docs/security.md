@@ -34,6 +34,12 @@ The Welcome's last page says the same. The sections below give the details.
   Without it, Locky switches to the macOS lock screen. It switches too when another app has secure keyboard
   entry on (Terminal's Secure Keyboard Entry, a focused password field), which hides the keys from any event
   tap.
+- **Every key goes to the password field.** The field has the keyboard from the lock's first frame, also while it is
+  hidden (a theme that shows it on activity). If anything takes the keyboard from it, the next key gives it back
+  before its character lands, and so does a click anywhere on the lock. While the event tap holds the keys, Locky asks
+  for the keyboard again each second, so the field shows its caret again when the other app is gone. After a wake, or
+  when the screen saver ends, Locky asks for the keyboard and restarts Touch ID. The field is disabled only while a
+  password check runs and during the wait after wrong passwords.
 - **The Touch ID button locks the Mac.** With Settings › General › Lock with the Touch ID button on, a press of
   the Touch ID button shows Locky's lock instead of the macOS lock screen. This needs Accessibility access: Locky
   stops the press before macOS sees it, with an event tap. It stops only that one event, and passes every other
