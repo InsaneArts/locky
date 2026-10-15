@@ -29,6 +29,12 @@ final class LockSession: NSObject, NSWindowDelegate {
         var epoch: CFTimeInterval?
         /// Where Lua finds the config, plugins, and themes; tests pass their own.
         var path = RuntimePath.standard()
+        /// Lock only: the lock comes in animated (LockTransition.animatesLock). Without it, the shield is opaque from the
+        /// first frame.
+        var animated = false
+        /// Preview only (`preview --transition`): the lock's way in plays as the window opens, over a stand-in desktop,
+        /// and Return plays the way out, then the way in again.
+        var showsTransition = false
     }
 
     let mode: Mode
@@ -89,6 +95,11 @@ final class LockSession: NSObject, NSWindowDelegate {
     private lazy var intruder = IntruderPolicy(settings: options.settings)
     private(set) var photos: [URL] = []
     private var capturing: Task<Void, Never>?
+    /// While the lock comes in: makes the windows opaque when it has.
+    private var comingIn: Task<Void, Never>?
+    /// The preview's Return, which plays the way out and in again.
+    private var replayMonitor: Any?
+    private var replaying = false
 
     /// The last lock's password field look, so the next lock's shield and field appear in it at once.
     private static var lastLook: (auth: Theme.Auth, palette: [String: String], font: FontSpec)?
@@ -170,10 +181,17 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
 
         // Cover the screen and show the password field first. The theme fills in when Lua is ready.
-        openWindows()
+        openWindows(animated: mode == .lock && options.animated)
         if let first = screens.first {
             let look = Self.firstLook
             installAuth(look.auth, style: LockyStyle(palette: look.palette, font: look.font, scale: Layout.scale(for: first.bounds.size)))
+        }
+        if mode == .preview, options.showsTransition {
+            replayMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard event.keyCode == 36, let self, event.window === windows.first else { return event }
+                replay()
+                return nil
+            }
         }
         if mode == .lock {
             installEmergencyExit()
@@ -225,6 +243,10 @@ final class LockSession: NSObject, NSWindowDelegate {
             context.timingFunction = Motion.easeOut
             screens.forEach { $0.reveal(animated: animated) }
         }, completionHandler: nil)
+        if mode == .preview, options.showsTransition, let screen = screens.first, screen.alphaValue == 0 {
+            screen.alphaValue = 1
+            comeIn(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        }
         guard mode == .embedded else { return }
         let ready = onReady
         onReady = nil
@@ -238,7 +260,8 @@ final class LockSession: NSObject, NSWindowDelegate {
             && ((screen.background as? BackgroundLoading)?.isLoaded ?? true)
     }
 
-    func end(_ reason: String) {
+    /// `unlocked`: a correct password or Touch ID ends the lock, which then goes out animated (LockTransition).
+    func end(_ reason: String, unlocked: Bool = false) {
         guard !ended else { return }
         ended = true
         if mode != .embedded { LogFile.shared.write(level: "info", message: "\(mode == .lock ? "lock" : "preview") ended: \(reason)", source: "locky") }
@@ -257,6 +280,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
         if let activationMonitor { NSEvent.removeMonitor(activationMonitor) }
+        if let replayMonitor { NSEvent.removeMonitor(replayMonitor) }
+        let wasComingIn = comingIn != nil
+        comingIn?.cancel()
         displayOff?.stop()
         powerObserver = nil
         idleTimer?.cancel()
@@ -278,13 +304,22 @@ final class LockSession: NSObject, NSWindowDelegate {
                 // behind would quit Locky, and auto-lock with it. (The status item's window cannot become main.)
                 NSApp.deactivate()
             }
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.2
-                context.timingFunction = Motion.easeOut
-                closing.forEach { $0.animator().alphaValue = 0 }
-            }, completionHandler: {
-                MainActor.assumeIsolated { closing.forEach { $0.orderOut(nil) } }
-            })
+            if LockTransition.animatesUnlock(unlocked: unlocked, setting: options.settings.lockAnimation, handingOver: handingOver,
+                                             comingIn: wasComingIn, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),
+               goOut(closing) {
+                Task {
+                    try? await Task.sleep(for: .seconds(LockTransition.length(.unlock) + 0.02))
+                    closing.forEach { $0.orderOut(nil) }
+                }
+            } else {
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.2
+                    context.timingFunction = Motion.easeOut
+                    closing.forEach { $0.animator().alphaValue = 0 }
+                }, completionHandler: {
+                    MainActor.assumeIsolated { closing.forEach { $0.orderOut(nil) } }
+                })
+            }
         } else {
             windows.forEach { $0.orderOut(nil) }
         }
@@ -316,6 +351,14 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         observe(workspace, NSWorkspace.didWakeNotification) { $0.runtime?.realign() }
         guard mode == .lock else { return }
+        // Animations stall while a display sleeps, and their clock stops while the Mac does: a lock still coming in turns
+        // opaque at once, so the screen is covered when it wakes. No queue for the Mac's sleep, so this runs before it.
+        observe(workspace, NSWorkspace.screensDidSleepNotification) { $0.finishComingIn() }
+        let token = workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: nil) { [weak self] _ in
+            let finish = { MainActor.assumeIsolated { if let self, !self.ended { self.finishComingIn() } } }
+            if Thread.isMainThread { finish() } else { DispatchQueue.main.sync(execute: finish) }
+        }
+        observers.append((workspace, token))
         // A display added, removed, or rearranged during the lock gets covered too.
         observe(.default, NSApplication.didChangeScreenParametersNotification) { $0.rebuildForDisplays() }
         // Anything that takes the keyboard (another app, a system prompt) gives it back to the password field.
@@ -448,10 +491,12 @@ final class LockSession: NSObject, NSWindowDelegate {
         palette["bg"].flatMap { NSColor(hex: $0) }?.withAlphaComponent(1) ?? .black
     }
 
-    private func openWindows() {
+    /// `animated`: a lock or a `preview --transition` comes in with LockTransition.
+    private func openWindows(animated: Bool = false) {
         // From the first frame, the last lock's bg: the scene fades in over it.
         let palette = Self.firstLook.palette
         let backdrop = Self.backdrop(palette)
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         switch mode {
         case .preview:
             let window = PreviewWindow(contentRect: CGRect(origin: .zero, size: options.previewSize), styleMask: [.titled, .closable, .resizable],
@@ -465,6 +510,11 @@ final class LockSession: NSObject, NSWindowDelegate {
             let screen = LockScreenView()
             screen.layer?.backgroundColor = backdrop.cgColor
             window.contentView = screen
+            if options.showsTransition {
+                // The stand-in desktop alone until the theme shows: the way in then plays over it (revealWhenReady).
+                screen.alphaValue = 0
+                window.contentView = Self.standInStage(scene: screen, size: options.previewSize)
+            }
             if options.behind {
                 window.setContentSize(options.previewSize)
                 window.setFrameOrigin(NSPoint(x: NSScreen.main?.visibleFrame.minX ?? 0, y: NSScreen.main?.visibleFrame.minY ?? 0))
@@ -509,7 +559,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                 window.acceptsMouseMovedEvents = true
                 let view = LockScreenView()
                 view.layer?.backgroundColor = backdrop.cgColor
-                window.contentView = view
+                Self.prepare(window, scene: view, transitions: options.settings.lockAnimation, comingIn: animated,
+                             reduceTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
                 window.setFrame(screen.frame, display: true)
                 window.orderFrontRegardless()
                 windows.append(window)
@@ -521,6 +572,108 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         // The field on a light bg draws light glass, as the theme will.
         windows.forEach { $0.appearance = NSAppearance(named: Design.isLight(palette["bg"]) ? .aqua : .darkAqua) }
+        if animated { comeIn(reduceMotion: reduceMotion) }
+    }
+
+    // MARK: The way in and out (LockTransition)
+
+    /// A shield's content. With lock_animation on: the backdrop under the scene, hidden while the window is opaque. Coming
+    /// in, the window starts clear, with the backdrop at the back, and still takes every click: input goes to the lock
+    /// from the first frame, as with an opaque shield.
+    static func prepare(_ window: NSWindow, scene: LockScreenView, transitions: Bool, comingIn: Bool, reduceTransparency: Bool) {
+        guard transitions else {
+            window.contentView = scene
+            return
+        }
+        let backdrop = LockTransition.backdrop(reduceTransparency: reduceTransparency)
+        backdrop.isHidden = !comingIn
+        window.contentView = TransitionStage(frame: window.contentRect(forFrameRect: window.frame), scene: scene, backdrop: backdrop)
+        guard comingIn else { return }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        // A clear window lets clicks through its clear pixels unless told otherwise.
+        window.ignoresMouseEvents = false
+    }
+
+    /// The preview's stage: a stand-in desktop with its blurred copy as the backdrop, under the scene.
+    private static func standInStage(scene: LockScreenView, size: CGSize) -> TransitionStage {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let picture = StandInDesktop.picture(size: size, scale: scale)
+        let desktop = NSView()
+        desktop.wantsLayer = true
+        desktop.layer?.contents = picture
+        desktop.layer?.contentsGravity = .resize
+        let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let backdrop = LockTransition.backdrop(reduceTransparency: reduceTransparency,
+                                               picture: picture.flatMap { StandInDesktop.blurred($0, scale: scale) })
+        return TransitionStage(frame: CGRect(origin: .zero, size: size), scene: scene, backdrop: backdrop, desktop: desktop)
+    }
+
+    /// Each window's point at `global` (screen coordinates), in its scene's coordinates.
+    private static func point(_ global: CGPoint, in stage: TransitionStage) -> CGPoint {
+        guard let window = stage.window else { return CGPoint(x: stage.scene.bounds.midX, y: stage.scene.bounds.midY) }
+        return stage.scene.convert(window.convertPoint(fromScreen: global), from: nil)
+    }
+
+    /// The lock comes in on every window, its iris from the middle of the main display; the windows turn opaque when it
+    /// has, or at once if a display or the Mac goes to sleep first (observeSystem).
+    private func comeIn(reduceMotion: Bool) {
+        let stages = windows.compactMap { $0.contentView as? TransitionStage }
+        guard let main = windows.first, let first = stages.first, let start = first.scene.layer?.convertTime(CACurrentMediaTime(), from: nil) else { return }
+        let middle = main.convertPoint(toScreen: first.convert(CGPoint(x: first.bounds.midX, y: first.bounds.midY), to: nil))
+        for stage in stages {
+            LockTransition.comeIn(backdrop: stage.backdrop, scene: stage.scene, origin: Self.point(middle, in: stage), at: start, reduceMotion: reduceMotion)
+        }
+        comingIn = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(LockTransition.length(.lock, reduceMotion: reduceMotion)))
+            guard !Task.isCancelled else { return }
+            self?.finishComingIn()
+        }
+    }
+
+    /// The lock has come in: the scene alone covers each display, opaque, for the rest of the lock.
+    private func finishComingIn() {
+        guard comingIn != nil else { return }
+        comingIn?.cancel()
+        comingIn = nil
+        for window in windows {
+            guard let stage = window.contentView as? TransitionStage else { continue }
+            LockTransition.finishComingIn(backdrop: stage.backdrop, scene: stage.scene)
+            guard mode == .lock else { continue }
+            window.backgroundColor = stage.scene.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) } ?? .black
+            window.isOpaque = true
+        }
+    }
+
+    /// Starts the way out on `closing`, the iris from the password field's middle. false when a window has no stage, as
+    /// when lock_animation was off as the lock started.
+    private func goOut(_ closing: [NSWindow]) -> Bool {
+        let stages = closing.compactMap { $0.contentView as? TransitionStage }
+        guard stages.count == closing.count, let first = stages.first, let start = first.scene.layer?.convertTime(CACurrentMediaTime(), from: nil)
+        else { return false }
+        let scene = first.scene
+        let field = scene.auth.map { CGPoint(x: $0.view.frame.midX, y: $0.view.frame.midY) } ?? CGPoint(x: scene.bounds.midX, y: scene.bounds.midY)
+        let global = first.window.map { $0.convertPoint(toScreen: scene.convert(field, to: nil)) } ?? field
+        for (window, stage) in zip(closing, stages) {
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            LockTransition.goOut(backdrop: stage.backdrop, scene: stage.scene, origin: Self.point(global, in: stage), at: start)
+        }
+        return true
+    }
+
+    /// The preview's Return: the way out, a moment of the desktop, and the way in again.
+    private func replay() {
+        guard !replaying, comingIn == nil, let window = windows.first, let stage = window.contentView as? TransitionStage else { return }
+        replaying = true
+        _ = goOut([window])
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(LockTransition.length(.unlock) + 0.5))
+            guard let self, !ended else { return }
+            LockTransition.reset(backdrop: stage.backdrop, scene: stage.scene)
+            replaying = false
+            comeIn(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        }
     }
 
     /// New windows for the displays there are now, with the theme and each widget's latest view, without
@@ -547,7 +700,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         let runtime = self.runtime
         authModel.user = Auth.user(privacy: privacy)
         let panel = AuthPanel(auth: spec, style: style, touchID: touchID, model: authModel,
-                              unlock: { [weak self] in self?.end("password") },
+                              unlock: { [weak self] in self?.end("password", unlocked: true) },
                               failed: { [weak self] in
                                   runtime?.queue.async { runtime?.emit("auth_failed") }
                                   self?.wrongPassword()
@@ -584,7 +737,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         touchIDFallback?.cancel()
         touchID?.start { [weak self] in
             self?.authModel.succeeded()
-            self?.end("Touch ID")
+            self?.end("Touch ID", unlocked: true)
         }
     }
 
@@ -632,7 +785,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .embedded { screens.forEach { $0.appearance = NSAppearance(named: light ? .aqua : .darkAqua) } }
         // Under the theme's field until the scene shows: its own bg, as a lock's first frame has it.
         let backdrop = Self.backdrop(theme.palette)
-        windows.forEach { $0.backgroundColor = backdrop }
+        // A window still coming in stays clear until it has (finishComingIn).
+        windows.forEach { if $0.isOpaque { $0.backgroundColor = backdrop } }
         screens.forEach { $0.layer?.backgroundColor = backdrop.cgColor }
 
         if let first = screens.first {
@@ -988,7 +1142,11 @@ final class LockScreenView: NSView {
             // A new place for the same field moves it; a new field replaces it.
             guard oldValue?.view !== auth?.view else { return }
             oldValue?.view.removeFromSuperview()
-            if let auth { addSubview(auth.view) }
+            if let auth {
+                addSubview(auth.view)
+                // A new look for the field enters where the old one was in its entrance.
+                enter(auth.view, slot: Self.fieldSlot, continuing: oldValue != nil)
+            }
         }
     }
     var authSize: CGSize = .zero { didSet { needsLayout = true } }
@@ -1000,6 +1158,7 @@ final class LockScreenView: NSView {
             if let glanceHint {
                 glanceHint.alphaValue = authVisible ? 0 : 1
                 if let field = auth?.view { addSubview(glanceHint, positioned: .below, relativeTo: field) } else { addSubview(glanceHint) }
+                enter(glanceHint, slot: Self.fieldSlot)
             }
             needsLayout = true
         }
@@ -1047,6 +1206,7 @@ final class LockScreenView: NSView {
             oldValue?.view.removeFromSuperview()
             if let message {
                 if let banner { addSubview(message.view, positioned: .below, relativeTo: banner) } else { addSubview(message.view) }
+                enter(message.view, slot: Self.fieldSlot)
             }
             needsLayout = true
         }
@@ -1057,6 +1217,7 @@ final class LockScreenView: NSView {
             oldValue?.view.removeFromSuperview()
             if let wayOut {
                 if let banner { addSubview(wayOut.view, positioned: .below, relativeTo: banner) } else { addSubview(wayOut.view) }
+                enter(wayOut.view, slot: Self.fieldSlot)
                 // SwiftUI can show the line after a layout pass measured it empty: it asks for another one.
                 wayOut.rootView.changed = { [weak self] in self?.needsLayout = true }
             }
@@ -1179,8 +1340,62 @@ final class LockScreenView: NSView {
             scene.append(widget)
         }
         for view in scene {
+            if animated, let widget = view as? WidgetHost, entering(widget) { continue }
             if animated { view.animator().alphaValue = 1 } else { view.alphaValue = 1 }
         }
+    }
+
+    // MARK: The lock's way in and out (LockTransition)
+
+    /// While a lock comes in: when its items' entrance starts, in the layer's time. The widgets enter from 0.25 s in turn,
+    /// 40 ms apart, and the password field with its lines last. An item that shows later enters at its turn, or at once
+    /// when its turn has passed. nil: items show as they always do.
+    var entrance: CFTimeInterval? {
+        didSet {
+            guard entrance != nil else { return }
+            for (view, slot) in items { enter(view, slot: slot, continuing: true) }
+        }
+    }
+
+    /// The password field, its hint, the message, and the way out enter after the widgets.
+    private static let fieldSlot = 3
+
+    /// What enters and leaves: the widgets that show and the password field with its lines. The background and the
+    /// overlay come with the scene.
+    private var items: [(view: NSView, slot: Int)] {
+        var list = widgets.filter { shown.contains(ObjectIdentifier($0)) }.enumerated().map { ($0.element as NSView, min($0.offset, 2)) }
+        list += [auth?.view, glanceHint, message?.view, wayOut?.view].compactMap { $0.map { ($0, Self.fieldSlot) } }
+        return list
+    }
+
+    /// Starts `view`'s entrance at its slot's turn. A view new to the screen whose turn has passed starts now, so it never
+    /// shows halfway; one that takes another's place (`continuing`) goes on from where that one was.
+    private func enter(_ view: NSView, slot: Int, continuing: Bool = false) {
+        guard let entrance, let layer = view.layer else { return }
+        var begin = entrance + 0.25 + 0.04 * CFTimeInterval(slot)
+        if !continuing { begin = max(begin, layer.convertTime(CACurrentMediaTime(), from: nil)) }
+        LockTransition.enter(layer, at: begin)
+    }
+
+    /// A widget that shows during the entrance: it shows at once, and its entrance animation brings it in. false after the
+    /// entrance, when it fades in alone, as always.
+    private func entering(_ widget: WidgetHost) -> Bool {
+        guard entrance != nil, let slot = widgets.firstIndex(where: { $0 === widget }) else { return false }
+        widget.alphaValue = 1
+        enter(widget, slot: min(slot, 2))
+        return true
+    }
+
+    /// The lock goes out: every item leaves at `start`, and stays gone.
+    func exit(at start: CFTimeInterval) {
+        entrance = nil
+        for (view, _) in items { if let layer = view.layer { LockTransition.exit(layer, at: start) } }
+    }
+
+    /// The preview only: every item as it was before the way in or out.
+    func resetTransition() {
+        entrance = nil
+        for (view, _) in items { if let layer = view.layer { LockTransition.removeItemAnimations(layer) } }
     }
 
     private static func measured(_ widget: WidgetHost) -> Bool { widget.placement.size != nil || widget.model.contentSize.width > 0 }
@@ -1203,7 +1418,9 @@ final class LockScreenView: NSView {
             // Measured after the scene showed: alone, as the scene came in.
             if revealed, Self.measured(widget), !shown.contains(ObjectIdentifier(widget)) {
                 shown.insert(ObjectIdentifier(widget))
-                if fadesIn {
+                if entering(widget) {
+                    continue
+                } else if fadesIn {
                     NSAnimationContext.runAnimationGroup { context in
                         context.duration = 0.25
                         context.timingFunction = Motion.easeOut

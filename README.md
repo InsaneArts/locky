@@ -78,7 +78,8 @@ clock in the toolbar, or File › Schedule Themes…) changes the theme by time 
 Move to Trash removes a theme you made.
 
 Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, auto-lock, Open at login, a lock
-screen message, Hide personal information, Turn the display off, Touch ID, and a photo after wrong passwords.
+screen message, Hide personal information, Animate locking and unlocking, Turn the display off, Touch ID, and a
+photo after wrong passwords.
 Plugins installs, updates, and removes plugins. General's last section opens the config folder and init.lua, shows
 init.lua's problems, and makes new themes and widgets. Everything but Open at login saves to `~/.config/locky/settings.json`, which wins over init.lua
 key by key: see [settings.md](docs/settings.md).
@@ -97,14 +98,16 @@ The same binary is a command line (`Locky.app/Contents/MacOS/Locky`):
 ```
 locky check [--theme NAME] [--widget NAME]   run your config, plugins, and a theme; list every error
 locky render --theme NAME --out FILE.png     the lock screen as a PNG, without a window; also --widget NAME,
-                                             --size 1728x1117, --appearance light|dark
+                                             --size 1728x1117, --appearance light|dark,
+                                             --transition lock|unlock --at 0.5 (the lock's animation)
 locky health                                 like :checkhealth
 locky themes | widgets                       what is installed
 locky skill install | path                   Locky's skill for coding agents (docs/agents.md)
 locky pack list|sync|update|clean            plugins from git, pinned by locky-pack-lock.json
 locky pack check                             which plugins have updates; installs none
 locky login [on|off]                         open Locky at login, or not
-locky preview --theme NAME                   the lock screen in a window
+locky preview --theme NAME                   the lock screen in a window; --transition plays the
+                                             lock's animation (Return plays it again)
 locky window [SECTION]                       the Themes window, a Settings pane, or the Welcome
 ```
 
