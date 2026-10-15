@@ -39,6 +39,10 @@ struct ThemeEditorPage: View {
                 // A newer load replaced this one.
                 guard !Task.isCancelled else { return }
                 editing = next
+                if let name = model.selectingWidget, let index = next.placements.firstIndex(where: { $0.widget == name }) {
+                    model.selectingWidget = nil
+                    selection = .widget(index)
+                }
             }
             .onChange(of: info.id) {
                 selection = nil

@@ -48,6 +48,8 @@ final class AppModel {
 
     /// Opened behind other windows for screenshots: previews keep running although hidden.
     var screenshots = false
+    /// A widget Customize selects once its theme loads (`--select`), for screenshots of its inspector.
+    @ObservationIgnored var selectingWidget: String?
     /// The theme open in Customize; nil shows the gallery.
     private(set) var editingTheme: String?
     /// Add Widget's sheet: the Customize toolbar, Edit › Add Widget…, and `Locky window widgets` ask for it. It reads false

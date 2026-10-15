@@ -38,6 +38,7 @@ import Testing
         #expect(!CLI.GUILaunch.parse(["window", "themes"]).opensWidgetGallery)
         #expect(CLI.GUILaunch.parse(["window", "config"]).window == .settings)
         #expect(CLI.GUILaunch.parse(["window", "new-widget"]).opensNewWidget && !CLI.GUILaunch.parse(["window", "settings"]).opensNewWidget)
+        #expect(CLI.GUILaunch.parse(["window", "themes", "--theme", "default", "--select", "weather"]).select == "weather")
         #expect(CLI.GUILaunch.parse(["preview"]).window == nil)
     }
 

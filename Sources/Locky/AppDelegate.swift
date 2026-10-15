@@ -111,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if let section = launch.window {
             // Only a launch is a screenshot run: its previews keep running behind other windows.
             model.screenshots = launch.behind
+            model.selectingWidget = launch.select
             open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, newWidget: launch.opensNewWidget, behind: launch.behind,
                  size: launch.size)
         } else if launch.mode == nil, WelcomeView.opensAtLaunch(.standard, isTool: tool) {

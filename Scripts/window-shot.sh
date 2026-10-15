@@ -14,7 +14,8 @@
 # LOCKY_APPEARANCE); without it, the Mac's own. WAIT (seconds, default 4) is how long the window gets to load.
 # Locky's config folder is an empty one with privacy mode on unless LOCKY_CONFIG_DIR names one, and the desktop
 # picture is none unless LOCKY_WALLPAPER names one; photos after wrong passwords never show. Needs Locky.app built
-# (Scripts/package_app.sh). PAGE (1 to 3, default 1) is the Welcome's page.
+# (Scripts/package_app.sh). PAGE (1 to 3, default 1) is the Welcome's page. SELECT (a widget's name) selects the
+# theme's first widget of that name in Customize, so the inspector shows its options.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SECTION=${1:?usage: window-shot.sh SECTION OUT.png [THEME]}
@@ -34,6 +35,7 @@ fi
 ARGS=(window "$SECTION" --behind --size "${SIZE:-1240x780}")
 [[ -n "${3:-}" ]] && ARGS+=(--theme "$3")
 [[ -n "${PAGE:-}" ]] && ARGS+=(--page "$PAGE")
+[[ -n "${SELECT:-}" ]] && ARGS+=(--select "$SELECT")
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \
   LOCKY_APPEARANCE="${APPEARANCE:-}" "$BIN" "${ARGS[@]}" >/dev/null 2>&1 &
 PID=$!

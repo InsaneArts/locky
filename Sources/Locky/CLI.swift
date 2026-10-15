@@ -34,6 +34,8 @@ enum CLI {
         /// `window new-widget`: General with the New Widget sheet open.
         var opensNewWidget: Bool { arguments.first == "window" && arguments.dropFirst().first == "new-widget" }
         var theme: String?
+        /// `window themes --theme T --select W`: Customize with the theme's first W widget selected, for screenshots.
+        var select: String?
         var size: CGSize?
         var behind = false
         /// `preview --transition`: the lock's way in and out, over a stand-in desktop.
@@ -47,6 +49,7 @@ enum CLI {
             launch.arguments = arguments
             launch.mode = arguments.first == "preview" ? .preview : arguments.first == "lock" ? .lock : nil
             launch.theme = value("--theme", in: arguments)
+            launch.select = value("--select", in: arguments)
             // Two positive numbers up to 100,000 only. A request from any process brings its own size: AppKit traps on
             // NaN and raises an exception that quits Locky for a frame past Int32's range.
             if let size = value("--size", in: arguments)?.split(separator: "x").compactMap({ Double($0) }), size.count == 2,
