@@ -1,5 +1,14 @@
 import AppKit
 import IOKit.ps
+import IOKit.pwr_mgt
+
+/// The power settings in use, as `pmset -g` shows them: a profile per power source ("AC Power", "Battery Power",
+/// "UPS Power"). Exported by IOKit, but not in its public headers: looked up by name and called as the C function it
+/// is. nil if a macOS release removes it, which reads as Never.
+private let IOPMCopyActivePMPreferences: (@convention(c) () -> Unmanaged<CFDictionary>?)? = {
+    guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "IOPMCopyActivePMPreferences") else { return nil }  // RTLD_DEFAULT
+    return unsafeBitCast(symbol, to: (@convention(c) () -> Unmanaged<CFDictionary>?).self)
+}()
 
 /// The Mac's power source and Low Power Mode, for still lock screens, and a way to turn the displays off.
 enum Power {
@@ -11,6 +20,27 @@ enum Power {
     }
 
     static var lowPowerMode: Bool { ProcessInfo.processInfo.isLowPowerModeEnabled }
+
+    /// The system's display sleep for the power source in use, in seconds: System Settings › Lock Screen › Turn display
+    /// off when inactive. nil for Never, or when the settings cannot be read.
+    static var systemDisplaySleep: Double? {
+        let source = IOPSCopyPowerSourcesInfo().flatMap { IOPSGetProvidingPowerSourceType($0.takeRetainedValue())?.takeUnretainedValue() as String? }
+        return displaySleep(preferences: IOPMCopyActivePMPreferences?()?.takeRetainedValue() as? [String: Any], source: source)
+    }
+
+    /// The display sleep of `source`'s profile in `preferences` (IOPMCopyActivePMPreferences), from minutes to seconds.
+    /// A Mac that does not say its source is on AC power. 0 minutes is Never: nil.
+    static func displaySleep(preferences: [String: Any]?, source: String?) -> Double? {
+        guard let profile = preferences?[source ?? kIOPMACPowerKey] as? [String: Any],
+              let minutes = (profile["Display Sleep Timer"] as? NSNumber)?.doubleValue, minutes > 0, minutes.isFinite else { return nil }
+        return minutes * 60
+    }
+
+    /// When a lock turns the displays off: settings.json's display_off, or else the system's display sleep, which
+    /// the lock's assertion holds back (DisplayAssertion). nil: the displays stay on, as with the system's Never.
+    static func displayOffSeconds(setting: Double?, system: Double?) -> Double? {
+        setting ?? system
+    }
 
     /// Turns the displays off now, as `pmset displaysleepnow` does. Tests pass a `run` that records the call: a real
     /// run turns the displays off.
@@ -44,6 +74,110 @@ extension Settings {
     var displayOff: Double? {
         get { self["display_off"].number.flatMap { $0 > 0 && $0.isFinite ? $0 : nil } }
         set { self["display_off"] = newValue.map { Int(exactly: $0).map(LuaValue.int) ?? .double($0) } ?? .nil }
+    }
+
+    /// settings.json's ambient_after: seconds without input on the lock screen before only its background shows.
+    /// Missing (or not a number) is 20; 0 or less is off (nil).
+    var ambientAfter: Double? {
+        guard let seconds = self["ambient_after"].number, seconds.isFinite else { return 20 }
+        return seconds > 0 ? seconds : nil
+    }
+}
+
+/// While a lock is on: an assertion that keeps idle display sleep, and with it the screen saver, from taking over the
+/// shield. The lock turns the displays off itself (DisplayOff). A closed lid or system sleep still sleep the Mac, and
+/// macOS releases the assertion if Locky exits.
+@MainActor
+final class DisplayAssertion {
+    /// The power calls, which tests replace.
+    struct API: Sendable {
+        var create: @Sendable (_ reason: String) -> IOPMAssertionID?
+        var release: @Sendable (IOPMAssertionID) -> Void
+
+        static let system = API(create: { reason in
+            var id = IOPMAssertionID(0)
+            let result = IOPMAssertionCreateWithName(kIOPMAssertPreventUserIdleDisplaySleep as CFString,
+                                                     IOPMAssertionLevel(kIOPMAssertionLevelOn), reason as CFString, &id)
+            return result == kIOReturnSuccess ? id : nil
+        }, release: { _ = IOPMAssertionRelease($0) })
+    }
+
+    private let api: API
+    private var id: IOPMAssertionID?
+    var isHeld: Bool { id != nil }
+
+    init(api: API = .system) {
+        self.api = api
+        id = api.create("Locky's lock screen is up")
+        if id != nil {
+            LogFile.shared.write(level: "info", message: "keeping the display awake during the lock", source: "locky")
+        } else {
+            LogFile.shared.write(level: "warn", message: "could not keep the display awake: the screen saver may show over the lock", source: "locky")
+        }
+    }
+
+    /// Once; later calls do nothing.
+    func release() {
+        guard let id else { return }
+        api.release(id)
+        self.id = nil
+        LogFile.shared.write(level: "info", message: "the display may sleep again", source: "locky")
+    }
+}
+
+/// The lock's ambient mode: after `seconds` without input, only the theme's background shows. The next input brings
+/// the rest back. `clock` is the continuous clock, or a test's own.
+@MainActor
+final class AmbientTimer<C: Clock> where C.Duration == Duration {
+    private let seconds: Duration
+    private let clock: C
+    private let onChange: (_ ambient: Bool) -> Void
+    private var lastActivity: C.Instant
+    private var timer: Task<Void, Never>?
+    private var stopped = false
+    private(set) var isAmbient = false
+
+    /// `seconds` counts up to a day, as DisplayOff's does.
+    init(after seconds: Double, clock: C, onChange: @escaping (_ ambient: Bool) -> Void) {
+        self.seconds = .seconds(min(max(seconds, 0), 86_400))
+        self.clock = clock
+        self.onChange = onChange
+        lastActivity = clock.now
+        arm()
+    }
+
+    /// Any input: a key, the mouse, a click, a scroll. Cheap enough for every mouse-moved event.
+    func noteActivity() {
+        lastActivity = clock.now
+        if isAmbient {
+            isAmbient = false
+            onChange(false)
+        }
+        if timer == nil, !stopped { arm() }
+    }
+
+    func stop() {
+        stopped = true
+        timer?.cancel()
+        timer = nil
+    }
+
+    private func arm() {
+        let deadline = lastActivity.advanced(by: seconds)
+        timer = Task { [weak self, clock] in
+            try? await clock.sleep(until: deadline, tolerance: nil)
+            guard !Task.isCancelled else { return }
+            self?.fire()
+        }
+    }
+
+    private func fire() {
+        timer = nil
+        // Input since the timer was set moved the deadline.
+        if lastActivity.advanced(by: seconds) > clock.now { arm() } else {
+            isAmbient = true
+            onChange(true)
+        }
     }
 }
 

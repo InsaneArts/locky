@@ -47,7 +47,8 @@ return {
   -- it shows. Widgets hear "auth_shown"/"auth_hidden".
   -- focus is the palette role of the focused border or underline (default "accent"); font.size sets the
   -- text size (default 14); hint_align = "leading" lines the hint up with the field; glow gives the text a
-  -- glow; ring = { width, fill, glow } styles the "ring" style.
+  -- glow; ring = { width, fill, glow } styles the "ring" style. While Caps Lock is on, ⇪ shows at the
+  -- field's right end in its quiet color (beside the Touch ID glyph for "ring"); nothing else moves.
   auth = { style = "underline", anchor = "bottom", offset = { 0, -80 }, width = 260, avatar = false, name = false,
            hint = true, placeholder = "password", prompt = nil, font = { family = "Menlo", size = 14 },
            focus = "accent", hint_align = "center", glow = nil, reveal = "always", idle = 20, dim = 0 },

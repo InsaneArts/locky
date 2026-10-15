@@ -91,9 +91,17 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Nothing moves in Low Power Mode, with Reduce Motion on, or on battery with settings.json's battery_saver on.
     private var still = false
     private var powerObserver: PowerObserver?
-    /// settings.json's display_off: the displays go dark after that many seconds without input.
+    /// settings.json's display_off, or the system's display sleep: the displays go dark after that many seconds without
+    /// input.
     private var displayOff: DisplayOff?
+    /// Lock only: neither idle display sleep nor the screen saver takes over the shield; displayOff turns the displays off.
+    private var displayAwake: DisplayAssertion?
+    /// settings.json's ambient_after: only the background shows after that many seconds without input.
+    private var ambient: AmbientTimer<ContinuousClock>?
+    /// Every input to the lock or the preview: it keeps the displays on, ends the ambient mode, and reads Caps Lock.
     private var inputMonitor: Any?
+    /// Lock only: the mouse while another app is active (the event tap holds the keys), which the monitor above misses.
+    private var mouseMonitor: Any?
     /// Asks to activate Locky at the lock's first input, so its kiosk options apply.
     private var activationMonitor: Any?
     /// When to take a photo of whoever types wrong passwords, and the photos this lock took.
@@ -141,6 +149,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             lockGuard = LockGuard { [weak self] reason in self?.handOver(reason) }
             // Without its guard, a crash would leave the shield's open session behind: the macOS lock instead.
             if lockGuard == nil { handOver("the guard did not start") }
+            displayAwake = DisplayAssertion()
         }
         if mode != .embedded {
             napGuard = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Showing the lock screen")
@@ -199,10 +208,13 @@ final class LockSession: NSObject, NSWindowDelegate {
                 return nil
             }
         }
+        if mode != .embedded {
+            authModel.capsLock = Self.capsLock(NSEvent.modifierFlags)
+            watchInput()
+        }
         if mode == .lock {
             installEmergencyExit()
             reclaimKeyboardSoon()
-            startDisplayOff()
             // The kiosk options (no app switching, no Force Quit) apply only while Locky is the active app, and a
             // non-activating shield does not activate it, even when clicked. Input to the lock is the moment macOS
             // grants an activation: ask then.
@@ -285,17 +297,21 @@ final class LockSession: NSObject, NSWindowDelegate {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
+        if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
         if let activationMonitor { NSEvent.removeMonitor(activationMonitor) }
         if let replayMonitor { NSEvent.removeMonitor(replayMonitor) }
         let wasComingIn = comingIn != nil
         comingIn?.cancel()
         displayOff?.stop()
+        displayAwake?.release()
+        ambient?.stop()
         powerObserver = nil
         idleTimer?.cancel()
         if let keyboardObserver { DistributedNotificationCenter.default().removeObserver(keyboardObserver) }
         if mode == .lock { NSApp.presentationOptions = [] }
         if let napGuard { ProcessInfo.processInfo.endActivity(napGuard) }
         observers.forEach { $0.0.removeObserver($0.1) }
+        DistributedNotificationCenter.default().removeObserver(self, name: Self.screenSaverStopped, object: nil)
         windows.forEach { $0.delegate = nil }
         if mode == .lock {
             let closing = windows
@@ -354,9 +370,19 @@ final class LockSession: NSObject, NSWindowDelegate {
             $0.runtime?.setPaused(false)
             $0.touchID?.restart()
             $0.displayOff?.noteActivity()
+            $0.ambient?.noteActivity()
+            $0.refocus()
         }
-        observe(workspace, NSWorkspace.didWakeNotification) { $0.runtime?.realign() }
+        observe(workspace, NSWorkspace.didWakeNotification) {
+            $0.runtime?.realign()
+            $0.refocus()
+        }
         guard mode == .lock else { return }
+        // The screen saver can still start during a lock (a hot corner starts it whatever holds the display awake), and
+        // takes the keyboard and Touch ID while it shows. AppKit holds distributed notifications back while Locky is
+        // inactive, unless they are delivered at once.
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(screenSaverDidStop), name: Self.screenSaverStopped,
+                                                            object: nil, suspensionBehavior: .deliverImmediately)
         // Animations stall while a display sleeps, and their clock stops while the Mac does: a lock still coming in turns
         // opaque at once, so the screen is covered when it wakes. No queue for the Mac's sleep, so this runs before it.
         observe(workspace, NSWorkspace.screensDidSleepNotification) { $0.finishComingIn() }
@@ -384,7 +410,28 @@ final class LockSession: NSObject, NSWindowDelegate {
         NSApp.activate()
         windows.first?.makeKeyAndOrderFront(nil)
         NSApp.presentationOptions = Self.kioskOptions
+        screens.first?.focusField()
         authModel.focusRequest += 1
+    }
+
+    private static let screenSaverStopped = Notification.Name("com.apple.screensaver.didstop")
+
+    @objc private nonisolated func screenSaverDidStop(_: Notification) {
+        Task { @MainActor [weak self] in
+            guard let self, !ended else { return }
+            // Touch ID gave up while the screen saver cancelled it.
+            touchID?.restart()
+            ambient?.noteActivity()
+            refocus()
+        }
+    }
+
+    /// After a wake or the screen saver: the lock asks for the keyboard again, the field takes it, and Caps Lock is read
+    /// anew, since its key may have changed while nothing reached the lock.
+    private func refocus() {
+        guard mode != .embedded else { return }
+        authModel.capsLock = Self.capsLock(NSEvent.modifierFlags)
+        if mode == .lock { reclaimKeyboard() } else { screens.first?.focusField() }
     }
 
     /// macOS treats activation as a request it may refuse: ask a few times, and check that the lock holds the
@@ -443,6 +490,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         case .keep:
             // While the tap holds the keys, another app may turn secure keyboard entry on: check each second.
             guard !holdsKeyboard else { return }
+            // And ask for the keyboard again each second: once whatever took it is gone (the screen saver, a system
+            // prompt), the shield is key again, and the field shows that it takes the typing.
+            if !handingOver { reclaimKeyboard() }
             keyboardCheck = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
@@ -489,7 +539,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             handOver("⌃⌥⌘Q")
             return true
         }
-        displayOff?.noteActivity()
+        noteInput(key)
         if activityMonitor != nil, key.type == .keyDown { activity() }
         windows.first?.sendEvent(key)
         return true
@@ -521,6 +571,8 @@ final class LockSession: NSObject, NSWindowDelegate {
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.backgroundColor = backdrop
+            // Mouse moves end the ambient mode.
+            window.acceptsMouseMovedEvents = true
             let screen = LockScreenView()
             screen.layer?.backgroundColor = backdrop.cgColor
             window.contentView = screen
@@ -716,6 +768,8 @@ final class LockSession: NSObject, NSWindowDelegate {
             installAuth(look.auth, style: LockyStyle(palette: look.palette, font: look.font, scale: Layout.scale(for: first.bounds.size)))
         }
         touchID?.restart()
+        // The new windows show everything: the ambient mode starts again from here.
+        ambient?.noteActivity()
         reclaimKeyboard()
     }
 
@@ -732,6 +786,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                               onSize: { [weak screen] size in screen?.authSize = size }, interactive: mode != .embedded,
                               touchIDPicture: touchIDPicture, exit: mode == .lock && emergencyExit)
         screen.auth = (NSHostingView(rootView: panel), spec)
+        // From the field's first frame: no key typed before SwiftUI asks for focus is lost.
+        if mode != .embedded { screen.focusField() }
     }
 
     /// The photos this lock took, once a capture still running has finished.
@@ -999,6 +1055,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         guard let auth, let screen = screens.first else { return }
         if !screen.authVisible {
             screen.setAuthVisible(true, dim: auth.dim, animated: true)
+            screen.focusField()
             runtime?.queue.async { [runtime] in runtime?.emit("auth_shown") }
         }
         idleTimer?.cancel()
@@ -1033,15 +1090,47 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock { rebuildForDisplays() }
     }
 
-    private func startDisplayOff() {
-        guard let seconds = options.settings.displayOff, seconds > 0 else { return }
-        let off = DisplayOff(after: seconds, sleep: { Power.sleepDisplays() })
-        displayOff = off
-        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel]) {
-            [weak off] event in
-            off?.noteActivity()
+    /// The timers that input restarts: display_off (lock only; the system's display sleep without it, since the lock's
+    /// assertion holds that back), and the ambient mode. Input also tells the field whether Caps Lock is on.
+    private func watchInput() {
+        if mode == .lock, let seconds = Power.displayOffSeconds(setting: options.settings.displayOff, system: Power.systemDisplaySleep) {
+            displayOff = DisplayOff(after: seconds, sleep: { Power.sleepDisplays() })
+        }
+        if let seconds = options.settings.ambientAfter {
+            ambient = AmbientTimer(after: seconds, clock: ContinuousClock()) { [weak self] on in self?.setAmbient(on) }
+        }
+        inputMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+        ) { [weak self] event in
+            self?.noteInput(event)
             return event
         }
+        // Everything on the screen is the lock: any mouse input is input to it. Mouse events need no permission here.
+        guard mode == .lock else { return }
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]) {
+            [weak self] event in
+            MainActor.assumeIsolated { self?.noteInput(event) }
+        }
+    }
+
+    /// Input to the lock, from the event monitor or the event tap.
+    private func noteInput(_ event: NSEvent) {
+        displayOff?.noteActivity()
+        ambient?.noteActivity()
+        if event.type == .flagsChanged { authModel.capsLock = Self.capsLock(event.modifierFlags) }
+    }
+
+    /// Whether Caps Lock is on in `flags`. A tool run (screenshots) can say it is with LOCKY_CAPS_LOCK=on.
+    static func capsLock(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.contains(.capsLock) || (AppDelegate.isTool && ProcessInfo.processInfo.environment["LOCKY_CAPS_LOCK"] == "on")
+    }
+
+    /// The ambient mode starts or ends on every screen. It ends with the field holding the keyboard, so the key that
+    /// ended it lands there.
+    private func setAmbient(_ on: Bool) {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        screens.forEach { $0.setAmbient(on, reduceMotion: reduceMotion) }
+        if !on { screens.first?.focusField() }
     }
 
     // MARK: Safety
@@ -1131,6 +1220,17 @@ final class ShieldWindow: NSPanel {
     var allowsKey = true
     override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { allowsKey }
+
+    private var scene: LockScreenView? { contentView as? LockScreenView ?? (contentView as? TransitionStage)?.scene }
+
+    /// The password field takes every key, whether it comes from macOS or the lock's event tap: a key that finds the field
+    /// without the keyboard gives it the keyboard first, so its character lands there. A click anywhere leaves the field
+    /// with the keyboard too.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown { scene?.focusField() }
+        super.sendEvent(event)
+        if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) { scene?.focusField() }
+    }
 }
 
 /// One display's lock screen. Flipped, so offsets read like screen coordinates: y grows downwards.
@@ -1201,6 +1301,73 @@ final class LockScreenView: NSView {
         }
     }
     private let dimLayer = CALayer()
+
+    /// SwiftUI's text field in the password field, once it has made it.
+    private var textField: NSTextField? {
+        func find(_ view: NSView) -> NSTextField? { (view as? NSSecureTextField) ?? view.subviews.lazy.compactMap(find).first }
+        return auth.flatMap { find($0.view) }
+    }
+
+    /// The password field has its window's keyboard: its field editor is the first responder.
+    var fieldHasKeyboard: Bool {
+        guard let field = textField, let editor = window?.firstResponder as? NSText else { return false }
+        return (editor.delegate as AnyObject?) === field
+    }
+
+    /// Gives the password field its window's keyboard, unless it has it or is disabled: during a check, the wait after
+    /// wrong passwords, and always in the theme editor's preview. A hidden field (a theme that shows it on activity, the
+    /// ambient mode) takes it too, so the first key counts. false: the field does not have the keyboard.
+    @discardableResult func focusField() -> Bool {
+        guard let window, let view = auth?.view else { return false }
+        if textField == nil {
+            // SwiftUI makes the text field at the hosting view's first layout.
+            layoutSubtreeIfNeeded()
+            view.layoutSubtreeIfNeeded()
+        }
+        guard let field = textField, field.isEnabled else { return false }
+        return fieldHasKeyboard || window.makeFirstResponder(field)
+    }
+
+    /// The ambient mode: only the background and the overlay show, and they go on moving as they were. Everything else
+    /// fades out with an additive opacity animation, so what shows or hides meanwhile (a widget measured late, the
+    /// glance) keeps its own alpha for when it comes back. The field keeps the keyboard.
+    private(set) var ambient = false
+
+    func setAmbient(_ on: Bool, reduceMotion: Bool) {
+        guard on != ambient else { return }
+        ambient = on
+        // Out slowly, as the scene settles; back at once, as the person who touched the Mac is looking.
+        let duration: CFTimeInterval = on ? (reduceMotion ? 0.2 : 0.6) : 0.3
+        let timing = CAMediaTimingFunction(name: on ? .easeInEaseOut : .easeOut)
+        for layer in ambientLayers { Self.fade(layer, out: on, duration: duration, timing: timing) }
+    }
+
+    /// What the ambient mode hides: the widgets, the password field and its lines, the banner, and the field's dim.
+    private var ambientLayers: [CALayer] {
+        let views: [NSView] = widgets + [auth?.view, glanceHint, message?.view, wayOut?.view, banner].compactMap { $0 }
+        return views.compactMap(\.layer) + [dimLayer]
+    }
+
+    private static let ambientKey = "locky.ambient"
+
+    /// Fades `layer` out of the ambient mode's view or back, from where an interrupted fade is.
+    private static func fade(_ layer: CALayer, out: Bool, duration: CFTimeInterval, timing: CAMediaTimingFunction?) {
+        let running = layer.animation(forKey: ambientKey) != nil
+        guard out || running else { return }
+        let from: Float = !running ? 0 : layer.presentation().map { max(-1, min(0, $0.opacity - layer.opacity)) } ?? -1
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.isAdditive = true
+        // Core Animation reads a duration of 0 as its default: a hold starts where it ends.
+        animation.fromValue = duration == 0 ? -1 : from
+        animation.toValue = out ? -1 : 0
+        animation.duration = duration
+        animation.timingFunction = timing
+        if out {
+            animation.fillMode = .forwards
+            animation.isRemovedOnCompletion = false
+        }
+        layer.add(animation, forKey: ambientKey)
+    }
 
     /// Shows or hides the password field. Hidden, it keeps the keyboard focus, so the first key counts. The key or
     /// the mouse that shows it gets the field at once, and only the dim eases in; hiding after idle, when nobody
@@ -1281,6 +1448,8 @@ final class LockScreenView: NSView {
     func add(_ widget: WidgetHost) {
         widgets.append(widget)
         widget.alphaValue = 0
+        // A layer from the start: the ambient mode fades it.
+        widget.wantsLayer = true
         widget.onResize = { [weak self] in self?.needsLayout = true }
         // Widgets stay under an overlay, if the theme has one, and always under the password field, its message, and
         // banners: a widget placed where the field is must not cover it.
@@ -1490,6 +1659,12 @@ final class LockScreenView: NSView {
             wayOut.view.frame = wayOutFrame(size: size, message: message?.view.frame ?? .zero, scale: scale)
         }
         banner?.frame = CGRect(x: 16, y: 16, width: min(bounds.width - 32, 640), height: 200)
+        // What joined the screen during the ambient mode stays hidden with the rest.
+        if ambient {
+            for layer in ambientLayers where layer.animation(forKey: Self.ambientKey) == nil {
+                Self.fade(layer, out: true, duration: 0, timing: nil)
+            }
+        }
         onLayout?()
     }
 

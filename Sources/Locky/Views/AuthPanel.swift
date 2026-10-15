@@ -46,6 +46,8 @@ final class AuthModel {
     }
     /// Bumped to put the keyboard focus back in the field.
     var focusRequest = 0
+    /// Caps Lock is on: the field shows ⇪. The lock sets it from each modifier change it sees.
+    var capsLock = false
     /// Wrong passwords in this lock, and whether a check runs. Here and not in the field, so a rebuilt field (a
     /// display added, the power changed) keeps them.
     var wrong = 0
@@ -327,6 +329,8 @@ struct AuthPanel: View {
     private var statusText: String? {
         Self.statusText(touchIDOffered: touchIDOffered, listening: listening, placeholder: placeholderText, hint: auth.hint)
     }
+    /// Caps Lock is on while the field takes typing. The theme editor's preview never shows it.
+    private var capsLockShown: Bool { model.capsLock && interactive }
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The "ring" style's lit arc: where it starts (0 to 1), its role color, and a counter that restarts its fade.
@@ -401,6 +405,12 @@ struct AuthPanel: View {
                     .accessibilityLabel("Touch ID or Enter Password")
                     .offset(y: diameter * 0.34)
             }
+            // The ring has no edge to hold it, and themes put a clock in its middle: ⇪ sits on the Touch ID glyph's line,
+            // beside the glyph, which stays where it is.
+            if capsLockShown {
+                capsLockSign(on: auth.ringFill, size: 16)
+                    .offset(x: listening ? 16 + 14 * s : 0, y: diameter * 0.34)
+            }
             if let note {
                 // VoiceOver reads it on the field.
                 Text(note)
@@ -430,6 +440,16 @@ struct AuthPanel: View {
         .onChange(of: model.focusRequest) { focused = true }
         // A field made during a check or the wait after wrong passwords was disabled when it asked for focus.
         .onChange(of: model.checking || model.waitLeft > 0) { _, busy in if !busy, interactive { focused = true } }
+    }
+
+    /// ⇪ in the field's quiet color, as the macOS login window shows Caps Lock. Over the field's own space, so it never
+    /// moves the field; it comes and goes with the key, at once.
+    private func capsLockSign(on surface: String?, size: CGFloat = 13) -> some View {
+        Image(systemName: "capslock.fill")
+            .font(.system(size: size * auth.size / 14 * s, weight: .medium))
+            .foregroundStyle(style.quiet(on: surface))
+            .legibilityHalo(style)
+            .accessibilityLabel("Caps Lock is on")
     }
 
     /// The Touch ID glyph at its natural side, made again for each new context. Gone once Touch ID gave up.
@@ -552,15 +572,19 @@ struct AuthPanel: View {
         case "underline":
             VStack(spacing: 8 * s) {
                 secureField(slot: note ?? placeholderText, alignment: auth.hintAlign == "leading" ? .leading : .center)
+                    .overlay(alignment: .trailing) { if capsLockShown { capsLockSign(on: fieldSurface) } }
                 Rectangle().fill(lineColor).frame(height: 1.5 * s)
             }
             .frame(width: width)
         case "box":
-            secureField(slot: note ?? placeholderText)
-                .padding(.horizontal, 14 * s)
-                .frame(width: width, height: 40 * s)
-                .background(style.color("surface"), in: RoundedRectangle(cornerRadius: 10 * s, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10 * s, style: .continuous).strokeBorder(lineColor, lineWidth: 1.5 * s))
+            HStack(spacing: 6 * s) {
+                secureField(slot: note ?? placeholderText)
+                if capsLockShown { capsLockSign(on: fieldSurface) }
+            }
+            .padding(.horizontal, 14 * s)
+            .frame(width: width, height: 40 * s)
+            .background(style.color("surface"), in: RoundedRectangle(cornerRadius: 10 * s, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10 * s, style: .continuous).strokeBorder(lineColor, lineWidth: 1.5 * s))
         case "terminal":
             HStack(spacing: 0) {
                 Text(auth.prompt ?? "\(user.login)@\(user.host) ~ % ").font(font(14, "regular")).foregroundStyle(style.color("accent"))
@@ -570,15 +594,19 @@ struct AuthPanel: View {
                     .shadow(color: glowColor, radius: auth.glow ?? 0)
                     .legibilityHalo(style)
                 secureField(slot: note ?? placeholderText).frame(width: width * 0.6)
+                    .overlay(alignment: .trailing) { if capsLockShown { capsLockSign(on: fieldSurface) } }
             }
         case "minimal":
             // The field is there and focused from the start, but only appears once you type or it has a note.
             secureField(slot: note ?? placeholderText, alignment: .center)
                 .frame(width: width)
                 .opacity(!password.isEmpty || note != nil ? 1 : 0.01)
+                // Shows while the field itself does not: the next key types in capitals.
+                .overlay(alignment: .trailing) { if capsLockShown { capsLockSign(on: fieldSurface) } }
         default:
             HStack(spacing: 6 * s) {
                 secureField(slot: note ?? placeholderText)
+                if capsLockShown { capsLockSign(on: fieldSurface) }
                 if !password.isEmpty {
                     // A pointer target only: Return stays the keyboard's way.
                     Button(action: submit) {
