@@ -247,6 +247,7 @@ locky.theme.current = nil
 ---@param name string
 ---@param patch locky.Theme|fun(theme: locky.Theme): locky.Theme?
 function locky.theme.extend(name, patch) end
+--- Every theme's name, without the starting points (file names that start with "_").
 ---@return string[]
 function locky.theme.list() end
 
