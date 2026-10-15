@@ -1056,6 +1056,8 @@ final class LockScreenView: NSView {
             oldValue?.view.removeFromSuperview()
             if let wayOut {
                 if let banner { addSubview(wayOut.view, positioned: .below, relativeTo: banner) } else { addSubview(wayOut.view) }
+                // SwiftUI can show the line after a layout pass measured it empty: it asks for another one.
+                wayOut.rootView.changed = { [weak self] in self?.needsLayout = true }
             }
             needsLayout = true
         }
