@@ -37,6 +37,7 @@ theme you edit.
 | `quote` | medium, large |
 | `sun` | inline, circular, rectangular, small, medium |
 | `system` | inline, circular, rectangular, small, medium |
+| `text` | none: it draws at its own size |
 | `top` | inline, rectangular, small, medium, large |
 | `uptime` | inline, circular |
 | `weather` | inline, circular, rectangular, small, medium, large |
@@ -90,6 +91,7 @@ The weather and sun widgets share one request, cached in `~/Library/Caches/Locky
 | Widget | Shows | Options |
 |---|---|---|
 | `greeting` | "Good evening, Alex." | `name` |
+| `text` | Your own words, in the theme's font and text color. | `text`; `size`: `small`, `medium`, `large`, `huge` (or points); `weight`; `alignment`: `leading`, `center`, `trailing`; `color` |
 | `agents` | Coding agents from [herdr](https://herdr.dev): who needs you, who is working. | `style`: `list`, `summary`, `dots`, `board`; `rows` |
 | `git` | Your repositories: branch, uncommitted changes, commits to push or pull, the last commit. | `repos = { "~/code/app" }` (shows nothing without it) |
 | `quote` | A short quote that changes every half hour. | `source`: `builtin`, `fortune`; `quotes` (your own list of `{ text, author }`); `every` |

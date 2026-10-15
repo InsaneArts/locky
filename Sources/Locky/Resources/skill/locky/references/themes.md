@@ -1,5 +1,8 @@
 # Themes
 
+[create-theme.md](create-theme.md) is the guide to making a theme, in the Themes window or in Lua. This page is
+the reference.
+
 A theme is `themes/<name>.lua` in the runtime path: a Lua file that returns a table. It sets the palette,
 the fonts, the background, the cards, the password field, and which widgets go where. A theme package is
 a folder (or git repository) that ships a theme together with its own widgets, shaders, and assets:
@@ -79,6 +82,9 @@ display gets the background.
 
 `card` and `size` still override what the family sets. [widgets.md](widgets.md) lists each widget's families.
 
+**Starting points.** A theme file whose name starts with `_` is left out of every theme list, and other themes
+can start from it. File › New Theme… starts from `_blank`.
+
 **Testing.** `Scripts/snapshot.sh <id> out.png` renders a theme to a PNG. `LOCKY_WALLPAPER=/path/to/image.jpg`
 (or `none`) stands in for the desktop picture, to try a theme on other wallpapers. A `preview.png` or
 `preview.jpg` next to `themes/` becomes the theme's thumbnail in the Themes window.
@@ -132,7 +138,10 @@ the lock screen in the preview, with its line number, and in the log.
 
 ## Make and share themes in the window
 
-Customize makes themes without Lua. Its More menu, and the File menu, have these commands:
+Customize makes themes without Lua ([create-theme.md](create-theme.md) walks through it). **File › New Theme…**
+(⌘N) writes a theme from `_blank` to `~/.config/locky/themes/untitled-theme.lua` ("Untitled Theme 2" in
+`untitled-theme-2.lua` when that one is there) and opens it in Customize. Name, at the top of the inspector,
+renames a theme you made; its file keeps its id. Customize's More menu, and the File menu, have these commands:
 
 - **Duplicate Theme…** asks for a name and writes your own theme to `~/.config/locky/themes/<id>.lua`: this
   theme with your changes to it. The new theme opens in Customize.
@@ -158,7 +167,15 @@ return locky.theme.derive("default", locky.json.decode([[
 ```
 
 `derive(base, { name, edits })` reads theme `base` and applies each edit in order. An edit has the shape of
-settings.json's `themes.<id>` (see [settings.md](settings.md)). The edits' widget options become the theme's own,
+settings.json's `themes.<id>` (see [settings.md](settings.md)). Besides `background`, `widgets`, and `auth`, it
+may hold the three that Customize's Colors and Font sections write:
+
+| Key | Holds |
+|---|---|
+| `palette` | Roles and colors, such as `{ "fg": "#fff4e6", "accent": "#ffb45e" }`, merged over the theme's palette. In settings.json they also win over `locky.setup({ palette = … })`. |
+| `font` | The theme's whole font: `family`, `weight`, `design`. A field left out is the system font's. |
+| `card` | `{ "fill": "#0a14262e" }`: the cards' fill. The rest of the card stays the theme's. |
+ The edits' widget options become the theme's own,
 so `locky.setup({ widgets = ... })` in init.lua still merges over them. Shaders and assets come from the base
 theme's folder.
 
