@@ -17,14 +17,18 @@ import Testing
     // MARK: Windows
 
     @Test(arguments: [("dashboard", .themes), ("widgets", .themes), ("themes", .themes), ("settings", .settings), ("plugins", .plugins),
-                      ("config", .config), ("welcome", .welcome), ("nope", nil)] as [(String, AppModel.Section?)])
+                      ("config", .settings), ("new-widget", .settings), ("welcome", .welcome), ("nope", nil)] as [(String, AppModel.Section?)])
     func aWindowArgumentNamesAWindowOrAPane(_ argument: String, _ section: AppModel.Section?) {
         #expect(AppModel.Section(argument: argument) == section)
     }
 
     @Test func theSettingsWindowOpensOnGeneral() {
         #expect(AppModel.Section.settings.title == "General")
-        #expect(AppModel.Section.panes == [.settings, .plugins, .config])
+        #expect(AppModel.Section.panes == [.settings, .plugins])
+        // The old Lua Config pane, remembered from an older Locky, opens General, which has its rows now.
+        defer { UserDefaults.standard.removeObject(forKey: SettingsTabViewController.paneKey) }
+        UserDefaults.standard.set("config", forKey: SettingsTabViewController.paneKey)
+        #expect(SettingsWindowController.lastPane == .settings)
     }
 
     @Test func windowWithoutASectionOpensTheThemesWindow() {
@@ -32,7 +36,8 @@ import Testing
         let widgets = CLI.GUILaunch.parse(["window", "widgets"])
         #expect(widgets.window == .themes && widgets.opensWidgetGallery)
         #expect(!CLI.GUILaunch.parse(["window", "themes"]).opensWidgetGallery)
-        #expect(CLI.GUILaunch.parse(["window", "config"]).window == .config)
+        #expect(CLI.GUILaunch.parse(["window", "config"]).window == .settings)
+        #expect(CLI.GUILaunch.parse(["window", "new-widget"]).opensNewWidget && !CLI.GUILaunch.parse(["window", "settings"]).opensNewWidget)
         #expect(CLI.GUILaunch.parse(["preview"]).window == nil)
     }
 
@@ -46,15 +51,18 @@ import Testing
         let settings = try #require(SettingsWindowController(model: model, onClose: {}).window)
         #expect(settings.standardWindowButton(.miniaturizeButton)?.isEnabled == false)
         #expect(settings.standardWindowButton(.zoomButton)?.isEnabled == false)
-        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 745))
+        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 1029))
         let items = try #require(settings.toolbar?.items)
-        #expect(items.map(\.label) == ["General", "Plugins", "Lua Config"])
+        #expect(items.map(\.label) == ["General", "Plugins"])
+        // General can be taller than the screen: the top edge goes at the screen's, where Plugins then fits under it.
+        let visible = try #require((settings.screen ?? NSScreen.main)?.visibleFrame)
+        settings.setFrameTopLeftPoint(CGPoint(x: visible.minX + 40, y: visible.maxY))
         let top = settings.frame.maxY
-        let config = try #require(items.last)
-        NSApp.sendAction(try #require(config.action), to: config.target, from: config)
-        #expect(settings.title == "Lua Config" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 360))
+        let plugins = try #require(items.last)
+        NSApp.sendAction(try #require(plugins.action), to: plugins.target, from: plugins)
+        #expect(settings.title == "Plugins" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 520))
         #expect(settings.frame.maxY == top)
-        #expect(SettingsWindowController.lastPane == .config)
+        #expect(SettingsWindowController.lastPane == .plugins)
         // Only a pane comes back.
         defaults.set("welcome", forKey: SettingsTabViewController.paneKey)
         #expect(SettingsWindowController.lastPane == .settings)
@@ -77,9 +85,9 @@ import Testing
         let controller = SettingsWindowController(model: model, onClose: {})
         let settings = try #require(controller.window)
         let visible = try #require((settings.screen ?? NSScreen.main)?.visibleFrame)
-        controller.show(.config, behind: true)
+        controller.show(.plugins, behind: true)
         defer { settings.close() }
-        // Lua Config low on the screen: General's height no longer fits under its top edge.
+        // Plugins low on the screen: General's height no longer fits under its top edge.
         settings.setFrameTopLeftPoint(CGPoint(x: visible.minX + 40, y: visible.minY + 500))
         let items = try #require(settings.toolbar?.items)
         let general = try #require(items.first)
@@ -125,7 +133,7 @@ import Testing
         tabs.place(settings, settings.frameRect(forContentRect: CGRect(origin: .zero, size: SettingsTabViewController.size(of: .settings))),
                    in: tall, animate: false)
         settings.contentView?.layoutSubtreeIfNeeded()
-        #expect(settings.contentRect(forFrameRect: settings.frame).height == 745)
+        #expect(settings.contentRect(forFrameRect: settings.frame).height == 1029)
     }
 
     /// A window fitted to a short screen gets General's full height again when it opens again on a tall one.
@@ -140,14 +148,15 @@ import Testing
         controller.show(.settings, behind: true)
         defer { settings.close() }
         let full = settings.frameRect(forContentRect: CGRect(origin: .zero, size: SettingsTabViewController.size(of: .settings)))
-        // The real screen is the tall one, so it must hold the whole window.
-        try #require((settings.screen ?? NSScreen.main).map { $0.visibleFrame.height >= full.height } == true)
+        // The real screen is the tall one: General gets its full height there, or the whole screen's when that is less.
+        let visible = try #require((settings.screen ?? NSScreen.main)?.visibleFrame)
+        try #require(visible.height > 600)
         tabs.place(settings, settings.frame, in: CGRect(x: 0, y: 40, width: 1440, height: 600), animate: false)
         #expect(settings.frame.height == 600)
         settings.close()
         controller.show(nil, behind: true)
         settings.contentView?.layoutSubtreeIfNeeded()
-        #expect(settings.contentRect(forFrameRect: settings.frame).height == 745)
+        #expect(settings.frame.height == min(full.height, visible.height), "\(settings.frame) on \(visible)")
     }
 
     /// The Message field saves when focus leaves it, and closing the window is one way focus leaves.

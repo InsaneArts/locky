@@ -53,12 +53,21 @@ import Testing
         #expect(throws: AgentSkill.Failure.self) { try AgentSkill(home: home, source: source).install() }
     }
 
+    /// General's Agent skill row names the agents that have the skill, and what it needs while none could.
+    @Test func theRowSaysWhereTheSkillIs() {
+        #expect(AgentSkillRow.subtitle(agents: [], installed: []) == "Needs Claude Code, Codex, or a ~/.agents folder.")
+        #expect(AgentSkillRow.subtitle(agents: [.claude], installed: []) == "Lets coding agents make widgets and themes.")
+        #expect(AgentSkillRow.subtitle(agents: [.claude, .codex], installed: [.claude, .codex]) == "Installed in Claude Code and Codex.")
+        #expect(AgentSkillRow.subtitle(agents: Array(AgentSkill.Agent.allCases), installed: Array(AgentSkill.Agent.allCases))
+            == "Installed in Claude Code, Codex, and ~/.agents.")
+    }
+
     /// The bundled skill's references are docs/ itself: docs/ is the one source, and this test keeps the copies equal.
     @Test func referencesMatchTheDocs() throws {
         let docs = RuntimePath.resources.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appending(path: "docs")
         let references = AgentSkill.bundled.appending(path: "references")
         let names = try FileManager.default.contentsOfDirectory(atPath: references.path).sorted()
-        #expect(names == ["api.md", "plugins.md", "themes.md", "views.md", "widgets.md"])
+        #expect(names == ["api.md", "create-widget.md", "plugins.md", "themes.md", "views.md", "widgets.md"])
         for name in names {
             let copy = try Data(contentsOf: references.appending(path: name)), original = try Data(contentsOf: docs.appending(path: name))
             #expect(copy == original, "\(name) differs from docs/\(name): run Scripts/sync-skill.sh")

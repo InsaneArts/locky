@@ -8,17 +8,19 @@ final class AppModel {
     enum Section: String, CaseIterable, Identifiable {
         /// The Themes window.
         case themes
-        /// The Settings window's panes: General, Plugins, Lua Config.
-        case settings, plugins, config
+        /// The Settings window's panes: General, Plugins.
+        case settings, plugins
         /// The Welcome window.
         case welcome
 
-        static let panes: [Section] = [.settings, .plugins, .config]
+        static let panes: [Section] = [.settings, .plugins]
 
-        /// A `Locky window` argument. The old names keep working.
+        /// A `Locky window` argument. The old names keep working: config, the old Lua Config pane, is General, which has
+        /// its rows now.
         init?(argument: String) {
             switch argument {
             case "dashboard", "widgets": self = .themes
+            case "config", "new-widget": self = .settings
             default: self.init(rawValue: argument)
             }
         }
@@ -30,7 +32,6 @@ final class AppModel {
             case .themes: "Themes"
             case .settings: "General"
             case .plugins: "Plugins"
-            case .config: "Lua Config"
             case .welcome: "Welcome to Locky"
             }
         }
@@ -40,7 +41,6 @@ final class AppModel {
             case .themes: "paintpalette"
             case .settings: "gearshape"
             case .plugins: "puzzlepiece.extension"
-            case .config: "curlybraces"
             case .welcome: "hand.wave"
             }
         }
@@ -60,6 +60,8 @@ final class AppModel {
     private var askedForAddWidget = false
     /// File › Import Theme… asks the gallery to show the file importer.
     var importing = false
+    /// General's New Widget sheet: its button and `Locky window new-widget` open it.
+    var newWidget = false
     /// The Schedule popover: the gallery's toolbar item and File › Schedule Themes… open it.
     var scheduling = false
     /// A Customize command from the main menu that needs the editor; the editor runs it and sets this back to nil.
@@ -90,7 +92,7 @@ final class AppModel {
     /// Packages with a newer commit upstream than the one pinned.
     var available: [PackUpdate] { updates.filter { $0.error == nil && $0.current != nil && $0.latest != nil && $0.current != $0.latest } }
 
-    /// The editors and terminals on this Mac, found once when Lua Config or an Open first needs them.
+    /// The editors and terminals on this Mac, found once when General's Customization section or an Open first needs them.
     private(set) var editors: (editors: [Editor], terminals: [Terminal])?
 
     /// Why the Lock Now shortcut could not be registered, such as another app holding it.
@@ -105,6 +107,7 @@ final class AppModel {
             guard locked else { return }
             scheduling = false
             importing = false
+            newWidget = false
         }
     }
 

@@ -3,9 +3,9 @@ import AVFoundation
 import LocalAuthentication
 import SwiftUI
 
-/// Settings › General: when the Mac locks, how it unlocks, and what the lock screen says. Each change saves to
-/// settings.json at once. A row Lua also reads stores no key while it shows init.lua's value, so the row is its own reset;
-/// Hide personal information is the exception, and stores on all the same.
+/// Settings › General: when the Mac locks, how it unlocks, what the lock screen says, and the config folder with new
+/// themes and widgets. Each change saves to settings.json at once. A row Lua also reads stores no key while it shows
+/// init.lua's value, so the row is its own reset; Hide personal information is the exception, and stores on all the same.
 struct SettingsPage: View {
     let model: AppModel
     /// The intruder photos, newest first. They are read when the pane is built, when a lock ends, and after each config
@@ -44,6 +44,8 @@ struct SettingsPage: View {
                 UnlockSection(model: model)
             }
             .disabled(store.problem != nil)
+            // Stays live with a broken settings.json: its folder is where the file is fixed.
+            CustomizationSection(model: model)
         }
         .formStyle(.grouped)
         .task(id: model.revision) { loadPhotos() }
