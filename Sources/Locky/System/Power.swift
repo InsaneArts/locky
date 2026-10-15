@@ -3,9 +3,12 @@ import IOKit.ps
 import IOKit.pwr_mgt
 
 /// The power settings in use, as `pmset -g` shows them: a profile per power source ("AC Power", "Battery Power",
-/// "UPS Power"). Exported by IOKit, but not in its public headers.
-@_silgen_name("IOPMCopyActivePMPreferences")
-private func IOPMCopyActivePMPreferences() -> Unmanaged<CFDictionary>?
+/// "UPS Power"). Exported by IOKit, but not in its public headers: looked up by name and called as the C function it
+/// is. nil if a macOS release removes it, which reads as Never.
+private let IOPMCopyActivePMPreferences: (@convention(c) () -> Unmanaged<CFDictionary>?)? = {
+    guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "IOPMCopyActivePMPreferences") else { return nil }  // RTLD_DEFAULT
+    return unsafeBitCast(symbol, to: (@convention(c) () -> Unmanaged<CFDictionary>?).self)
+}()
 
 /// The Mac's power source and Low Power Mode, for still lock screens, and a way to turn the displays off.
 enum Power {
@@ -22,7 +25,7 @@ enum Power {
     /// off when inactive. nil for Never, or when the settings cannot be read.
     static var systemDisplaySleep: Double? {
         let source = IOPSCopyPowerSourcesInfo().flatMap { IOPSGetProvidingPowerSourceType($0.takeRetainedValue())?.takeUnretainedValue() as String? }
-        return displaySleep(preferences: IOPMCopyActivePMPreferences()?.takeRetainedValue() as? [String: Any], source: source)
+        return displaySleep(preferences: IOPMCopyActivePMPreferences?()?.takeRetainedValue() as? [String: Any], source: source)
     }
 
     /// The display sleep of `source`'s profile in `preferences` (IOPMCopyActivePMPreferences), from minutes to seconds.
