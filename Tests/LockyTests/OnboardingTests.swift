@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import Locky
 
@@ -24,6 +26,91 @@ import Testing
     /// `locky window welcome` (and window-shot.sh) opens it.
     @MainActor @Test func theWelcomeOpensFromTheCommandLine() {
         #expect(CLI.GUILaunch.parse(["window", "welcome"]).window == .welcome)
+    }
+
+    /// Three pages in order: the first has no Back, the last no Continue.
+    @MainActor @Test func thePagesGoInOrder() {
+        #expect(WelcomeView.Page.allCases == [.welcome, .lockScreen, .safety])
+        #expect(WelcomeView.Page.welcome.previous == nil && WelcomeView.Page.welcome.next == .lockScreen)
+        #expect(WelcomeView.Page.safety.previous == .lockScreen && WelcomeView.Page.safety.next == nil)
+    }
+
+    /// `window welcome --page 2` (window-shot.sh's PAGE) opens on the second page; anything else on the first.
+    @MainActor @Test(arguments: [(["window", "welcome", "--page", "2"], .lockScreen), (["window", "welcome", "--page", "3"], .safety),
+                                 (["window", "welcome"], .welcome), (["window", "welcome", "--page", "9"], .welcome),
+                                 (["window", "welcome", "--page", "x"], .welcome)] as [([String], WelcomeView.Page)])
+    func aToolRunOpensOnThePageItNames(_ arguments: [String], _ page: WelcomeView.Page) {
+        #expect(WelcomeWindowController.firstPage(arguments) == page)
+    }
+
+    /// Return is Continue and then Done, ⌘[ is Back, and Esc closes. A closed Welcome opens again on the first page,
+    /// with the switch's memory gone.
+    @MainActor @Test func theKeysMoveThroughThePagesAndClose() async throws {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        var closed = 0
+        let controller = WelcomeWindowController(model: model) { closed += 1 }
+        let window = try #require(controller.window)
+        controller.show(behind: true)
+        defer { window.orderOut(nil) }
+        func press(_ code: UInt16, _ text: String, _ modifiers: NSEvent.ModifierFlags = []) async {
+            window.contentView?.layoutSubtreeIfNeeded()
+            let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: window.windowNumber,
+                                         context: nil, characters: text, charactersIgnoringModifiers: text, isARepeat: false, keyCode: code)!
+            // As NSApplication sends a key: a key equivalent first, then the keyboard's view.
+            if !window.performKeyEquivalent(with: event) { window.sendEvent(event) }
+        }
+        /// Polls on the main actor while the window lays out, as a window on screen would.
+        func settles(_ condition: () -> Bool) async -> Bool {
+            let deadline = Date().addingTimeInterval(5)
+            while !condition(), Date() < deadline {
+                window.contentView?.layoutSubtreeIfNeeded()
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            return condition()
+        }
+        let visit = controller.visit
+        await press(36, "\r")
+        #expect(await settles { visit.page == .lockScreen })
+        await press(33, "[", .command)
+        #expect(await settles { visit.page == .welcome })
+        await press(36, "\r")
+        #expect(await settles { visit.page == .lockScreen })
+        await press(36, "\r")
+        #expect(await settles { visit.page == .safety })
+        visit.turnedOff = AutoLockSettings(systemSleep: true)
+        await press(36, "\r")
+        #expect(await settles { closed == 1 && !window.isVisible })
+        #expect(visit.page == .welcome && visit.turnedOff == nil)
+
+        controller.show(behind: true)
+        await press(36, "\r")
+        #expect(await settles { visit.page == .lockScreen })
+        await press(53, "\u{1b}")
+        #expect(await settles { closed == 2 && !window.isVisible })
+        #expect(visit.page == .welcome)
+    }
+
+    /// Each page lays out at the window's width, in light and dark.
+    @MainActor @Test(arguments: WelcomeView.Page.allCases, [NSAppearance.Name.aqua, .darkAqua])
+    func eachPageBuilds(_ page: WelcomeView.Page, _ appearance: NSAppearance.Name) throws {
+        _ = NSApplication.shared
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
+        let visit = WelcomeVisit()
+        visit.page = page
+        let view = NSHostingView(rootView: WelcomeView(model: model, visit: visit, close: {}))
+        view.appearance = NSAppearance(named: appearance)
+        view.layoutSubtreeIfNeeded()
+        #expect(view.fittingSize.width == 560 && view.fittingSize.height > 300)
+    }
+
+    /// docs/security.md opens with the last page's three lines, word for word.
+    @Test func theLastPageSaysWhatSecurityMDSays() throws {
+        let doc = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../docs/security.md")
+        let text = try String(contentsOf: doc, encoding: .utf8)
+        let section = try #require(text.range(of: "## If something goes wrong\n\n").map { text[$0.upperBound...] })
+        let lines = section.components(separatedBy: "\n\n").first
+        #expect(lines == [WelcomeView.guardLine, WelcomeView.wayOutLine, WelcomeView.unlockOnlyLine].map { "- \($0)" }.joined(separator: "\n"))
     }
 
     /// The line under Lock Now never promises Touch ID to a Mac or a setting that does not offer it.
