@@ -12,9 +12,10 @@ import Testing
         return sandbox
     }
 
-    /// `eventually`, on the main actor, where the screen lives.
+    /// `eventually`, on the main actor, where the screen lives. Ten seconds: in a full run other suites keep the main
+    /// actor busy, and a fade's completion comes late.
     private func wait(_ condition: () -> Bool) async -> Bool {
-        let deadline = Date().addingTimeInterval(3)
+        let deadline = Date().addingTimeInterval(10)
         while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
         return condition()
     }
