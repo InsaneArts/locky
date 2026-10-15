@@ -64,6 +64,8 @@ enum Render {
         descriptor.usage = [.renderTarget, .shaderRead, .shaderWrite]
         descriptor.storageMode = .managed
         guard let texture = device.makeTexture(descriptor: descriptor) else { return nil }
+        // AppKit's own pending changes first: committed after the scale below, they would undo it.
+        CATransaction.flush()
         // The renderer counts in pixels: the screen grows to them from its corner.
         root.anchorPoint = .zero
         root.position = .zero
