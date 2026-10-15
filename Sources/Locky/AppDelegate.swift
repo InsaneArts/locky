@@ -35,6 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private lazy var hotkeys = HotkeyCenter { [weak self] in self?.lockNow(nil) }
     private lazy var autoLock = AutoLock(isLocked: { [weak self] in self?.session?.mode == .lock },
                                          lock: { [weak self] reason in self?.lock(because: reason) })
+    /// The Touch ID button, with lock_key on: Lock Now's lock instead of the macOS one.
+    private lazy var lockKey = LockKey(isLocked: { [weak self] in self?.session?.mode == .lock },
+                                       lockIsUp: { [weak self] in self?.session?.holdsLock == true },
+                                       lock: { [weak self] in self?.lockNow(nil) })
     /// While Settings records a new shortcut, the old one stays free so the recorder sees the keys.
     private var recordingShortcut = false
     /// The menu that opened last: a pop-up or context menu in a window, the status menu, or the menu bar.
@@ -74,6 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             scheduleUpdateChecks()
             DistributedNotificationCenter.default().addObserver(self, selector: #selector(handleRequest(_:)), name: Self.request, object: nil,
                                                                 suspensionBehavior: .deliverImmediately)
+            // Accessibility may have changed in System Settings: the Touch ID button follows when Locky comes forward.
+            NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive(_:)), name: NSApplication.didBecomeActiveNotification,
+                                                   object: nil)
         }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locky")
@@ -103,10 +110,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
     }
 
-    /// The settings the app itself acts on: auto-lock's triggers and the Lock Now shortcut.
+    /// The settings the app itself acts on: auto-lock's triggers, the Lock Now shortcut, and the Touch ID button.
     private func applyAppSettings() {
         autoLock.apply(store.settings.autoLock)
         applyShortcut()
+        applyLockKey()
+    }
+
+    /// The Touch ID button's tap, while lock_key is on and Accessibility is granted. Never in a tool run.
+    private func applyLockKey() {
+        lockKey.apply(!Self.isTool && store.settings.lockKey && AXIsProcessTrusted())
+    }
+
+    @objc private func didBecomeActive(_ notification: Notification) {
+        // A lock activates Locky at its start and at each keyboard reclaim: nothing is read then.
+        guard session?.mode != .lock else { return }
+        applyLockKey()
     }
 
     private func applyShortcut() {

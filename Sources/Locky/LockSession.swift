@@ -408,6 +408,9 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Locky is the active app, with the main shield key: what is typed goes to the lock.
     private var holdsKeyboard: Bool { NSApp.isActive && windows.first?.isKeyWindow == true }
 
+    /// A lock on screen that gets what is typed: its main shield is key, or its event tap takes the keys.
+    var holdsLock: Bool { mode == .lock && !ended && (windows.first?.isKeyWindow == true || keyTap != nil) }
+
     enum KeyboardAction: Equatable { case keep, tap, handOver }
 
     /// A lock that does not hold the keyboard must not stay up, since typing would go to the app behind it. It
