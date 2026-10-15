@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The Settings window, as macOS apps have it: a toolbar of panes (General, Plugins, Lua Config), the pane's name as the
+/// The Settings window, as macOS apps have it: a toolbar of panes (General, Plugins), the pane's name as the
 /// title, a fixed width and a height per pane, minimize and zoom dimmed, and the last pane again on the next open.
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
@@ -71,19 +71,17 @@ final class SettingsTabViewController: NSTabViewController {
         tabStyle = .toolbar
         add(.settings, SettingsPage(model: model))
         add(.plugins, PluginsPage(model: model))
-        add(.config, ConfigPage(model: model))
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     /// A pane's content size: one width for all, and a height that fits the pane. General fits its tallest usual state
     /// without scrolling: a Touch ID Mac that has not allowed Accessibility, as every new install starts, with the Open at
-    /// login subtitle (744.5 pt measured).
+    /// login subtitle and no init.lua problem (1028.5 pt measured). A shorter screen gets the screen's height (fit).
     static func size(of pane: AppModel.Section) -> CGSize {
         switch pane {
         case .plugins: CGSize(width: 640, height: 520)
-        case .config: CGSize(width: 640, height: 360)
-        default: CGSize(width: 640, height: 745)
+        default: CGSize(width: 640, height: 1029)
         }
     }
 

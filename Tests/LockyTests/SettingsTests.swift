@@ -888,7 +888,7 @@ import Testing
     }
 }
 
-/// The Settings window's own rules: General's pop-ups and switches, and Lua Config's Open in button.
+/// The Settings window's own rules: General's pop-ups and switches, and its Open in button.
 @Suite struct WindowSettingsTests {
     @Test func whenInactiveListsNeverAndTheUsualTimes() {
         let choices = SettingsPage.idleChoices(stored: nil)

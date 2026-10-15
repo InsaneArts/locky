@@ -204,7 +204,12 @@ return {
 ## Tools
 
 - `locky check [--theme NAME]` runs your config, plugins, and a theme without locking, and lists every error.
+  `--widget NAME` runs that widget alone in the theme, so a widget that no theme places runs too.
+- `locky render --theme NAME --out FILE.png` draws the theme's lock screen to a PNG without a window, with
+  privacy mode on. `--widget NAME` draws that widget alone, in the middle; `--size 1728x1117` and
+  `--appearance light|dark` try other screens.
 - `locky preview --theme NAME` opens the lock screen in a window.
+- `locky skill install` gives coding agents Locky's skill: see [agents.md](agents.md).
 - `locky themes` and `locky widgets` list what is installed.
 - For completion and type checking in any editor with lua-language-server, point it at Locky's type stubs.
   `~/.config/locky/.luarc.json`:

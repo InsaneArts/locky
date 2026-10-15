@@ -54,7 +54,7 @@ Everything a widget starts stops when the screen unlocks or the widget fails.
 | `locky.sys.battery()` | `present`, `percent`, `charging`, `plugged`, `state` (`"charging"`, `"charged"`, `"plugged"`, `"discharging"`), `remaining` and `until_full` (minutes, when known). |
 | `locky.sys.cpu()` | `usage` (percent of all cores since the previous call), `cores`. |
 | `locky.sys.memory()` | `total`, `used` (bytes, like Activity Monitor's Memory Used), `percent`. |
-| `locky.sys.uptime()` | Seconds since the Mac started. |
+| `locky.sys.uptime()` | Seconds since the Mac started, sleep included. |
 | `locky.sys.hostname()` | `name` (the computer's name), `host` (its local host name). |
 | `locky.sys.user()` | `name` (short), `full_name`. |
 | `locky.sys.os()` | `name`, `version`, `codename`, `build`. |

@@ -228,10 +228,17 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        guard let pass = currentRenderPassDescriptor, let drawable = currentDrawable,
-              let buffer = queue.makeCommandBuffer(), let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-        var uniforms = Uniforms(time: Float(CACurrentMediaTime() - start) * speed,
-                                resolution: SIMD2(Float(drawableSize.width), Float(drawableSize.height)))
+        guard let pass = currentRenderPassDescriptor, let drawable = currentDrawable, let buffer = queue.makeCommandBuffer(),
+              encode(pass, in: buffer, size: drawableSize) else { return }
+        buffer.present(drawable)
+        buffer.commit()
+        isLoaded = true
+    }
+
+    /// Draws a frame of the shader at this moment into `pass`.
+    private func encode(_ pass: MTLRenderPassDescriptor, in buffer: MTLCommandBuffer, size: CGSize) -> Bool {
+        guard let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return false }
+        var uniforms = Uniforms(time: Float(CACurrentMediaTime() - start) * speed, resolution: SIMD2(Float(size.width), Float(size.height)))
         let now = Date()
         params.clock = Float(now.timeIntervalSince(Calendar.current.startOfDay(for: now)))
         encoder.setRenderPipelineState(pipeline)
@@ -239,9 +246,36 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
         encoder.setFragmentBytes(&params, length: MemoryLayout<Params>.stride, index: 1)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
-        buffer.present(drawable)
+        return true
+    }
+
+    /// This moment's frame as a picture, drawn into a texture off the screen, for `locky render`: Core Animation's
+    /// renderer draws pictures, not Metal drawables.
+    func frameImage() -> CGImage? {
+        guard let device else { return nil }
+        let scale = (window?.backingScaleFactor ?? 2) * resolutionScale
+        let width = max(Int(bounds.width * scale), 1), height = max(Int(bounds.height * scale), 1)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.renderTarget]
+        descriptor.storageMode = .managed
+        guard let texture = device.makeTexture(descriptor: descriptor), let buffer = queue.makeCommandBuffer() else { return nil }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = texture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].clearColor = clearColor
+        pass.colorAttachments[0].storeAction = .store
+        guard encode(pass, in: buffer, size: CGSize(width: width, height: height)), let blit = buffer.makeBlitCommandEncoder() else { return nil }
+        blit.synchronize(resource: texture)
+        blit.endEncoding()
         buffer.commit()
-        isLoaded = true
+        buffer.waitUntilCompleted()
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        texture.getBytes(&pixels, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        let info = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                       space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: info), provider: provider,
+                       decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 }
 

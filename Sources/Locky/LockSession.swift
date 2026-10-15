@@ -43,7 +43,7 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     private let options: Options
     private var runtime: LuaRuntime?
-    private var started: LuaRuntime.Started?
+    private(set) var started: LuaRuntime.Started?
     private var windows: [NSWindow] = []
     private var screens: [LockScreenView] = []
     /// Shows the scene once it is ready. buildScreens starts it again, so a rebuild never runs two.

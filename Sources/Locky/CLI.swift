@@ -1,3 +1,4 @@
+import AppKit
 import CLua
 import Foundation
 import LocalAuthentication
@@ -5,16 +6,18 @@ import Metal
 
 /// `Locky <command>`: the command line, in the same binary as the app.
 ///
-///   locky check [--theme NAME]     run init.lua, plugins, and a theme; report every error
+///   locky check [--theme NAME] [--widget NAME]   run init.lua, plugins, and a theme; report every error
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
+///   locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
+///   locky skill install|path       the skill that teaches coding agents to write widgets and themes
 ///   locky pack list|check|sync|update|clean
 ///   locky login [on|off]
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
 ///   locky lock [--theme NAME]
 ///   locky window [section] [--theme NAME] [--behind]   (the old sections dashboard and widgets still work)
 enum CLI {
-    static let commands: Set<String> = ["check", "health", "themes", "widgets", "pack", "login", "help", "--help", "-h", "version", "--version"]
+    static let commands: Set<String> = ["check", "health", "themes", "widgets", "render", "skill", "pack", "login", "help", "--help", "-h", "version", "--version"]
 
     /// The GUI's options, for `preview`, `lock`, and `window [section]`.
     struct GUILaunch {
@@ -26,6 +29,8 @@ enum CLI {
         }
         /// `window widgets`: Customize with Add Widget open.
         var opensWidgetGallery: Bool { arguments.first == "window" && arguments.dropFirst().first == "widgets" }
+        /// `window new-widget`: General with the New Widget sheet open.
+        var opensNewWidget: Bool { arguments.first == "window" && arguments.dropFirst().first == "new-widget" }
         var theme: String?
         var size: CGSize?
         var behind = false
@@ -55,7 +60,7 @@ enum CLI {
     static func run(_ arguments: [String]) -> Int32 {
         switch arguments.first {
         case "check":
-            let report = checkReport(theme: value("--theme", in: arguments))
+            let report = checkReport(theme: value("--theme", in: arguments), widget: value("--widget", in: arguments))
             print(report.text)
             return report.ok ? 0 : 1
         case "health":
@@ -107,24 +112,89 @@ enum CLI {
             case .unavailable(let message): print(message)
             }
             return 0
+        case "skill":
+            switch arguments.dropFirst().first {
+            case "path":
+                print(AgentSkill.bundled.path)
+                return 0
+            case "install":
+                do {
+                    for folder in try AgentSkill().install() { print("Installed \(LuaError.shortenPaths(folder.path))") }
+                    return 0
+                } catch {
+                    print("error: \(error.localizedDescription)")
+                    return 1
+                }
+            default:
+                print("usage: locky skill install|path")
+                return 2
+            }
+        case "render":
+            return MainActor.assumeIsolated { render(arguments) }
         case "version", "--version":
             print("Locky \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"), \(String(cString: locky_lua_release()))")
             return 0
         default:
             print("""
             usage: locky <command>
-              check [--theme NAME]   run init.lua, plugins, and a theme, and report every error
+              check [--theme NAME] [--widget NAME]
+                                     run init.lua, plugins, and a theme, and report every error;
+                                     --widget checks only that widget, in the theme
               health                 check Locky, Lua, plugins, Touch ID, and git
               themes                 list themes
               widgets                list widgets
+              render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
+                                     draw a theme's lock screen to a PNG, with privacy mode on;
+                                     --widget draws only that widget, in the middle
+              skill install          install the agent skill in ~/.claude, ~/.codex, and ~/.agents
+              skill path             print the folder of the skill Locky ships
               pack list|check|sync|update|clean
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
               lock [--theme NAME]
-              window [themes|settings|plugins|config|welcome] [--theme NAME] [--size 1240x780]
+              window [themes|settings|plugins|welcome|new-widget] [--theme NAME] [--size 1240x780]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2
+        }
+    }
+
+    /// `locky render`: the theme's lock screen as a PNG, drawn off the screen (Render). It waits on the main run loop,
+    /// which the lock screen's views need, for 10 seconds at most.
+    @MainActor private static func render(_ arguments: [String]) -> Int32 {
+        let appearanceWord = value("--appearance", in: arguments)
+        guard let theme = value("--theme", in: arguments), let out = value("--out", in: arguments),
+              [nil, "light", "dark"].contains(appearanceWord) else {
+            print("usage: locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]")
+            return 2
+        }
+        let size = GUILaunch.parse(arguments).size ?? CGSize(width: 1440, height: 900)
+        let appearance: NSAppearance.Name? = appearanceWord.map { $0 == "light" ? .aqua : .darkAqua }
+        // No Dock icon and no menu bar: nothing shows while it draws.
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        var result: Result<CGImage, any Error>?
+        Task {
+            do { result = .success(try await Render.image(theme: theme, widget: value("--widget", in: arguments), size: size,
+                                                               appearance: appearance)) } catch { result = .failure(error) }
+        }
+        let deadline = Date().addingTimeInterval(10)
+        while result == nil, Date() < deadline { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
+        switch result {
+        case .success(let image)?:
+            let url = URL(fileURLWithPath: out)
+            guard let destination = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil),
+                  { CGImageDestinationAddImage(destination, image, nil); return CGImageDestinationFinalize(destination) }() else {
+                print("error: cannot write \(LuaError.shortenPaths(url.path))")
+                return 1
+            }
+            print(url.path)
+            return 0
+        case .failure(let error)?:
+            print("error: \(error)")
+            return 1
+        case nil:
+            print("error: theme \(theme) did not draw within 10 seconds")
+            return 1
         }
     }
 
@@ -134,15 +204,22 @@ enum CLI {
         return runtime
     }
 
-    /// Starts a full session without windows and collects what goes wrong in the first 1.5 seconds.
-    static func checkReport(theme: String?) -> (ok: Bool, text: String) {
+    /// Starts a full session without windows and collects what goes wrong in the first 1.5 seconds. With `widget`, the
+    /// theme (default unless named) holds that widget alone.
+    static func checkReport(theme: String?, widget: String? = nil, config: URL = RuntimePath.defaultConfig) -> (ok: Bool, text: String) {
         final class Collector: @unchecked Sendable {
             let lock = NSLock()
             var rendered = Set<Int>()
             var failures: [Int: String] = [:]
         }
         let collector = Collector()
-        let runtime = LuaRuntime(delegate: .init(
+        var settings: Settings?
+        let theme = widget == nil ? theme : theme ?? "default"
+        if let widget, let theme {
+            settings = Settings.load(config: config).settings
+            settings?.showOnly(widget, in: theme)
+        }
+        let runtime = LuaRuntime(path: .standard(config: config), settings: settings, delegate: .init(
             present: { id, _ in collector.lock.withLock { _ = collector.rendered.insert(id) } },
             failed: { id, message, _ in collector.lock.withLock { collector.failures[id] = message } }
         ))
@@ -181,7 +258,7 @@ enum CLI {
                 lines.append("ERROR shader \(LuaError.shortenPaths(url.path)): \(error.localizedDescription)")
             }
         }
-        for spec in PackManager(path: .standard()).specs().specs { lines.append("  plugin \(spec.name): \(spec.grants)") }
+        for spec in PackManager(path: .standard(config: config)).specs().specs { lines.append("  plugin \(spec.name): \(spec.grants)") }
         for problem in started.problems { lines.append("ERROR \(problem)") }
         let ok = shaderOK && started.problems.isEmpty && failures.isEmpty && !started.instances.contains(nil)
         lines.append(ok ? "No problems." : "Problems found.")
@@ -201,7 +278,7 @@ enum CLI {
         let path = RuntimePath.standard()
         let initFile = path.config.appending(path: "init.lua")
         if FileManager.default.fileExists(atPath: initFile.path) { ok("config: \(LuaError.shortenPaths(initFile.path))") }
-        else { warn("no init.lua", "Settings › Lua Config creates one with examples") }
+        else { warn("no init.lua", "Settings › General › Config folder creates one with examples") }
 
         let runtime = LuaRuntime(path: path, delegate: .init(present: { _, _ in }, failed: { _, _, _ in }))
         var pluginSections: LuaValue = .nil

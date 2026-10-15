@@ -21,10 +21,9 @@ import Testing
         #expect(WelcomeView.opensAtLaunch(store.defaults, isTool: false) == false)
     }
 
-    /// `locky window welcome` (and window-shot.sh) opens it; the Lua Config pane keeps "config" for them.
+    /// `locky window welcome` (and window-shot.sh) opens it.
     @MainActor @Test func theWelcomeOpensFromTheCommandLine() {
         #expect(CLI.GUILaunch.parse(["window", "welcome"]).window == .welcome)
-        #expect(AppModel.Section.config.title == "Lua Config" && AppModel.Section(rawValue: "config") == .config)
     }
 
     /// The line under Lock Now never promises Touch ID to a Mac or a setting that does not offer it.

@@ -91,7 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if let section = launch.window {
             // Only a launch is a screenshot run: its previews keep running behind other windows.
             model.screenshots = launch.behind
-            open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: launch.behind, size: launch.size)
+            open(section, theme: launch.theme, widgets: launch.opensWidgetGallery, newWidget: launch.opensNewWidget, behind: launch.behind,
+                 size: launch.size)
         } else if launch.mode == nil, WelcomeView.opensAtLaunch(.standard, isTool: tool) {
             showWindow(.welcome)
         }
@@ -156,14 +157,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case .preview?: preview(theme: launch.theme)
         default:
             // In front: a screenshot run takes no requests, so a request that says --behind is not from Locky.
-            open(launch.window ?? .themes, theme: launch.theme, widgets: launch.opensWidgetGallery, behind: false, size: launch.size)
+            open(launch.window ?? .themes, theme: launch.theme, widgets: launch.opensWidgetGallery, newWidget: launch.opensNewWidget, behind: false,
+                 size: launch.size)
         }
     }
 
     /// `Locky window`: a window or a Settings pane. For the Themes window, Customize for `theme`, or for the theme in use
-    /// with Add Widget open (`widgets`); else the gallery.
-    private func open(_ section: AppModel.Section, theme: String?, widgets: Bool, behind: Bool, size: CGSize?) {
+    /// with Add Widget open (`widgets`); else the gallery. For General, the New Widget sheet with `newWidget`.
+    private func open(_ section: AppModel.Section, theme: String?, widgets: Bool, newWidget: Bool, behind: Bool, size: CGSize?) {
         showWindow(section, behind: behind, size: size)
+        if newWidget { model.newWidget = true }
         guard section == .themes else { return }
         if let theme {
             model.customize(theme)
@@ -213,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 guard let self, session?.mode != .lock else { return }
                 controller.show(behind: behind)
             }
-        case .settings?, .plugins?, .config?:
+        case .settings?, .plugins?:
             model.startWatching()
             model.refresh()
             let controller = settingsWindow ?? SettingsWindowController(model: model) { [weak self] in self?.closed(self?.settingsWindow?.window) }
