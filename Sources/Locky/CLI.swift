@@ -10,11 +10,11 @@ import Metal
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
 ///   locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
-///                [--transition lock|unlock --at 0.0…1.0]
+///                [--transition lock|unlock --at 0.0…1.0 [--style STYLE]]
 ///   locky skill install|path       the skill that teaches coding agents to write widgets and themes
 ///   locky pack list|check|sync|update|clean
 ///   locky login [on|off]
-///   locky preview [--theme NAME] [--size 1440x900] [--behind] [--transition]
+///   locky preview [--theme NAME] [--size 1440x900] [--behind] [--transition [STYLE]]
 ///   locky lock [--theme NAME]
 ///   locky window [section] [--theme NAME] [--behind]   (the old sections dashboard and widgets still work)
 enum CLI {
@@ -37,6 +37,8 @@ enum CLI {
         var behind = false
         /// `preview --transition`: the lock's way in and out, over a stand-in desktop.
         var transition = false
+        /// `preview --transition STYLE`: that style, not the setting's.
+        var transitionStyle: LockTransition.Style?
         private var arguments: [String] = []
 
         static func parse(_ arguments: [String]) -> GUILaunch {
@@ -52,6 +54,7 @@ enum CLI {
             }
             launch.behind = arguments.contains("--behind")
             launch.transition = launch.mode == .preview && arguments.contains("--transition")
+            if launch.transition { launch.transitionStyle = value("--transition", in: arguments).flatMap(LockTransition.Style.init(rawValue:)) }
             return launch
         }
     }
@@ -148,15 +151,17 @@ enum CLI {
               themes                 list themes
               widgets                list widgets
               render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
-                     [--transition lock|unlock --at 0.0…1.0]
+                     [--transition lock|unlock --at 0.0…1.0 [--style STYLE]]
                                      draw a theme's lock screen to a PNG, with privacy mode on;
                                      --widget draws only that widget, in the middle;
-                                     --transition draws the lock's way in or out at that point
+                                     --transition draws the lock's way in or out at that point,
+                                     in STYLE (\(LockTransition.Style.allCases.map(\.rawValue).joined(separator: ", ")))
+                                     or the setting's
               skill install          install the agent skill in ~/.claude, ~/.codex, and ~/.agents
               skill path             print the folder of the skill Locky ships
               pack list|check|sync|update|clean
               login [on|off]         open Locky at login, or not
-              preview [--theme NAME] [--size 1440x900] [--transition]
+              preview [--theme NAME] [--size 1440x900] [--transition [STYLE]]
               lock [--theme NAME]
               window [themes|settings|plugins|welcome|new-widget] [--theme NAME] [--size 1240x780]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
@@ -173,11 +178,12 @@ enum CLI {
         let directionWord = value("--transition", in: arguments), atWord = value("--at", in: arguments)
         let direction = directionWord.flatMap(LockTransition.Direction.init(rawValue:))
         let progress = atWord.flatMap(Double.init).flatMap { (0...1).contains($0) ? $0 : nil }
+        let styleWord = value("--style", in: arguments), style = styleWord.flatMap(LockTransition.Style.init(rawValue:))
         guard let theme = value("--theme", in: arguments), let out = value("--out", in: arguments),
               [nil, "light", "dark"].contains(appearanceWord), (directionWord == nil) == (atWord == nil),
-              directionWord == nil || (direction != nil && progress != nil) else {
+              directionWord == nil || (direction != nil && progress != nil), styleWord == nil || (style != nil && directionWord != nil) else {
             print("usage: locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]")
-            print("                    [--transition lock|unlock --at 0.0…1.0]")
+            print("                    [--transition lock|unlock --at 0.0…1.0 [--style STYLE]]")
             return 2
         }
         let transition = direction.flatMap { direction in progress.map { (direction: direction, progress: $0) } }
@@ -188,7 +194,7 @@ enum CLI {
         var result: Result<CGImage, any Error>?
         Task {
             do { result = .success(try await Render.image(theme: theme, widget: value("--widget", in: arguments), size: size,
-                                                               appearance: appearance, transition: transition)) } catch { result = .failure(error) }
+                                                               appearance: appearance, transition: transition, style: style)) } catch { result = .failure(error) }
         }
         let deadline = Date().addingTimeInterval(10)
         while result == nil, Date() < deadline { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05)) }

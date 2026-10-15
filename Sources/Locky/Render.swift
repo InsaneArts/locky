@@ -16,10 +16,11 @@ enum Render {
 
     /// The theme with privacy mode on, whatever settings.json says. With `widget`, that widget alone, in the middle of the
     /// theme. Shaders show the frame of the moment they are drawn. With `transition`, the lock's way in or out at that
-    /// point (0 to 1) of its time, over a stand-in desktop.
+    /// point (0 to 1) of its time, over a stand-in desktop, in `style` or else settings.json's (Focus for none).
     static func image(theme: String, widget: String? = nil, size: CGSize, appearance: NSAppearance.Name?,
                       config: URL = RuntimePath.defaultConfig,
-                      transition: (direction: LockTransition.Direction, progress: Double)? = nil) async throws -> CGImage {
+                      transition: (direction: LockTransition.Direction, progress: Double)? = nil,
+                      style: LockTransition.Style? = nil) async throws -> CGImage {
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         if let appearance { window.appearance = NSAppearance(named: appearance) }
@@ -42,7 +43,9 @@ enum Render {
         if let widget, session.started?.theme.widgets.first?.known != true { throw Failure(description: "no widget named \"\(widget)\"") }
         let now = CACurrentMediaTime()
         // Before the layout: views added after it leave the container's layer where the renderer does not see it.
-        if let transition, let scene = container.subviews.first as? LockScreenView { stage(transition, scene: scene, in: container, at: now) }
+        if let transition, let scene = container.subviews.first as? LockScreenView {
+            stage(transition, style: style ?? settings.lockAnimation ?? .focus, scene: scene, in: container, at: now)
+        }
         container.layoutSubtreeIfNeeded()
         freezeShaders(in: container)
         guard let layer = container.layer, let image = draw(layer, size: size, at: now) else { throw Failure(description: "the lock screen did not draw") }
@@ -51,27 +54,26 @@ enum Render {
 
     /// The stand-in desktop and its blurred copy under the scene, and the way in or out started so long before `now` that
     /// the renderer, drawing at `now`, draws the animations the lock runs at `progress`.
-    private static func stage(_ transition: (direction: LockTransition.Direction, progress: Double), scene: LockScreenView, in container: NSView,
-                              at now: CFTimeInterval) {
+    private static func stage(_ transition: (direction: LockTransition.Direction, progress: Double), style: LockTransition.Style,
+                              scene: LockScreenView, in container: NSView, at now: CFTimeInterval) {
         let picture = StandInDesktop.picture(size: container.bounds.size, scale: scale)
-        let desktop = NSView(frame: container.bounds)
+        let desktop = NSView()
         desktop.wantsLayer = true
         desktop.layer?.contents = picture
         desktop.layer?.contentsGravity = .resize
         let backdrop = LockTransition.backdrop(reduceTransparency: false, picture: picture.flatMap { StandInDesktop.blurred($0, scale: scale) })
-        backdrop.frame = container.bounds
-        container.addSubview(desktop, positioned: .below, relativeTo: scene)
-        container.addSubview(backdrop, positioned: .above, relativeTo: desktop)
-        let start = now - min(max(transition.progress, 0), 1) * LockTransition.length(transition.direction)
+        let stage = TransitionStage(frame: container.bounds, scene: scene, backdrop: backdrop, desktop: desktop)
+        container.addSubview(stage)
+        let start = now - min(max(transition.progress, 0), 1) * LockTransition.length(transition.direction, style: style)
         let middle = CGPoint(x: scene.bounds.midX, y: scene.bounds.midY)
         switch transition.direction {
         case .lock:
-            LockTransition.comeIn(backdrop: backdrop, scene: scene, origin: middle, at: start, reduceMotion: false)
+            LockTransition.comeIn(stage, style: style, origin: middle, at: start, reduceMotion: false)
         case .unlock:
-            backdrop.isHidden = true
             let field = scene.auth.map { CGPoint(x: $0.view.frame.midX, y: $0.view.frame.midY) } ?? middle
-            LockTransition.goOut(backdrop: backdrop, scene: scene, origin: field, at: start)
+            LockTransition.goOut(stage, style: style, origin: field, at: start)
         }
+        stage.shader?.freeze(at: now, scale: scale)
     }
 
     /// Puts a picture of each shader's frame under its sublayers (the password field's dim): the renderer draws layers'
@@ -87,7 +89,7 @@ enum Render {
     }
 
     /// Renders `root` and its sublayers into a texture with CARenderer, and reads it back right side up.
-    private static func draw(_ root: CALayer, size: CGSize, at time: CFTimeInterval) -> CGImage? {
+    static func draw(_ root: CALayer, size: CGSize, at time: CFTimeInterval) -> CGImage? {
         let width = Int(size.width * scale), height = Int(size.height * scale)
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { return nil }
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
