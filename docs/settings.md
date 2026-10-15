@@ -28,7 +28,7 @@ says so in its windows and in `locky check`, and does not overwrite it.
 |---|---|---|
 | `theme` | A theme id, such as `"mocha"` | The Themes window (click a theme), or the menu's Themes… |
 | `schedule` | `{ "mode": "time", "day": "glass", "night": "default", "day_starts": "07:00", "night_starts": "19:00" }`, or `{ "mode": "appearance", "light": "glass", "dark": "default" }` | Themes › Schedule (the toolbar's clock, or File › Schedule Themes…) |
-| `themes` | `{ "<id>": { "background": {…}, "widgets": […], "auth": {…} } }`: see below | Themes › Customize… |
+| `themes` | `{ "<id>": { "background": {…}, "palette": {…}, "font": {…}, "card": {…}, "widgets": […], "auth": {…} } }`: see below and [themes.md](themes.md#make-and-share-themes-in-the-window) | Themes › Customize… |
 | `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, an `https://`, `ssh://`, or `git@` address, or `{ "src": …, "version": …, "name": …, "allow": ["system", "files"] }` (`allow`: what the plugin may do; see [plugins.md](plugins.md#what-a-plugin-may-do)) | Settings › Plugins › Install Plugin… |
 | `message` | A line under the password field | Settings › General › Lock Screen |
 | `hour24` | `true` or `false`: a 24- or 12-hour clock in every theme | — (the lock screen follows System Settings › General › Date & Time unless this key or init.lua sets it) |
@@ -86,7 +86,9 @@ Dock, and its menus have Lock Now in the Locky menu.
   lock shows at the top (and first in the menu bar icon's menu) until its files or init.lua change or you dismiss
   it; Open goes to the line with the error. When the theme in use does not load, the top says why, with Open at
   the file and line. Schedule (the clock in the toolbar, or File › Schedule Themes…) changes the theme by time of
-  day or with Light and Dark mode. Right-click a theme you made for Move to Trash.
+  day or with Light and Dark mode. New Theme… (+ in the toolbar, File › New Theme…, or ⌘N) makes "Untitled Theme"
+  from a blank one and opens Customize on it ([create-theme.md](create-theme.md)). Right-click a theme you made for
+  Move to Trash.
 - **Customize:** Customize… (or Return, or a theme's right-click menu) opens the editor on that theme's live lock
   screen. Click a widget or the password field to select it, and drag it to move it. A widget lands pinned to
   the corner, edge, or center of the part of the screen it is in, so it keeps its place on other screens; View ›
@@ -94,7 +96,8 @@ Dock, and its menus have Lock Now in the Locky menu.
   grid step with Shift), Delete removes a selected widget, and Escape clears the selection; a second Escape
   returns to the themes. The inspector shows what is selected: where it is pinned (Reset puts it back where the
   theme has it), its size, its card, and its options. With nothing selected, it shows the background, the widget
-  list, and the password field. Add Widget… (+) opens a live gallery of the widgets, in each of their sizes.
+  list, and the password field, and under the background, the theme's Colors and Font; a theme you made with
+  New Theme… also shows its Name there. Add Widget… (+) opens a live gallery of the widgets, in each of their sizes.
   The More menu (and the File menu) has Duplicate Theme…, Export Theme…, Revert to Original, and, for a theme you
   made, Move to Trash (see [themes.md](themes.md#make-and-share-themes-in-the-window)). Edit › Undo (⌘Z) takes
   back each change, and Redo (⇧⌘Z) makes it again. Done returns to the themes. For a theme that does not load,
@@ -119,4 +122,5 @@ Dock, and its menus have Lock Now in the Locky menu.
   daily checks in the background, and Check Now checks at once. The footer says Up to date only after a check that
   reached the plugins and found each at its newest commit. Each plugin shows the themes and widgets it adds.
 - **Welcome:** a window of its own. It opens by itself on the first launch, and from Help › Welcome to Locky
-  after that: a live preview and Lock Now, then a switch for auto-lock and one for Open at login. Done closes it.
+  after that. It has three pages: a live preview and Lock Now; Lock automatically, Open at login, the Lock Now
+  shortcut, and Accessibility; and what happens if something goes wrong. Done closes it.
