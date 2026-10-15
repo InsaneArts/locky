@@ -202,7 +202,7 @@ func waitUntil(_ condition: () -> Bool) async -> Bool {
 }
 
 /// The `preview` window, as a lock has its screen: the field has the keyboard from the first frame and after a wake;
-/// the first key of a hidden field shows it and lands in it; Caps Lock shows.
+/// the first key of a hidden field shows it and lands in it; Caps Lock shows; input ends the ambient mode.
 @MainActor
 @Suite(.serialized) struct PreviewFocusTests {
     private func preview(_ theme: String = "return { background = { color = '#101010' } }",
@@ -274,5 +274,29 @@ func waitUntil(_ condition: () -> Bool) async -> Bool {
         try send(.flagsChanged, flags: [], to: window)
         #expect(model(screen)?.capsLock == false)
         #expect(screen.fieldHasKeyboard)
+    }
+
+    /// After ambient_after seconds without input only the background shows; the mouse brings the rest back with the field
+    /// holding the keyboard, and a key that ends it lands in the field.
+    @Test func inputEndsTheAmbientMode() async throws {
+        let (session, window, screen, sandbox) = try preview(settings: ["ambient_after": .double(0.3)])
+        defer { session.end("test"); _ = sandbox }
+        window.makeKeyAndOrderFront(nil)
+        #expect(await waitUntil { screen.ambient })
+        try send(.mouseMoved, to: window)
+        #expect(!screen.ambient && screen.fieldHasKeyboard)
+        #expect(await waitUntil { screen.ambient })
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(nil)
+        try send(.keyDown, "q", to: window)
+        #expect(!screen.ambient)
+        #expect(model(screen)?.password == "q")
+    }
+
+    @Test func ambientAfterZeroIsOff() async throws {
+        let (session, _, screen, sandbox) = try preview(settings: ["ambient_after": .int(0)])
+        defer { session.end("test"); _ = sandbox }
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(!screen.ambient)
     }
 }
