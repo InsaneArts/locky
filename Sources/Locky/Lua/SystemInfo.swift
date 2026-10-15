@@ -192,6 +192,8 @@ enum SystemInfo {
             "language": .string(Locale.current.language.languageCode?.identifier ?? "en"),
             "hour24": .bool(hour24),
             "first_weekday": .int(calendar.firstWeekday),
+            // System Settings › General › Language & Region › Temperature, which the region alone does not tell.
+            "temperature": .string(UnitTemperature(forLocale: .current, usage: .weather) == .fahrenheit ? "F" : "C"),
             "weekdays": list(symbols.standaloneWeekdaySymbols),
             "weekdays_short": list(symbols.veryShortStandaloneWeekdaySymbols),
             "weekdays_abbreviated": list(symbols.shortStandaloneWeekdaySymbols),

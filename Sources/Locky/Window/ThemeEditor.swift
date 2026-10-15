@@ -496,11 +496,24 @@ private struct WidgetInspector: View {
             if !keys.isEmpty {
                 Section {
                     ForEach(keys, id: \.self) { key in
-                        OptionRow(key: key, value: placement.opts[key] ?? inherited[key] ?? .nil, choices: info?.choices[key],
-                                  own: info?.defaults[key], inherited: inherited[key],
-                                  palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
-                                  pick: { pick(key, $0) },
-                                  commit: { value in change { $0.opts[key] = value == inherited[key] ? nil : value } })
+                        if key == "location" {
+                            LocationOption(location: (placement.opts[key] ?? inherited[key])?.string ?? "",
+                                           placeName: (placement.opts["place_name"] ?? inherited["place_name"])?.string,
+                                           permission: model.location.state, grant: model.location.grant) { location, name in
+                                // Picked now: macOS asks, if it never did.
+                                if LocationOption.isCurrent(location) { model.location.request() }
+                                change {
+                                    $0.opts[key] = .string(location) == inherited[key] ? nil : .string(location)
+                                    $0.opts["place_name"] = name.map(LuaValue.string)
+                                }
+                            }
+                        } else {
+                            OptionRow(key: key, value: placement.opts[key] ?? inherited[key] ?? .nil, choices: info?.choices[key],
+                                      own: info?.defaults[key], inherited: inherited[key],
+                                      palette: Theme.fallback.palette.merging(editing.theme.palette) { $1 },
+                                      pick: { pick(key, $0) },
+                                      commit: { value in change { $0.opts[key] = value == inherited[key] ? nil : value } })
+                        }
                     }
                 } header: {
                     ResetHeader(title: "Options", shown: !placement.opts.isEmpty) { change("Reset Options of") { $0.opts = [:] } }
@@ -657,16 +670,18 @@ private struct OptionRow: View {
         }
     }
 
-    /// The options to show, the common ones first, then by name. Lists and tables are left out: only Lua changes them.
+    /// The options to show, the common ones first, then by name. Lists and tables are left out: only Lua changes them. So
+    /// is place_name, which Location writes with the place.
     static func keys(inherited: [String: LuaValue], overrides: [String: LuaValue], choices: [String: [String]]) -> [String] {
         let keys = Set(inherited.keys).union(overrides.keys).union(choices.keys).filter { key in
-            switch overrides[key] ?? inherited[key] ?? .nil {
+            guard key != "place_name" else { return false }
+            return switch overrides[key] ?? inherited[key] ?? .nil {
             case .bool, .int, .double, .string: true
             case .nil: choices[key] != nil
             default: false
             }
         }
-        let first = ["style", "format", "text", "label", "title", "size", "weight", "design", "font", "color"]
+        let first = ["style", "location", "units", "format", "text", "label", "title", "size", "weight", "design", "font", "color"]
         return keys.sorted { a, b in
             let (rankA, rankB) = (first.firstIndex(of: a) ?? first.count, first.firstIndex(of: b) ?? first.count)
             return rankA != rankB ? rankA < rankB : a < b

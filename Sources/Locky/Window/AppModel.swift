@@ -99,6 +99,9 @@ final class AppModel {
     var shortcutProblem: String?
     /// Accessibility, the camera, and the login item: what Locky asks macOS for.
     let permissions: Permissions
+    /// Location Services, for the weather's Current Location: made when first used, so a run that never shows it (a test)
+    /// never talks to Location Services.
+    @ObservationIgnored lazy var location = LocationAccess(isLocked: { [unowned self] in locked })
     /// Open at login, read again whenever Locky becomes active (back from System Settings).
     var loginItem: LoginItem.Status { permissions.loginItem }
     /// True for the length of a lock (AppDelegate sets it). Nothing is read on didBecomeActive then. As it turns true,

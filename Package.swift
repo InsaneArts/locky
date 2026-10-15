@@ -33,6 +33,7 @@ let package = Package(
             .product(name: "PermissionFlowCameraStatus", package: "PermissionFlow"),
             .product(name: "SystemSettingsKit", package: "PermissionFlow"),
         ], path: "Sources/Locky", exclude: ["Resources"]),
-        .testTarget(name: "LockyTests", dependencies: ["Locky", "GuardCore"], path: "Tests/LockyTests"),
+        // Fixtures: replies saved from the services widgets call, read by path.
+        .testTarget(name: "LockyTests", dependencies: ["Locky", "GuardCore"], path: "Tests/LockyTests", exclude: ["Fixtures"]),
     ]
 )

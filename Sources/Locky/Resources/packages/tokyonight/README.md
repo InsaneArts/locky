@@ -11,7 +11,7 @@ locky.setup({ theme = "tokyonight" })
 
 - The time, hours in blue over minutes in magenta, in a heavy monospaced face.
 - The date in cyan, and a greeting.
-- `weather` (top right): the temperature and the sky, from wttr.in.
+- `weather` (top right): the temperature and the sky, from Open-Meteo.
 - `battery` (top left), `away` (bottom left: when the screen locked, and wrong passwords since), and the
   keyboard layout (bottom right).
 
@@ -21,7 +21,7 @@ night city out of focus: blue and magenta glows, and soft lights drifting up.
 ## Options
 
 ```lua
--- Your own city instead of wttr.in's guess, and no greeting:
+-- Your own city instead of the Mac's location, and no greeting:
 locky.theme.extend("tokyonight", function(theme)
   for _, w in ipairs(theme.widgets) do
     if w[1] == "weather" then w.opts.location = "Tokyo" end

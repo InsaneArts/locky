@@ -111,7 +111,8 @@ locky.widget.define("notebook.sticky", {
 
 locky.widget.define("notebook.weather", {
   description = "The weather, written in the margin",
-  opts = { size = 24, color = "ink" },
+  opts = { size = 24, color = "ink", location = "", units = "automatic" },
+  choices = { units = { "automatic", "celsius", "fahrenheit" } },
   init = function(self)
     weather.watch(self, self.opts, function(self, data)
       self:set({ data = data })

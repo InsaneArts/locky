@@ -79,9 +79,15 @@ with a green check.
   without the permission, it takes no photo.
 - **Login item.** Open at login adds Locky to System Settings › General › Login Items. If you switch it off there,
   the row says so, and Grant opens Login Items.
+- **Location Services.** Only for a weather widget's Current Location. macOS asks once, when you pick Current
+  Location in Customize; Grant in the row under Location asks too. If you said no, Grant opens System Settings ›
+  Privacy & Security › Location Services. The lock never asks. With the permission, Locky takes a fix when it
+  starts and as each lock starts, and keeps the last one in `~/Library/Caches/Locky/location.json`. Without it, the
+  weather follows the city of the Mac's time zone. The coordinates go to Open-Meteo, for the weather, and to Apple,
+  for the city's name.
 
 Showing a state never asks: Locky reads it with `AXIsProcessTrusted()`, `AVCaptureDevice.authorizationStatus`,
-and `SMAppService`. It reads the states again when you come back to Locky. While the panel is open, it reads
+`CLLocationManager.authorizationStatus`, and `SMAppService`. It reads the states again when you come back to Locky. While the panel is open, it reads
 Accessibility once a second, for 5 minutes at most, and stops when Locky has it. A lock closes the panel at its
 start, and no panel opens during a lock.
 

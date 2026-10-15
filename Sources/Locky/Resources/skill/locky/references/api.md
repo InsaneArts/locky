@@ -65,7 +65,8 @@ Everything a widget starts stops when the screen unlocks or the widget fails.
 | `locky.sys.wallpaper()` | The main display's desktop picture as an image file path, or nil. For a dynamic wallpaper this is its thumbnail. |
 | `locky.sys.wallpaper_colors()` | Its dominant colors, most common first, as `"#rrggbb"` (up to 5; empty without a wallpaper). A theme can build its palette from them, like Material You. |
 | `locky.date.format(template, time, zone)` | A date: `"time"` (24- or 12-hour as `locky.config.hour24` forces, when set), `"date"`, a pattern used as it is (`"EEEE d MMMM"`, `"HH:mm"`), or `"skeleton:EEEEdMMMM"` (ordered the user's way). Names come in the user's language. `time` defaults to now; `zone` (such as `"Asia/Tokyo"`) shows it in another time zone, and the pattern `"ZZZZZ"` gives that zone's offset (`+09:00`). |
-| `locky.date.locale()` | `identifier`, `language`, `hour24` (`locky.config.hour24` when set), `first_weekday` (1 is Sunday), `weekdays`, `weekdays_short`, `weekdays_abbreviated`, `months`, `months_short`. |
+| `locky.date.locale()` | `identifier`, `language`, `hour24` (`locky.config.hour24` when set), `first_weekday` (1 is Sunday), `temperature` (`"C"` or `"F"`, from System Settings › General › Language & Region), `weekdays`, `weekdays_short`, `weekdays_abbreviated`, `months`, `months_short`. |
+| `locky.location()` | Where the Mac is: `lat`, `lon`, `name`, or nil. This is Location Services' last fix if you allowed it in Customize, else the city of the Mac's time zone. It never asks for a permission. In privacy mode, `name` is nil; a widget must not show `lat` and `lon`. |
 
 ## Files and data
 
@@ -99,6 +100,23 @@ end
 done, working, idle, each `{ status, kind, title, workspace }`; `counts` per status; `need` = blocked + done.
 `herdr.colors` and `herdr.words` map each status to a palette role and a label. `herdr.parse(json)` parses
 `herdr api snapshot` output yourself.
+
+## Weather
+
+`require("locky.weather")` gets the weather from [Open-Meteo](https://open-meteo.com), as the weather widget does:
+
+```lua
+local weather = require("locky.weather")
+init = function(self)
+  weather.watch(self, self.opts, function(self, data) self:set({ data = data }) end)
+end
+```
+
+`opts`: `location`, `place_name`, `units`, and `every`, as [widgets.md](widgets.md#sky) says. `data` is `false`
+while there is no weather, otherwise `{ place, temp, feels, high, low, unit, condition, code, symbol, night,
+humidity, wind, wind_unit, wind_dir, uv, sunrise, sunset, moon_phase, moon_illumination, days, hours, fetched }`.
+`code` is the WMO weather code; `weather.condition(code, night)` gives its words and SF Symbol. Weather data by
+Open-Meteo.com, under CC BY 4.0.
 
 ## Logging and health
 
