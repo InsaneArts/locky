@@ -3,6 +3,7 @@ import CLua
 import Foundation
 import LocalAuthentication
 import Metal
+import PermissionFlow
 
 /// `Locky <command>`: the command line, in the same binary as the app.
 ///
@@ -320,6 +321,10 @@ enum CLI {
             }
         }
         runtime.stop()
+
+        // The words of PermissionFlow's buttons and panel, which Scripts/package_app.sh copies into Locky.app.
+        if let words = PermissionFlowResources.packageBundle { ok("permission guide's words: \(LuaError.shortenPaths(words.bundlePath))") }
+        else { warn("the permission guide's words are missing", "its buttons and panel use English; build Locky.app with Scripts/package_app.sh") }
 
         if LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) { ok("Touch ID is available") }
         else { warn("Touch ID is not available", "unlock with your password") }

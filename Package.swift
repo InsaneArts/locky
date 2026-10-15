@@ -9,6 +9,11 @@ let package = Package(
         // Named apart from Locky, so `killall Locky` does not end it too.
         .executable(name: "locky-guard", targets: ["LockyGuard"]),
     ],
+    dependencies: [
+        // Locky's one dependency: the permission flow (System Settings deep links, the floating drag panel, and status
+        // reads that never prompt). Pinned to a version whose source was read; MIT, see docs/security.md.
+        .package(url: "https://github.com/jaywcjlove/PermissionFlow.git", exact: "2.11.3"),
+    ],
     targets: [
         // Lua 5.5.1, unmodified (see Sources/CLua/LICENSE), plus Locky's C bridge: locky_bridge.c.
         .target(
@@ -22,7 +27,12 @@ let package = Package(
         // Locky shares with it. Foundation and Darwin only.
         .target(name: "GuardCore", path: "Sources/GuardCore"),
         .executableTarget(name: "LockyGuard", dependencies: ["GuardCore"], path: "Sources/LockyGuard"),
-        .executableTarget(name: "Locky", dependencies: ["CLua", "GuardCore"], path: "Sources/Locky", exclude: ["Resources"]),
+        .executableTarget(name: "Locky", dependencies: [
+            "CLua", "GuardCore",
+            .product(name: "PermissionFlow", package: "PermissionFlow"),
+            .product(name: "PermissionFlowCameraStatus", package: "PermissionFlow"),
+            .product(name: "SystemSettingsKit", package: "PermissionFlow"),
+        ], path: "Sources/Locky", exclude: ["Resources"]),
         .testTarget(name: "LockyTests", dependencies: ["Locky", "GuardCore"], path: "Tests/LockyTests"),
     ]
 )

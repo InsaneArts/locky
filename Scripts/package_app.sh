@@ -47,6 +47,17 @@ cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 # The guard, which locks the Mac if Locky dies or hangs during a lock. Locky finds it beside its executable.
 cp "$BIN_DIR/locky-guard" "$APP/Contents/MacOS/locky-guard"
 cp -R "$ROOT/Sources/$APP_NAME/Resources/." "$APP/Contents/Resources/"
+# PermissionFlow's words (its .lproj tables). PermissionFlowResources looks in Bundle.main's Resources first. SwiftPM's
+# Bundle.module would look in the app's root, where codesign does not allow files, and then in this Mac's .build, and
+# stops the app if neither has it: PermissionFlow never calls it. A release build drops code that nothing calls, so the
+# message of Bundle.module's stop in the binary means a new version calls it.
+cp -R "$BIN_DIR/PermissionFlow_PermissionFlow.bundle" "$APP/Contents/Resources/"
+# SwiftPM writes its tables read-only, and xattr below must clear them.
+chmod -R u+w "$APP/Contents/Resources/PermissionFlow_PermissionFlow.bundle"
+if [[ "$CONF" == "release" ]] && grep -q "could not load resource bundle" "$APP/Contents/MacOS/$APP_NAME"; then
+  echo "ERROR: the binary calls SwiftPM's Bundle.module, which stops Locky.app when it runs on another Mac" >&2
+  exit 1
+fi
 xattr -cr "$APP"
 
 # The guard first, then the app that contains it. Every mode, ad-hoc too, signs with the hardened runtime, so
