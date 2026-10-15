@@ -101,6 +101,11 @@ extension Settings {
         self["themes"][theme][key]
     }
 
+    /// Shows `widget` alone, in the middle of `theme`: `locky check --widget` and `locky render --widget`.
+    mutating func showOnly(_ widget: String, in theme: String) {
+        setThemeEdit(theme, "widgets", .array([.table(["widget": .string(widget), "anchor": .string("center")])]))
+    }
+
     /// Sets themes.<theme>.<key>, or removes it for nil; a theme left with no changes goes too.
     mutating func setThemeEdit(_ theme: String, _ key: String, _ value: LuaValue?) {
         var themes = self["themes"].table ?? [:]

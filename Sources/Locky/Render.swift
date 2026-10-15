@@ -27,7 +27,7 @@ enum Render {
 
         var settings = Settings.load(config: config).settings
         settings["privacy"] = .bool(true)
-        if let widget { settings.setThemeEdit(theme, "widgets", .array([.table(["widget": .string(widget), "anchor": .string("center")])])) }
+        if let widget { settings.showOnly(widget, in: theme) }
         var options = LockSession.Options(theme: theme, previewSize: size, settings: settings, container: container, remembers: false)
         options.path = .standard(config: config)
         let session = LockSession(mode: .embedded, options: options)

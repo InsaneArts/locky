@@ -6,7 +6,7 @@ import Metal
 
 /// `Locky <command>`: the command line, in the same binary as the app.
 ///
-///   locky check [--theme NAME]     run init.lua, plugins, and a theme; report every error
+///   locky check [--theme NAME] [--widget NAME]   run init.lua, plugins, and a theme; report every error
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
 ///   locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
@@ -57,7 +57,7 @@ enum CLI {
     static func run(_ arguments: [String]) -> Int32 {
         switch arguments.first {
         case "check":
-            let report = checkReport(theme: value("--theme", in: arguments))
+            let report = checkReport(theme: value("--theme", in: arguments), widget: value("--widget", in: arguments))
             print(report.text)
             return report.ok ? 0 : 1
         case "health":
@@ -117,7 +117,9 @@ enum CLI {
         default:
             print("""
             usage: locky <command>
-              check [--theme NAME]   run init.lua, plugins, and a theme, and report every error
+              check [--theme NAME] [--widget NAME]
+                                     run init.lua, plugins, and a theme, and report every error;
+                                     --widget checks only that widget, in the theme
               health                 check Locky, Lua, plugins, Touch ID, and git
               themes                 list themes
               widgets                list widgets
@@ -180,15 +182,22 @@ enum CLI {
         return runtime
     }
 
-    /// Starts a full session without windows and collects what goes wrong in the first 1.5 seconds.
-    static func checkReport(theme: String?) -> (ok: Bool, text: String) {
+    /// Starts a full session without windows and collects what goes wrong in the first 1.5 seconds. With `widget`, the
+    /// theme (default unless named) holds that widget alone.
+    static func checkReport(theme: String?, widget: String? = nil, config: URL = RuntimePath.defaultConfig) -> (ok: Bool, text: String) {
         final class Collector: @unchecked Sendable {
             let lock = NSLock()
             var rendered = Set<Int>()
             var failures: [Int: String] = [:]
         }
         let collector = Collector()
-        let runtime = LuaRuntime(delegate: .init(
+        var settings: Settings?
+        let theme = widget == nil ? theme : theme ?? "default"
+        if let widget, let theme {
+            settings = Settings.load(config: config).settings
+            settings?.showOnly(widget, in: theme)
+        }
+        let runtime = LuaRuntime(path: .standard(config: config), settings: settings, delegate: .init(
             present: { id, _ in collector.lock.withLock { _ = collector.rendered.insert(id) } },
             failed: { id, message, _ in collector.lock.withLock { collector.failures[id] = message } }
         ))
@@ -227,7 +236,7 @@ enum CLI {
                 lines.append("ERROR shader \(LuaError.shortenPaths(url.path)): \(error.localizedDescription)")
             }
         }
-        for spec in PackManager(path: .standard()).specs().specs { lines.append("  plugin \(spec.name): \(spec.grants)") }
+        for spec in PackManager(path: .standard(config: config)).specs().specs { lines.append("  plugin \(spec.name): \(spec.grants)") }
         for problem in started.problems { lines.append("ERROR \(problem)") }
         let ok = shaderOK && started.problems.isEmpty && failures.isEmpty && !started.instances.contains(nil)
         lines.append(ok ? "No problems." : "Problems found.")
