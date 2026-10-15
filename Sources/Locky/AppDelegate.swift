@@ -5,10 +5,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var statusItem: NSStatusItem!
     private var session: LockSession?
     /// settings.json: what the windows change.
-    /// A screenshot run (`--behind`) or one against the source tree (LOCKY_RESOURCES): a tool, not the user's
-    /// Locky. It starts no auto-lock, shortcut, or update checks, and leaves the user's last good settings, the
-    /// remembered privacy, and the menu's old theme choice alone.
+    /// A screenshot run (`--behind`), a transition preview (`preview --transition`), or one against the source tree
+    /// (LOCKY_RESOURCES): a tool, not the user's Locky. It starts no auto-lock, shortcut, or update checks, and leaves the
+    /// user's last good settings, the remembered privacy, and the menu's old theme choice alone.
     static let isTool = CommandLine.arguments.contains("--behind") || ProcessInfo.processInfo.environment["LOCKY_RESOURCES"] != nil
+        || CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst())).transition
     private let store = SettingsStore(lastGood: isTool ? nil : SettingsStore.defaultLastGood)
     private lazy var model: AppModel = {
         let model = AppModel(store: store)
@@ -85,8 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         // `locky preview` and `locky lock` (main.swift) start here with their options.
         let launch = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst()))
         if let mode = launch.mode {
-            start(mode, options: LockSession.Options(theme: launch.theme, previewSize: launch.size ?? CGSize(width: 1440, height: 900),
-                                                     behind: launch.behind, settings: store.settings))
+            var options = LockSession.Options(theme: launch.theme, previewSize: launch.size ?? CGSize(width: 1440, height: 900),
+                                              behind: launch.behind, settings: store.settings)
+            options.animated = mode == .lock && animates(.user)
+            options.showsTransition = launch.transition
+            start(mode, options: options)
         }
         if let section = launch.window {
             // Only a launch is a screenshot run: its previews keep running behind other windows.
@@ -124,7 +128,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func lock(because reason: String) {
         LogFile.shared.write(level: "info", message: "auto-lock: \(reason)", source: "locky")
-        lockNow(nil)
+        lock(LockTransition.Trigger(autoLock: reason))
+    }
+
+    /// Whether a lock that `trigger` starts now comes in animated: not with lock_animation off, nor while the main
+    /// display sleeps.
+    private func animates(_ trigger: LockTransition.Trigger) -> Bool {
+        LockTransition.animatesLock(trigger, setting: store.settings.lockAnimation, displayAsleep: CGDisplayIsAsleep(CGMainDisplayID()) != 0)
     }
 
     /// Once a day, a minute after launch first, if settings.json's update_check is not off: fetch the plugins
@@ -153,7 +163,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         switch launch.mode {
         case .lock?:
             if session?.mode == .preview { session?.end("locking") }
-            start(.lock, options: LockSession.Options(theme: launch.theme ?? scheduledTheme(), settings: store.settings))
+            var options = LockSession.Options(theme: launch.theme ?? scheduledTheme(), settings: store.settings)
+            options.animated = animates(.user)
+            start(.lock, options: options)
         case .preview?: preview(theme: launch.theme)
         default:
             // In front: a screenshot run takes no requests, so a request that says --behind is not from Locky.
@@ -294,10 +306,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
     }
 
-    @objc func lockNow(_ sender: Any?) {
+    @objc func lockNow(_ sender: Any?) { lock(.user) }
+
+    private func lock(_ trigger: LockTransition.Trigger) {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
-        start(.lock, options: LockSession.Options(theme: scheduledTheme(), settings: store.settings))
+        var options = LockSession.Options(theme: scheduledTheme(), settings: store.settings)
+        options.animated = animates(trigger)
+        start(.lock, options: options)
     }
 
     /// The theme schedule's pick for now, when the schedule is on and has a theme for now.

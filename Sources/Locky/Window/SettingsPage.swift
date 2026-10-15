@@ -260,6 +260,7 @@ private struct LockScreenSection: View {
                 Text("Hide personal information")
                 Text("Your name and picture, this Mac's name and location, network addresses, and project and task names.")
             }
+            Toggle("Animate locking and unlocking", isOn: store.bool("lock_animation", default: true))
             // Only while locked and nobody touches the Mac; it turns the display off even when the system's display
             // sleep is Never or another app keeps the display on.
             Picker("Turn the display off", selection: Binding(get: { displayOff }, set: { seconds in
