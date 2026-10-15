@@ -4,10 +4,13 @@ import SwiftUI
 
 /// A weather widget's Location in Customize: the place's name, which opens a search with suggestions as you type and
 /// Current Location first. A place saves as "lat,lon" with its name in place_name; Current Location saves as "".
-/// While the widget follows Current Location, Location Services' row shows under it.
+/// While the widget follows Current Location, Location Services' row shows under it. The window shows the place to its
+/// owner in privacy mode too, as it shows the message; the lock screen leaves it out.
 struct LocationOption: View {
     let location: String
     let placeName: String?
+    /// Hide personal information is on: the row says the lock screen leaves the place out.
+    var privacy = false
     /// Location Services' state, and its Grant.
     let permission: PermissionAuthorizationState
     let grant: () -> Void
@@ -15,10 +18,11 @@ struct LocationOption: View {
     @State private var searching = false
 
     static let reason = "For the weather where this Mac is. Without it, the weather follows the time zone."
+    static let hidden = "Hidden on the lock screen"
 
     var body: some View {
         let current = Self.isCurrent(location)
-        LabeledContent("Location") {
+        LabeledContent {
             Button { searching = true } label: {
                 Label(Self.title(location: location, placeName: placeName), systemImage: "location.fill")
                     .labelStyle(LocationLabelStyle(showsIcon: current))
@@ -30,6 +34,9 @@ struct LocationOption: View {
                     commit(location, name)
                 }
             }
+        } label: {
+            Text("Location")
+            if privacy { Text(Self.hidden) }
         }
         if current {
             PermissionRow(title: "Location Services", reason: Self.reason, state: permission, grant: grant)

@@ -71,7 +71,8 @@ each file in `Sources/Locky/Resources/runtime/plugin/` lists every option.
 | `moon` | Tonight's phase, how much is lit, and the days to the full moon. No network. | `style`: `full`, `symbol`, `row`; `size` |
 
 The weather and sun widgets share one request, cached in `~/Library/Caches/Locky`. Hide personal information
-(`privacy`) leaves out the place's name.
+(`privacy`) leaves out the place's name, on the lock screen and in Customize's preview. Customize's Location row
+still shows it to you, with "Hidden on the lock screen" under it.
 
 `location` is one of these:
 

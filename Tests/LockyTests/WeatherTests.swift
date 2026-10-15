@@ -191,6 +191,30 @@ import Testing
         #expect(try runtime.eval("local w = watch({ location = '' }) return w.place, w.temp") == [.nil, .int(4)])
         #expect(try runtime.eval("local p = locky.location() return p.lat, p.lon, p.name") == [.double(10), .double(20), .nil])
     }
+
+    /// Customize's canvas runs the theme with settings.json's values, not init.lua's: privacy from there hides the
+    /// place as the lock does.
+    @Test func theCanvasHidesThePlaceInPrivacyMode() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/w.lua", "return { widgets = { { 'weather', opts = { location = '64.1355,-21.8954', place_name = 'Reykjavík' } } } }")
+        try sandbox.write("plugin/fixture.lua", """
+            local weather = require('locky.weather')
+            weather.cache_dir = '\(sandbox.root.appending(path: "cache").path)'
+            local reply = [==[\(try WeatherTests.fixture("open-meteo-forecast.json"))]==]
+            weather.fetch = function(self, url, done) done(self, reply) end
+            """)
+        try FileManager.default.createDirectory(at: sandbox.root.appending(path: "cache"), withIntermediateDirectories: true)
+        for privacy in [false, true] {
+            let recorder = Recorder()
+            let runtime = LuaRuntime(path: sandbox.path(), settings: Settings(["privacy": .bool(privacy)]), delegate: recorder.delegate)
+            let started = await runtime.start(theme: "w")
+            defer { runtime.stop() }
+            let id = try #require(started.instances.first ?? nil)
+            #expect(await eventually { !WidgetText.of(recorder.views[id] ?? nil).isEmpty })
+            let texts = WidgetText.of(recorder.views[id] ?? nil).joined(separator: " ")
+            #expect(texts.contains("Reykjavík") == !privacy, "\(texts)")
+        }
+    }
 }
 
 /// Where the Mac is without Location Services: its time zone's city, from macOS's zone table.
@@ -243,11 +267,11 @@ import Testing
         #expect(LocationOption.value(latitude: 64.135483, longitude: -21.895412) == "64.1355,-21.8954")
     }
 
-    @Test(arguments: ["", "64.1355,-21.8954"])
-    func theRowLaysOut(_ location: String) {
+    @Test(arguments: ["", "64.1355,-21.8954"], [false, true])
+    func theRowLaysOut(_ location: String, privacy: Bool) {
         _ = NSApplication.shared
         let view = NSHostingView(rootView: Form {
-            LocationOption(location: location, placeName: "Reykjavík", permission: .notGranted, grant: {}, commit: { _, _ in })
+            LocationOption(location: location, placeName: "Reykjavík", privacy: privacy, permission: .notGranted, grant: {}, commit: { _, _ in })
         }.formStyle(.grouped).frame(width: 300))
         view.layoutSubtreeIfNeeded()
         #expect(view.fittingSize.height > 0)

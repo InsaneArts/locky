@@ -81,3 +81,15 @@ extension LuaRuntime {
         try sync { try evaluate(source, budget: budget) }
     }
 }
+
+/// The texts in a view, in order.
+enum WidgetText {
+    static func of(_ node: Node?) -> [String] {
+        guard let node else { return [] }
+        switch node.kind {
+        case .vstack(let children), .hstack(let children), .zstack(let children), .grid(let children): return children.flatMap(of)
+        case .text(let text): return [text]
+        default: return []
+        }
+    }
+}

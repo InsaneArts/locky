@@ -169,6 +169,8 @@ final class AppModel {
         self.addingWidget = addingWidget
     }
 
+    /// Hide personal information: settings.json's value, else init.lua's. Only true hides, as Lua reads it.
+    var privacy: Bool { (store.settings["privacy"].isNil ? inspection.base["privacy"] : store.settings["privacy"]).bool == true }
     /// The theme a lock uses when no schedule picks one: settings.json's, else init.lua's, else Aurora.
     var usualTheme: String { store.settings["theme"].string ?? inspection.base["theme"].string ?? "default" }
     /// The theme a lock uses now. settings.json comes first, so a change shows on the frame it is made; the next read of
