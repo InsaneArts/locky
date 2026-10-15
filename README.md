@@ -15,8 +15,15 @@ open Locky.app                    # the lock icon appears in the menu bar
 swift test                        # the test suite
 ```
 
-The first launch opens a one-screen Welcome: see your lock screen, try a lock, and turn on auto-lock and Open at
-login. The menu bar icon has Lock Now, Themes…, and Settings….
+The first launch opens the Welcome, three short pages:
+
+1. **Welcome to Locky:** your lock screen, live. Lock Now tries a real lock.
+2. **Make Locky Your Lock Screen:** turn on Lock automatically, Open at login, and a Lock Now shortcut, so that
+   Locky locks your Mac. The Apple menu's Lock Screen and ⌃⌘Q still show the macOS lock screen.
+3. **If Something Goes Wrong:** what happens if Locky stops during a lock, and the ⌃⌥⌘Q way out
+   ([security.md](docs/security.md#if-something-goes-wrong)).
+
+Help › Welcome to Locky opens it again. The menu bar icon has Lock Now, Themes…, and Settings….
 
 ## Themes
 
