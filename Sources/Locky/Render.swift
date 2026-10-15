@@ -14,8 +14,10 @@ enum Render {
     /// Pixels per point, as on a Retina display.
     static let scale: CGFloat = 2
 
-    /// The theme with privacy mode on, whatever settings.json says. Shaders show the frame of the moment they are drawn.
-    static func image(theme: String, size: CGSize, appearance: NSAppearance.Name?, config: URL = RuntimePath.defaultConfig) async throws -> CGImage {
+    /// The theme with privacy mode on, whatever settings.json says. With `widget`, that widget alone, in the middle of the
+    /// theme. Shaders show the frame of the moment they are drawn.
+    static func image(theme: String, widget: String? = nil, size: CGSize, appearance: NSAppearance.Name?,
+                      config: URL = RuntimePath.defaultConfig) async throws -> CGImage {
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         if let appearance { window.appearance = NSAppearance(named: appearance) }
@@ -25,6 +27,7 @@ enum Render {
 
         var settings = Settings.load(config: config).settings
         settings["privacy"] = .bool(true)
+        if let widget { settings.setThemeEdit(theme, "widgets", .array([.table(["widget": .string(widget), "anchor": .string("center")])])) }
         var options = LockSession.Options(theme: theme, previewSize: size, settings: settings, container: container, remembers: false)
         options.path = .standard(config: config)
         let session = LockSession(mode: .embedded, options: options)
@@ -33,7 +36,8 @@ enum Render {
             session.begin()
         }
         defer { session.end("rendered") }
-        if let failed = session.failed, failed.theme == theme { throw Failure(description: LuaError(failed.problem).summary) }
+        if let failed = session.started?.failed, failed.theme == theme { throw Failure(description: LuaError(failed.problem).summary) }
+        if let widget, session.started?.theme.widgets.first?.known != true { throw Failure(description: "no widget named \"\(widget)\"") }
         container.layoutSubtreeIfNeeded()
         freezeShaders(in: container)
         guard let layer = container.layer, let image = draw(layer, size: size) else { throw Failure(description: "the lock screen did not draw") }

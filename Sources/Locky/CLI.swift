@@ -9,7 +9,7 @@ import Metal
 ///   locky check [--theme NAME]     run init.lua, plugins, and a theme; report every error
 ///   locky health                   check Locky, Lua, plugins, Touch ID, and git, like :checkhealth
 ///   locky themes | widgets         list what is installed
-///   locky render --theme NAME --out FILE.png [--size 1440x900] [--appearance light|dark]
+///   locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
 ///   locky pack list|check|sync|update|clean
 ///   locky login [on|off]
 ///   locky preview [--theme NAME] [--size 1440x900] [--behind]
@@ -121,8 +121,9 @@ enum CLI {
               health                 check Locky, Lua, plugins, Touch ID, and git
               themes                 list themes
               widgets                list widgets
-              render --theme NAME --out FILE.png [--size 1440x900] [--appearance light|dark]
-                                     draw a theme's lock screen to a PNG, with privacy mode on
+              render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
+                                     draw a theme's lock screen to a PNG, with privacy mode on;
+                                     --widget draws only that widget, in the middle
               pack list|check|sync|update|clean
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900]
@@ -140,7 +141,7 @@ enum CLI {
         let appearanceWord = value("--appearance", in: arguments)
         guard let theme = value("--theme", in: arguments), let out = value("--out", in: arguments),
               [nil, "light", "dark"].contains(appearanceWord) else {
-            print("usage: locky render --theme NAME --out FILE.png [--size 1440x900] [--appearance light|dark]")
+            print("usage: locky render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]")
             return 2
         }
         let size = GUILaunch.parse(arguments).size ?? CGSize(width: 1440, height: 900)
@@ -149,7 +150,8 @@ enum CLI {
         NSApplication.shared.setActivationPolicy(.prohibited)
         var result: Result<CGImage, any Error>?
         Task {
-            do { result = .success(try await Render.image(theme: theme, size: size, appearance: appearance)) } catch { result = .failure(error) }
+            do { result = .success(try await Render.image(theme: theme, widget: value("--widget", in: arguments), size: size,
+                                                               appearance: appearance)) } catch { result = .failure(error) }
         }
         let deadline = Date().addingTimeInterval(10)
         while result == nil, Date() < deadline { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05)) }

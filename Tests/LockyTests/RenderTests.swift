@@ -38,4 +38,22 @@ import Testing
             try await Render.image(theme: "nothing-by-this-name", size: CGSize(width: 200, height: 120), appearance: nil, config: sandbox.config)
         }
     }
+
+    /// --widget: that widget alone, in the middle of the theme; a widget nobody defined fails.
+    @Test func aWidgetDrawsAloneInTheMiddle() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/square.lua", """
+            locky.widget.define("square", { render = function() return locky.ui.rect({ width = 40, height = 40, color = "#00ff00" }) end })
+            """)
+        try sandbox.write("themes/plain.lua", """
+            return { name = "Plain", background = { color = "#000000" }, widgets = { { "square", anchor = "top-left" } } }
+            """)
+        let image = try await Render.image(theme: "plain", widget: "square", size: CGSize(width: 400, height: 250), appearance: nil, config: sandbox.config)
+        let middle = pixel(image, 400, 250), corner = pixel(image, 20, 20)
+        #expect(middle.green > 200 && middle.red < 50, "middle: \(middle)")
+        #expect(corner.green < 50, "the theme's own placement is gone: \(corner)")
+        await #expect(throws: Render.Failure.self) {
+            try await Render.image(theme: "plain", widget: "circle", size: CGSize(width: 200, height: 120), appearance: nil, config: sandbox.config)
+        }
+    }
 }

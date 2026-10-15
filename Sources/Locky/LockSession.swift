@@ -36,8 +36,6 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// Embedded only: called once, when the theme shows with each widget drawn and the background loaded (or
     /// after two seconds at most), so a preview can swap this session in without a blank moment.
     var onReady: (() -> Void)?
-    /// The theme asked for and its first problem, when it did not load and another one shows.
-    var failed: (theme: String, problem: String)? { started?.failed }
     /// Instances that have drawn or failed at least once.
     private var heard = Set<Int>()
     /// Embedded only: called after each layout of the screen, so the theme editor's canvas follows the widgets.
@@ -45,7 +43,7 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     private let options: Options
     private var runtime: LuaRuntime?
-    private var started: LuaRuntime.Started?
+    private(set) var started: LuaRuntime.Started?
     private var windows: [NSWindow] = []
     private var screens: [LockScreenView] = []
     /// Shows the scene once it is ready. buildScreens starts it again, so a rebuild never runs two.
