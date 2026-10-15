@@ -158,3 +158,8 @@ Scripts/                      packaging, snapshot.sh (a theme to PNG), window-sh
                               thumbnails.sh (the theme thumbnails), make_icon.swift (the app icon)
 Tests/LockyTests/             the test suite, and Fixtures/ (saved replies of the services widgets call)
 ```
+
+## Credits
+
+Weather data by [Open-Meteo.com](https://open-meteo.com), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The weather and sun widgets use it. Locky › About Locky shows this credit too.
