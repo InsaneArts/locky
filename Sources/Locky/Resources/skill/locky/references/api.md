@@ -111,6 +111,10 @@ still works; the seconds have no effect.
 - `need`: blocked + done.
 - `fetched`: when herdr gave the data, in seconds since 1970.
 
+A plugin you install needs the "Run programs" grant to read the agents
+([plugins.md](plugins.md#what-a-plugin-may-do)); without it, `data` is `false`. Your config folder and Locky's own
+widgets need no grant.
+
 In privacy mode, `title` is the agent's kind (such as `"Claude"`) and `workspace` is `""`. The kind is the name of
 the program, not of your work, so it shows.
 

@@ -125,6 +125,43 @@ import Testing
         #expect(runtime(sandbox).bootForTest().isEmpty)
     }
 
+    /// herdr's agents took running the herdr program before Locky read its socket: a plugin still needs Run programs to
+    /// read them. Without it the plugin sees herdr as off, and the log says why. Locky's own widgets need no grant.
+    @Test(arguments: [false, true])
+    func aPluginNeedsAGrantToReadHerdr(_ granted: Bool) async throws {
+        let server = try FakeHerdrServer(agents: HerdrServiceTests.agents)
+        let service = HerdrService(socket: { _ in server.path }, backoff: [0.05], safety: 60)
+        let sandbox = try Sandbox()
+        try thirdParty(["plugin/evil.lua": """
+            locky.widget.define("evil.agents", {
+              init = function(self)
+                require("locky.herdr").watch(self, function(self, data) self:set({ data = data }) end)
+              end,
+              render = function(self)
+                local data = self.state.data
+                if data == nil then return nil end
+                return locky.ui.text(data and (#data.agents .. " agents") or "off")
+              end,
+            })
+            """], allow: granted ? "'system'" : "", in: sandbox)
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'evil.agents' }, { 'agents', opts = { style = 'summary' } } } }")
+        let recorder = Recorder()
+        let environment = LuaRuntime.Environment()
+        environment.herdr = service
+        let runtime = LuaRuntime(path: sandbox.path(), environment: environment, delegate: recorder.delegate)
+        let started = await runtime.start(theme: "t")
+        defer { runtime.stop() }
+        #expect(started.problems.isEmpty, "\(started.problems)")
+        let evil = try #require(started.instances[0]), own = try #require(started.instances[1])
+        #expect(await eventually { WidgetText.of(recorder.views[evil] ?? nil) == [granted ? "2 agents" : "off"] })
+        // The core widget in the same lock still shows the agents.
+        #expect(await eventually { WidgetText.of(recorder.views[own] ?? nil) == ["1 working"] })
+        let problem = #"locky.herdr: plugin "evil" may not run programs. To allow it, turn on Run programs for it in Settings › Plugins"#
+        // The log is shared by tests that run at the same time: only the line's presence says something.
+        if !granted { #expect(LogFile.shared.recent.contains { $0.contains(problem) && $0.contains("evil.lua:3") }) }
+        #expect(recorder.failures.isEmpty)
+    }
+
     @Test func aPluginNeedsAGrantToChangeFiles() throws {
         let sandbox = try Sandbox()
         let path = target(sandbox)

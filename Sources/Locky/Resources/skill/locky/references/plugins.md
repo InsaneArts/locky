@@ -114,7 +114,9 @@ view and property, and [api.md](api.md) for `locky.*`.
 A plugin you install (a folder in `~/.local/share/locky/pack`) runs programs and changes files only if you
 allow it. Without the grant, `locky.system` fails, and so do `io.open` in a write, append, or update mode,
 `io.output` with a file name, `os.remove`, `os.rename`, and `os.tmpname`. The error names the plugin and says
-how to allow it. For a plugin you added with Install Plugin… in Settings › Plugins, turn on "Run programs" or
+how to allow it. Reading herdr's agents with `locky.herdr` also needs "Run programs": the agents' titles and
+workspaces once took running the herdr program. Without the grant, the plugin gets `false`, as if herdr were
+off, and the log names the plugin and says how to allow it. For a plugin you added with Install Plugin… in Settings › Plugins, turn on "Run programs" or
 "Change files" there. For one that only init.lua adds, allow it in `init.lua`:
 
 ```lua
