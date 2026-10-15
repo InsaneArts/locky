@@ -360,7 +360,12 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         observers.append((workspace, token))
         // A display added, removed, or rearranged during the lock gets covered too.
-        observe(.default, NSApplication.didChangeScreenParametersNotification) { $0.rebuildForDisplays() }
+        observe(.default, NSApplication.didChangeScreenParametersNotification) { session in
+            // Hiding the Dock and the menu bar at the lock's start changes the screens' parameters too: only other
+            // displays, or displays that moved or changed size, need new windows (a rebuild ends the way in).
+            guard LockSession.displaysChanged(windows: session.windows.map(\.frame), screens: NSScreen.screens.map(\.frame)) else { return }
+            session.rebuildForDisplays()
+        }
         // Anything that takes the keyboard (another app, a system prompt) gives it back to the password field.
         observe(.default, NSApplication.didResignActiveNotification) { $0.keyboardTaken() }
         observe(.default, NSWindow.didResignKeyNotification) { session in
@@ -678,6 +683,11 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     /// New windows for the displays there are now, with the theme and each widget's latest view, without
     /// restarting Lua. The password field keeps what was typed.
+    /// Whether the shields no longer match the displays: one window per display, at its frame, in order.
+    nonisolated static func displaysChanged(windows: [CGRect], screens: [CGRect]) -> Bool {
+        windows != screens
+    }
+
     private func rebuildForDisplays() {
         guard mode == .lock, !ended else { return }
         LogFile.shared.write(level: "info", message: "displays changed: \(NSScreen.screens.count) now", source: "locky")

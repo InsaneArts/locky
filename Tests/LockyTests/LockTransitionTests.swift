@@ -162,3 +162,21 @@ import Testing
         #expect(!red(try await frame(.unlock, 1)))
     }
 }
+
+/// Hiding the Dock and the menu bar as a lock starts reports new screen parameters with the same displays: the
+/// shields stay, and so does their way in. Another display, or one that moved or changed size, gets new shields.
+@Suite struct DisplayChangeTests {
+    private let laptop = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+    private let external = CGRect(x: 1728, y: 0, width: 2560, height: 1440)
+
+    @Test func theSameDisplaysKeepTheirShields() {
+        #expect(!LockSession.displaysChanged(windows: [laptop, external], screens: [laptop, external]))
+    }
+
+    @Test func anotherDisplayOrAMovedOneGetsNewShields() {
+        #expect(LockSession.displaysChanged(windows: [laptop], screens: [laptop, external]))
+        #expect(LockSession.displaysChanged(windows: [laptop, external], screens: [laptop]))
+        #expect(LockSession.displaysChanged(windows: [laptop], screens: [CGRect(x: 0, y: 0, width: 1512, height: 982)]))
+        #expect(LockSession.displaysChanged(windows: [laptop, external], screens: [external, laptop]))
+    }
+}
