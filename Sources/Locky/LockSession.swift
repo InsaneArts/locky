@@ -32,6 +32,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         /// Lock only: the lock comes in animated (LockTransition.animatesLock). Without it, the shield is opaque from the
         /// first frame.
         var animated = false
+        /// Seconds from the start in which a Touch ID match does not unlock: after the Touch ID button locked, the finger
+        /// that pressed it is still on the sensor.
+        var touchIDQuiet: Double = 0
         /// Preview only (`preview --transition`): the lock's way in plays as the window opens, over a stand-in desktop,
         /// and Return plays the way out, then the way in again.
         var showsTransition = false
@@ -48,6 +51,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     var onLayout: (() -> Void)?
 
     private let options: Options
+    /// When begin ran: the start of Touch ID's quiet time.
+    private var beganAt: ContinuousClock.Instant?
     private var runtime: LuaRuntime?
     private(set) var started: LuaRuntime.Started?
     private var windows: [NSWindow] = []
@@ -129,6 +134,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     func begin() {
+        beganAt = .now
         if mode == .lock {
             // Before the shield activates Locky.
             if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != getpid() { previousApp = front }
@@ -754,9 +760,22 @@ final class LockSession: NSObject, NSWindowDelegate {
     private func startTouchID() {
         touchIDFallback?.cancel()
         touchID?.start { [weak self] in
-            self?.authModel.succeeded()
-            self?.end("Touch ID", unlocked: true)
+            guard let self else { return }
+            if let left = Self.quietLeft(since: beganAt.map { ContinuousClock.now - $0 } ?? .zero, quiet: options.touchIDQuiet) {
+                // The press's own finger: Touch ID listens again once the quiet time is over, for a new touch.
+                LogFile.shared.write(level: "info", message: "Touch ID: not unlocking with the finger that pressed the button", source: "locky")
+                touchID?.restart(after: left)
+                return
+            }
+            authModel.succeeded()
+            end("Touch ID", unlocked: true)
         }
+    }
+
+    /// Seconds of the quiet time left `elapsed` after the start, or nil when it is over.
+    nonisolated static func quietLeft(since elapsed: Duration, quiet: Double) -> Double? {
+        let left = quiet - Double(elapsed.components.seconds) - Double(elapsed.components.attoseconds) / 1e18
+        return left > 0 ? left : nil
     }
 
     private func apply(_ started: LuaRuntime.Started) {

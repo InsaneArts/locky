@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     /// The Touch ID button, with lock_key on: Lock Now's lock instead of the macOS one.
     private lazy var lockKey = LockKey(isLocked: { [weak self] in self?.session?.mode == .lock },
                                        lockIsUp: { [weak self] in self?.session?.holdsLock == true },
-                                       lock: { [weak self] in self?.lockNow(nil) })
+                                       lock: { [weak self] in self?.lock(.user, touchIDQuiet: 1) })
     /// While Settings records a new shortcut, the old one stays free so the recorder sees the keys.
     private var recordingShortcut = false
     /// The menu that opened last: a pop-up or context menu in a window, the status menu, or the menu bar.
@@ -328,11 +328,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc func lockNow(_ sender: Any?) { lock(.user) }
 
-    private func lock(_ trigger: LockTransition.Trigger) {
+    /// `touchIDQuiet`: seconds in which Touch ID does not unlock, for a lock from the Touch ID button.
+    private func lock(_ trigger: LockTransition.Trigger, touchIDQuiet: Double = 0) {
         // A preview open (for a theme author, or behind other windows for screenshots) gives way to the lock.
         if session?.mode == .preview { session?.end("locking") }
         var options = LockSession.Options(theme: scheduledTheme(), settings: store.settings)
         options.animated = animates(trigger)
+        options.touchIDQuiet = touchIDQuiet
         start(.lock, options: options)
     }
 

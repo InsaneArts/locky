@@ -122,3 +122,18 @@ import Testing
         #expect(model.store.settings.lockKey)
     }
 }
+
+/// A lock from the Touch ID button does not open with the finger that pressed it: Touch ID matches in the first second
+/// are ignored, and it listens again when the second is over.
+@Suite struct TouchIDQuietTests {
+    @Test func aMatchInTheQuietTimeWaitsForTheRest() {
+        #expect(LockSession.quietLeft(since: .milliseconds(200), quiet: 1) == 0.8)
+        #expect(LockSession.quietLeft(since: .zero, quiet: 1) == 1)
+    }
+
+    @Test func aMatchAfterItOrWithoutOneUnlocks() {
+        #expect(LockSession.quietLeft(since: .milliseconds(1000), quiet: 1) == nil)
+        #expect(LockSession.quietLeft(since: .seconds(3), quiet: 1) == nil)
+        #expect(LockSession.quietLeft(since: .zero, quiet: 0) == nil)
+    }
+}
