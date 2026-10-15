@@ -37,8 +37,9 @@ import Testing
         var quiet: Bool { prompts == 0 && guides.isEmpty && opened.isEmpty }
     }
 
-    private func wait(_ condition: () -> Bool) async -> Bool {
-        let deadline = Date().addingTimeInterval(3)
+    /// Polls `condition` on the main actor, which a full test run keeps busy for seconds at a time.
+    private func wait(timeout: Double = 10, _ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
         while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(10)) }
         return condition()
     }
