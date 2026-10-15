@@ -110,11 +110,16 @@ Weather data by [Open-Meteo.com](https://open-meteo.com), under [CC BY 4.0](http
 |---|---|---|
 | `greeting` | "Good evening, Alex." | `name` |
 | `text` | Your own words, in the theme's font and text color. | `text`; `size`: `small`, `medium`, `large`, `huge` (or points); `weight`; `alignment`: `leading`, `center`, `trailing`; `color` |
-| `agents` | Coding agents from [herdr](https://herdr.dev): who needs you, who is working. | `style`: `list`, `summary`, `dots`, `board`; `rows` |
+| `agents` | Coding agents from [herdr](https://herdr.dev): which agent needs you, and what is working. Changes show at once. | `style`: `list`, `summary`, `dots`, `board`; `rows`; `title`; `offline` |
 | `git` | Your repositories: branch, uncommitted changes, commits to push or pull, the last commit. | `repos = { "~/code/app" }` (shows nothing without it) |
 | `quote` | A short quote that changes every half hour. | `source`: `builtin`, `fortune`; `quotes` (your own list of `{ text, author }`); `every` |
 | `life` | Conway's Game of Life, evolving quietly. | `columns`, `rows`, `every`, `cell` |
 
+The agents widget puts the agents that need you first: blocked ones ("Needs you", in the warning color), then done
+ones, then working ones. Each row says how long the agent has had its status, such as "Working · Api · 12m".
+Idle agents show as one count, such as "+ 6 idle". The widget says "No agents running" when herdr has no agents,
+and "Herdr isn't running" when herdr is off (`offline = false` hides the widget then).
+
 Hide personal information (`privacy = true`) keeps names out: the user's and the Mac's, the place, the network
 address, git's repositories, branches, and commit messages (the git widget shows only its counts), and herdr's
-titles and workspaces.
+titles and workspaces. An agent's kind, such as Claude, still shows: it names the program, not your work.
