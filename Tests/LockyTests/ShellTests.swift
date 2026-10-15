@@ -51,7 +51,7 @@ import Testing
         let settings = try #require(SettingsWindowController(model: model, onClose: {}).window)
         #expect(settings.standardWindowButton(.miniaturizeButton)?.isEnabled == false)
         #expect(settings.standardWindowButton(.zoomButton)?.isEnabled == false)
-        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 1029))
+        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 640, height: 1213))
         let items = try #require(settings.toolbar?.items)
         #expect(items.map(\.label) == ["General", "Plugins"])
         // General can be taller than the screen: the top edge goes at the screen's, where Plugins then fits under it.
@@ -133,7 +133,7 @@ import Testing
         tabs.place(settings, settings.frameRect(forContentRect: CGRect(origin: .zero, size: SettingsTabViewController.size(of: .settings))),
                    in: tall, animate: false)
         settings.contentView?.layoutSubtreeIfNeeded()
-        #expect(settings.contentRect(forFrameRect: settings.frame).height == 1029)
+        #expect(settings.contentRect(forFrameRect: settings.frame).height == 1213)
     }
 
     /// A window fitted to a short screen gets General's full height again when it opens again on a tall one.

@@ -38,7 +38,7 @@ says so in its windows and in `locky check`, and does not overwrite it.
 | `shortcut` | `{ "key": 37, "modifiers": ["control", "option", "command"] }`: a virtual key code (37 is L) and modifiers | Settings › General › Lock Now shortcut |
 | `auto_lock` | `{ "idle_minutes": 5, "display_sleep": true, "system_sleep": true, "screen_saver": true }`; a missing key is off. Locky treats `display_sleep` and `screen_saver` as one: when either is `true`, it locks on both. The idle count pauses while a video, a call, or a presentation keeps the display on | Settings › General › Lock Automatically (one switch, "When the screen saver starts or the display turns off", for both keys) |
 | `battery_saver` | `true`: nothing moves on battery either. In Low Power Mode or with Reduce Motion on, nothing moves anyway | — |
-| `lock_animation` | `false` turns off the animation as a lock comes in and goes out (default `true`). The lock comes in animated after Lock Now and after inactivity. A lock when the display turns off, the screen saver starts, or the Mac sleeps covers the screen at once. The lock goes out animated only after your password or Touch ID. With Reduce Motion on, the lock fades in and out | Settings › General › Lock Screen › Animate locking and unlocking |
+| `lock_animation` | How a lock comes in and goes out: `"fade"`, `"focus"` (the default), `"iris"`, `"lift"`, `"sweep"`, `"dissolve"`, `"tiles"`, or `"none"`. Fade: the lock fades in and out. Focus: the lock grows sharp from a little larger, and grows as it goes. Iris: it opens from the middle of the screen, and out from the password field. Lift: it comes down from above the screen, and lifts up off it. Sweep: a wide soft edge crosses the screen in the reading direction. Dissolve: it forms out of large soft clouds, and clears outward from the password field. Tiles: hexagons appear from the middle, and go from the password field. `true` from an older Locky is Focus, `false` is none, and a name Locky does not know is Focus. The lock comes in animated after Lock Now and after inactivity. A lock when the display turns off, the screen saver starts, or the Mac sleeps covers the screen at once. The lock goes out animated only after your password or Touch ID. With Reduce Motion on, every style is Fade | Settings › General › Lock Screen › Lock animation |
 | `display_off` | Seconds on the lock screen without input before the displays turn off. It acts only during a lock, and also when the system's display sleep is Never or another app keeps the display on | Settings › General › Lock Screen › Turn the display off |
 | `intruder_photo` | Take a camera photo at this many wrong passwords in one lock. Locky keeps the newest 20 photos and deletes those older than 30 days | Settings › General › Unlock › Take a photo |
 | `update_check` | `false` stops the daily plugin update check, which fetches and compares commits and runs no plugin code (default `true`) | Settings › Plugins › Check for updates daily |
@@ -104,8 +104,10 @@ Dock, and its menus have Lock Now in the Locky menu.
   back each change, and Redo (⇧⌘Z) makes it again. Done returns to the themes. For a theme that does not load,
   Customize shows why, with Open at the file and line.
 - **Settings › General:** Open at login, the Lock Now shortcut, Lock Automatically, the lock screen message, Hide
-  personal information, Animate locking and unlocking, Turn the display off, Touch ID, and Take a photo; photos
-  taken after wrong passwords show at the top. The Lock Automatically footer says that you may unlock twice when
+  personal information, Lock animation, Turn the display off, Touch ID, and Take a photo; photos taken after wrong
+  passwords show at the top. Under Lock animation, a small preview plays the chosen style on the theme in use, over
+  your desktop picture, while the Settings window is in front. With Reduce Motion on, it shows a still picture and
+  says that Locky uses Fade. The Lock Automatically footer says that you may unlock twice when
   macOS also asks for your password after the display turns off. The last section, Customization, has:
   - **Config folder:** its path, and Open in your editor for init.lua. The button's menu chooses the editor (and
     the terminal for a terminal editor) and has Show in Finder. Without init.lua, Create init.lua makes one with

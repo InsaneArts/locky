@@ -90,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                                               behind: launch.behind, settings: store.settings)
             options.animated = mode == .lock && animates(.user)
             options.showsTransition = launch.transition
+            if let style = launch.transitionStyle { options.settings.lockAnimation = style }
             start(mode, options: options)
         }
         if let section = launch.window {
@@ -131,10 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         lock(LockTransition.Trigger(autoLock: reason))
     }
 
-    /// Whether a lock that `trigger` starts now comes in animated: not with lock_animation off, nor while the main
+    /// Whether a lock that `trigger` starts now comes in animated: not with lock_animation none, nor while the main
     /// display sleeps.
     private func animates(_ trigger: LockTransition.Trigger) -> Bool {
-        LockTransition.animatesLock(trigger, setting: store.settings.lockAnimation, displayAsleep: CGDisplayIsAsleep(CGMainDisplayID()) != 0)
+        LockTransition.animatesLock(trigger, setting: store.settings.lockAnimation != nil, displayAsleep: CGDisplayIsAsleep(CGMainDisplayID()) != 0)
     }
 
     /// Once a day, a minute after launch first, if settings.json's update_check is not off: fetch the plugins
