@@ -256,16 +256,11 @@ private struct LockScreenSection: View {
 
     private var store: SettingsStore { model.store }
 
-    /// settings.json's value, else init.lua's: only true hides, as Lua reads it.
-    private var privacy: Bool {
-        (store.settings["privacy"].isNil ? model.inspection.base["privacy"] : store.settings["privacy"]).bool == true
-    }
-
     var body: some View {
         let displayOff = SettingsPage.whole(store.settings.displayOff)
         Section("Lock Screen") {
             MessageField(model: model)
-            Toggle(isOn: Binding(get: { privacy }, set: { on in
+            Toggle(isOn: Binding(get: { model.privacy }, set: { on in
                 store.update { SettingsPage.setPrivacy(on, base: model.inspection.base["privacy"], in: &$0) }
             })) {
                 Text("Hide personal information")

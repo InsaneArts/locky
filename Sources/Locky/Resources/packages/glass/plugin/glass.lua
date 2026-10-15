@@ -16,7 +16,7 @@
 --   opts.shade     a tint inside each circle that keeps white legible on bright glass (default "#0000001f", or a
 --                  deeper blue "#17377a3d" over the theme's bright fallback scene)
 --   opts.every     seconds between CPU and memory readings (default 5)
---   opts.agents    seconds between herdr checks (default 5); false hides the agents circle
+--   opts.agents    false hides the agents circle
 --   opts.low       battery percent at or below which the ring turns "danger" (default 20)
 local ui = locky.ui
 local herdr = require("locky.herdr")
@@ -77,7 +77,7 @@ locky.widget.define("glass.clock", {
 
 locky.widget.define("glass.gauges", {
   description = "Battery, CPU, memory, and herdr agents as Liquid Glass circles",
-  opts = { size = 64, spacing = 22, stroke = 4.5, color = "accent", track = "track", every = 5, agents = 5, low = 20 },
+  opts = { size = 64, spacing = 22, stroke = 4.5, color = "accent", track = "track", every = 5, agents = true, low = 20 },
   init = function(self)
     local o = self.opts
     self:every(30, function(self)
@@ -95,7 +95,7 @@ locky.widget.define("glass.gauges", {
     self:after(0.5, read)
     self:every(o.every, read, { now = false })
     if o.agents then
-      herdr.watch(self, o.agents, function(self, data)
+      herdr.watch(self, function(self, data)
         update(self, "agents", data and { need = data.need, total = #data.agents, blocked = data.counts.blocked } or false)
       end)
     end

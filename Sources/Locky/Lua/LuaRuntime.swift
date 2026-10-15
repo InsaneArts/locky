@@ -24,6 +24,7 @@ final class LuaRuntime: @unchecked Sendable {
         private var _screen = CGSize(width: 1440, height: 900)
         private var _wallpaperColors: [String]?
         private var _location: (@Sendable () -> MacLocation.Place?)?
+        private var _herdr = HerdrService.shared
 
         var keyboard: LuaValue {
             get { lock.withLock { _keyboard } }
@@ -52,6 +53,12 @@ final class LuaRuntime: @unchecked Sendable {
         var location: (@Sendable () -> MacLocation.Place?)? {
             get { lock.withLock { _location } }
             set { lock.withLock { _location = newValue } }
+        }
+
+        /// herdr's agents for locky.herdr: the app's one connection; tests pass one of their own.
+        var herdr: HerdrService {
+            get { lock.withLock { _herdr } }
+            set { lock.withLock { _herdr = newValue } }
         }
 
         /// Its dominant colors, worked out on first use.
@@ -121,6 +128,10 @@ final class LuaRuntime: @unchecked Sendable {
     private var timers: [Int: ScheduledTimer] = [:]
     private var handlers: [String: [Handler]] = [:]
     private var processes: [Int: ChildProcess] = [:]
+    /// Widgets that show herdr's agents, and this runtime's subscription to them while there are any.
+    private var herdrWatchers: [Handler] = []
+    private var herdrSubscription: UUID?
+    private var herdrLast: HerdrService.State?
     private var lastID = 0
     private var dirty = Set<Int>()
     private var flushScheduled = false
@@ -313,6 +324,7 @@ final class LuaRuntime: @unchecked Sendable {
             timers = [:]
             for process in processes.values { process.terminate() }
             processes = [:]
+            stopWatchingHerdr()
             handlers = [:]
             entries = [:]
             vm = nil
@@ -432,6 +444,11 @@ final class LuaRuntime: @unchecked Sendable {
                 return handler.owner != owner
             }
         }
+        herdrWatchers.removeAll { watcher in
+            if watcher.owner == owner { vm?.release(watcher.callback) }
+            return watcher.owner == owner
+        }
+        if herdrWatchers.isEmpty { stopWatchingHerdr() }
         dirty.remove(owner)
         _ = try? call("dispose", [.int(owner)], budget: Budget.callback)
     }
@@ -575,6 +592,23 @@ final class LuaRuntime: @unchecked Sendable {
                 }
                 let onExit = try call.optionalFunction(4, "on_exit")
                 return [.int(startProcess(owner: owner, command: command, options: options, onExit: onExit))]
+            },
+            // herdr's agents: the latest now (nil while there is none yet), and fn(agents) on each change.
+            "herdr_watch": { [unowned self] call in
+                let owner = try call.value(1).int ?? 0
+                let callback = try call.function(2, "fn")
+                herdrWatchers.append(Handler(callback: callback, owner: owner))
+                let service = environment.herdr
+                if herdrSubscription == nil {
+                    herdrSubscription = service.subscribe { [weak self] state in
+                        guard let runtime = self else { return }
+                        runtime.queue.async { runtime.deliverHerdr(state) }
+                    }
+                }
+                // A first connection takes milliseconds: waiting for it lets the first frame show the agents.
+                let state = service.current(waiting: 0.15)
+                if let state { herdrLast = state }
+                return [state?.lua ?? .nil]
             },
             "system_kill": { [unowned self] call in
                 if let id = try call.value(1).int { processes[id]?.terminate() }
@@ -759,6 +793,24 @@ final class LuaRuntime: @unchecked Sendable {
             failures[0] = nil
             LogFile.shared.write(level: "error", message: "stopped a timer that failed 3 times in a row", source: "lua")
         }
+    }
+
+    // MARK: herdr
+
+    private func deliverHerdr(_ state: HerdrService.State) {
+        guard !stopped, herdrSubscription != nil, state != herdrLast else { return }
+        herdrLast = state
+        let value = state.lua
+        for watcher in herdrWatchers {
+            invoke(watcher.callback, [value], owner: watcher.owner)
+        }
+    }
+
+    private func stopWatchingHerdr() {
+        guard let herdrSubscription else { return }
+        environment.herdr.unsubscribe(herdrSubscription)
+        self.herdrSubscription = nil
+        herdrLast = nil
     }
 
     // MARK: Processes

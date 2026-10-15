@@ -81,14 +81,14 @@ locky.widget.define("synthwave.battery", {
 
 -- synthwave.agents: one neon dot per herdr agent, most urgent first: blocked pink, done cyan, working
 -- orange, idle dim. Hidden when herdr is off or has no agents.
---   opts.size, opts.gap, opts.max (most dots), opts.label (false hides it), opts.every (seconds)
+--   opts.size, opts.gap, opts.max (most dots), opts.label (false hides it)
 local colors = { blocked = "accent", done = "accent2", working = "sun" }
 
 locky.widget.define("synthwave.agents", {
   description = "herdr agents as small neon dots",
-  opts = { size = 8, gap = 7, max = 24, label = "AGENTS", every = 3 },
+  opts = { size = 8, gap = 7, max = 24, label = "AGENTS" },
   init = function(self)
-    herdr.watch(self, self.opts.every, function(self, data)
+    herdr.watch(self, function(self, data)
       local key = ""
       for _, a in ipairs(data and data.agents or {}) do
         key = key .. a.status:sub(1, 2)

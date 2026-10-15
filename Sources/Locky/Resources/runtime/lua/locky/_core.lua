@@ -106,19 +106,27 @@ local function called_directly(level, name)
     and how.name == name
 end
 
--- Raises an error for the code `level` frames up unless every plugin on the stack may use `capability` and the
--- function the check guards was called directly.
-local function require_grant(capability, what, level)
+-- Why `what` may not run when a plugin on the stack lacks `capability`, or nil when every plugin there has it.
+local function grant_problem(capability, what)
   local words = capabilities[capability]
-  for name in pairs(plugins_on_stack(2)) do
+  for name in pairs(plugins_on_stack(3)) do
     if name == "" then
-      error(("%s: code loaded from a string may not %s"):format(what, words[1]), level + 1)
+      return ("%s: code loaded from a string may not %s"):format(what, words[1])
     end
     local granted = grants[lower(name)]
     if not (granted and granted[capability]) then
-      error(("%s: plugin %q may not %s. To allow it, turn on %s for it in Settings › Plugins, or add allow = { %q } to its locky.pack.add entry in init.lua")
-        :format(what, name, words[1], words[2], capability), level + 1)
+      return ("%s: plugin %q may not %s. To allow it, turn on %s for it in Settings › Plugins, or add allow = { %q } to its locky.pack.add entry in init.lua")
+        :format(what, name, words[1], words[2], capability)
     end
+  end
+end
+
+-- Raises an error for the code `level` frames up unless every plugin on the stack may use `capability` and the
+-- function the check guards was called directly.
+local function require_grant(capability, what, level)
+  local problem = grant_problem(capability, what)
+  if problem then
+    error(problem, level + 1)
   end
   if not called_directly(level, what:match("[^.]+$")) then
     error(("%s: call it by its name from your own code, not through pcall, a callback, a metamethod, or another name")
@@ -963,6 +971,28 @@ function Instance:system(cmd, opts, on_exit)
   return system(self.id, cmd, opts, on_exit and function(result)
     on_exit(self, result)
   end)
+end
+
+--- herdr's agents, for locky.herdr: fn(self, agents) now if they are known, and on each change. agents is false
+--- when herdr is not running, else the host's { agents, fetched }. The host keeps one live connection for every widget.
+function Instance:_herdr(fn)
+  validate("fn", fn, "callable")
+  -- Reading them took running herdr before: a plugin still needs the grant to run programs. Without it, herdr is off.
+  local problem = grant_problem("system", "locky.herdr")
+  if problem then
+    native.log("error", problem, caller(3))
+    fn(self, false)
+    return
+  end
+  if not called_directly(1, "_herdr") then
+    error("locky.herdr: call it by its name from your own code, not through pcall, a callback, a metamethod, or another name", 2)
+  end
+  local now = native.herdr_watch(self.id, function(agents)
+    fn(self, agents)
+  end)
+  if now ~= nil then
+    fn(self, now)
+  end
 end
 
 --- locky.on, owned by this widget: fn(self, data).

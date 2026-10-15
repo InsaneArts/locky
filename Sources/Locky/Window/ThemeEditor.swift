@@ -503,7 +503,7 @@ private struct WidgetInspector: View {
                         if key == "location" {
                             LocationOption(location: (placement.opts[key] ?? inherited[key])?.string ?? "",
                                            placeName: (placement.opts["place_name"] ?? inherited["place_name"])?.string,
-                                           permission: model.location.state, grant: model.location.grant) { location, name in
+                                           privacy: model.privacy, permission: model.location.state, grant: model.location.grant) { location, name in
                                 // Picked now: macOS asks, if it never did.
                                 if LocationOption.isCurrent(location) { model.location.request() }
                                 change {

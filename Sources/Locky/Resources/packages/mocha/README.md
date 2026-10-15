@@ -46,7 +46,6 @@ Widget options (`locky.setup({ widgets = { ["mocha.center"] = { ... } } })`):
 | `mocha.user` | `size` | `14` | |
 | `mocha.status` | `low` | `20` | battery percent at or below which its icon turns red |
 | `mocha.agents` | `max` | `16` | most dots shown |
-| | `every` | `5` | seconds between herdr checks |
 | `mocha.label` | `text` | `"mocha"` | the word in the bottom-right corner |
 
 The background's blur, dim, and tint are in the theme's `background` table:

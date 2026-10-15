@@ -173,14 +173,14 @@ locky.widget.define("dotmatrix.info", {
 
 -- dotmatrix.agents: one square dot per herdr agent, most urgent first: blocked in signal (red), done in
 -- fg (white), working in muted (gray), idle as an outline. Hidden when herdr is off or has no agents.
---   opts.size, opts.gap, opts.max (most squares), opts.label (false hides it), opts.every (seconds)
+--   opts.size, opts.gap, opts.max (most squares), opts.label (false hides it)
 local colors = { blocked = "signal", done = "fg", working = "muted" }
 
 locky.widget.define("dotmatrix.agents", {
   description = "herdr agents as square dots: blocked red, done white, working gray",
-  opts = { size = 9, gap = 5, max = 30, label = "AGENTS", every = 3 },
+  opts = { size = 9, gap = 5, max = 30, label = "AGENTS" },
   init = function(self)
-    herdr.watch(self, self.opts.every, function(self, data)
+    herdr.watch(self, function(self, data)
       local key = ""
       for _, a in ipairs(data and data.agents or {}) do
         key = key .. a.status:sub(1, 2)

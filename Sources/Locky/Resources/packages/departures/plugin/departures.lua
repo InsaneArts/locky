@@ -218,7 +218,6 @@ locky.widget.define("departures.board", {
   opts = {
     rows = 5,          -- most agents listed
     idle = false,      -- true lists idle agents too, after the others
-    every = 3,         -- seconds between herdr checks
     tile = { 19, 27 }, -- one flap, in points
     gap = 3,           -- between flaps
     row_gap = 5,
@@ -229,7 +228,7 @@ locky.widget.define("departures.board", {
     empty = "No departures",
   },
   init = function(self)
-    herdr.watch(self, self.opts.every, function(self, data)
+    herdr.watch(self, function(self, data)
       local rows = rows_for(data, self.opts)
       local key = key_for(rows, data and data.counts)
       if key ~= self.state.key then

@@ -92,14 +92,35 @@ merge, lists are replaced), `extend`, `deepcopy`, `islist`, `isempty`, `keys`, `
 ```lua
 local herdr = require("locky.herdr")
 init = function(self)
-  herdr.watch(self, 3, function(self, data) self:set({ herdr = data }) end)  -- now, then every 3 s
+  herdr.watch(self, function(self, data) self:set({ herdr = data }) end)  -- now, then at each change
 end
 ```
 
-`data` is `false` when herdr is not running, otherwise `{ agents, counts, need }`: `agents` sorted blocked,
-done, working, idle, each `{ status, kind, title, workspace }`; `counts` per status; `need` = blocked + done.
-`herdr.colors` and `herdr.words` map each status to a palette role and a label. `herdr.parse(json)` parses
-`herdr api snapshot` output yourself.
+Locky keeps one connection to herdr's socket while a lock or a preview shows a widget that watches. herdr tells
+Locky when an agent changes, so the widget gets new data at once, and no program runs on a timer. If herdr is not
+running, Locky tries again after 0.5, 1, 2, and then every 3 seconds. The old form `herdr.watch(self, seconds, fn)`
+still works; the seconds have no effect.
+
+`data` is `false` when herdr is not running, otherwise `{ agents, counts, need, fetched }`:
+
+- `agents`: sorted blocked, done, working, idle, and in each status the oldest change first. Each agent is
+  `{ id, status, kind, title, workspace, since }`. `id` is herdr's terminal id, which stays when the pane moves.
+  `since` is how many seconds the agent had its status at `fetched`. It is `nil` when the status began before Locky
+  connected.
+- `counts`: the number of agents in each status (`blocked`, `done`, `working`, `idle`, `unknown`).
+- `need`: blocked + done.
+- `fetched`: when herdr gave the data, in seconds since 1970.
+
+A plugin you install needs the "Run programs" grant to read the agents
+([plugins.md](plugins.md#what-a-plugin-may-do)); without it, `data` is `false`. Your config folder and Locky's own
+widgets need no grant.
+
+In privacy mode, `title` is the agent's kind (such as `"Claude"`) and `workspace` is `""`. The kind is the name of
+the program, not of your work, so it shows.
+
+`herdr.elapsed(data, agent)` is the seconds the agent has had its status now, or `nil`. `herdr.duration(seconds)`
+writes it short, as the agents widget does: `"now"`, `"12m"`, `"3h"`, `"2d"`. `herdr.colors` and `herdr.words`
+map each status to a palette role and a label. `herdr.parse(json)` parses `herdr api snapshot` output yourself.
 
 ## Weather
 

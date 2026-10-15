@@ -51,7 +51,7 @@ Gauge options (`locky.setup({ widgets = { ["glass.gauges"] = { ... } } })`):
 | `color`, `track` | `"accent"`, `"track"` | ring and track colors |
 | `shade` | `"#0000001f"`; `"#17377a3d"` on the fallback scene | a tint inside each circle that keeps white legible on bright glass |
 | `every` | `5` | seconds between CPU and memory readings |
-| `agents` | `5` | seconds between herdr checks; `false` hides the agents circle |
+| `agents` | `true` | `false` hides the agents circle |
 | `low` | `20` | battery percent at or below which the ring turns red |
 
 Clock options (`glass.clock`): `format` (`"time"`, or a template such as `"HH:mm"`), `size` (270), `weight`

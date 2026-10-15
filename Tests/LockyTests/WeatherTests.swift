@@ -191,6 +191,30 @@ import Testing
         #expect(try runtime.eval("local w = watch({ location = '' }) return w.place, w.temp") == [.nil, .int(4)])
         #expect(try runtime.eval("local p = locky.location() return p.lat, p.lon, p.name") == [.double(10), .double(20), .nil])
     }
+
+    /// Customize's canvas runs the theme with settings.json's values, not init.lua's: privacy from there hides the
+    /// place as the lock does.
+    @Test func theCanvasHidesThePlaceInPrivacyMode() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/w.lua", "return { widgets = { { 'weather', opts = { location = '64.1355,-21.8954', place_name = 'Reykjavík' } } } }")
+        try sandbox.write("plugin/fixture.lua", """
+            local weather = require('locky.weather')
+            weather.cache_dir = '\(sandbox.root.appending(path: "cache").path)'
+            local reply = [==[\(try WeatherTests.fixture("open-meteo-forecast.json"))]==]
+            weather.fetch = function(self, url, done) done(self, reply) end
+            """)
+        try FileManager.default.createDirectory(at: sandbox.root.appending(path: "cache"), withIntermediateDirectories: true)
+        for privacy in [false, true] {
+            let recorder = Recorder()
+            let runtime = LuaRuntime(path: sandbox.path(), settings: Settings(["privacy": .bool(privacy)]), delegate: recorder.delegate)
+            let started = await runtime.start(theme: "w")
+            defer { runtime.stop() }
+            let id = try #require(started.instances.first ?? nil)
+            #expect(await eventually { !WidgetText.of(recorder.views[id] ?? nil).isEmpty })
+            let texts = WidgetText.of(recorder.views[id] ?? nil).joined(separator: " ")
+            #expect(texts.contains("Reykjavík") == !privacy, "\(texts)")
+        }
+    }
 }
 
 /// Where the Mac is without Location Services: its time zone's city, from macOS's zone table.
@@ -243,13 +267,37 @@ import Testing
         #expect(LocationOption.value(latitude: 64.135483, longitude: -21.895412) == "64.1355,-21.8954")
     }
 
-    @Test(arguments: ["", "64.1355,-21.8954"])
-    func theRowLaysOut(_ location: String) {
+    @Test(arguments: ["", "64.1355,-21.8954"], [false, true])
+    func theRowLaysOut(_ location: String, privacy: Bool) {
         _ = NSApplication.shared
         let view = NSHostingView(rootView: Form {
-            LocationOption(location: location, placeName: "Reykjavík", permission: .notGranted, grant: {}, commit: { _, _ in })
+            LocationOption(location: location, placeName: "Reykjavík", privacy: privacy, permission: .notGranted, grant: {}, commit: { _, _ in })
         }.formStyle(.grouped).frame(width: 300))
         view.layoutSubtreeIfNeeded()
         #expect(view.fittingSize.height > 0)
+    }
+}
+
+/// The weather's cache folder after the move to Open-Meteo.
+@Suite struct WeatherCacheTests {
+    @Test func onlyWttrRepliesAreDeleted() throws {
+        let sandbox = try Sandbox()
+        let folder = sandbox.root.appending(path: "Caches")
+        let fm = FileManager.default
+        try fm.createDirectory(at: folder.appending(path: "weather-folder.json"), withIntermediateDirectories: true)
+        let kept = ["forecast-41.72,44.82-c.json", "place-tbilisi.json", "location.json", "weather.json", "weather-notes.txt", "my-weather-x.json"]
+        for name in kept + ["weather-here.json", "weather-tbilisi.json"] {
+            try "{}".write(to: folder.appending(path: name), atomically: true, encoding: .utf8)
+        }
+        // A link with the name stays, and so does the file it points to.
+        let outside = sandbox.root.appending(path: "outside.json")
+        try "{}".write(to: outside, atomically: true, encoding: .utf8)
+        try fm.createSymbolicLink(at: folder.appending(path: "weather-link.json"), withDestinationURL: outside)
+        WeatherCache.removeOldReplies(in: folder)
+        let left = Set(try fm.contentsOfDirectory(atPath: folder.path))
+        #expect(left == Set(kept + ["weather-folder.json", "weather-link.json"]))
+        #expect(fm.fileExists(atPath: outside.path))
+        // A folder that is not there is no error.
+        WeatherCache.removeOldReplies(in: sandbox.root.appending(path: "none"))
     }
 }

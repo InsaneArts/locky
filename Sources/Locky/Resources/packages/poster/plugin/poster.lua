@@ -8,8 +8,7 @@
 --                    minutes (colors), overprint (true: the minutes multiply over the hours), part ("all",
 --                    "hours", or "minutes": see below)
 --   poster.info      ruled blocks of small type. opts: blocks (any of "date", "week", "user", "host",
---                    "agents", in order), size (14), rows (most agents listed, 4), every (seconds between
---                    herdr checks, 5)
+--                    "agents", in order), size (14), rows (most agents listed, 4)
 --   poster.weekday   the weekday, turned to run up the edge, in tracked capitals. opts: size, tracking, length
 --   poster.seconds   a red square stepping across the 12 columns, one column every 5 seconds, on a ruler that
 --                    runs off the right edge. opts: size, tick, bleed (1200; 0 ends the ruler at the margin)
@@ -180,7 +179,7 @@ local renderers = {
 
 locky.widget.define("poster.info", {
   description = "Small type in ruled blocks: the date, the week, you, this Mac, and the herdr agents that need you",
-  opts = { blocks = { "date", "week", "user", "host", "agents" }, width = 4 * GRID.column + 3 * GRID.gutter, size = 14, rows = 4, every = 5 },
+  opts = { blocks = { "date", "week", "user", "host", "agents" }, width = 4 * GRID.column + 3 * GRID.gutter, size = 14, rows = 4 },
   init = function(self)
     local o = self.opts
     local user = locky.sys.user()
@@ -195,7 +194,7 @@ locky.widget.define("poster.info", {
       end
     end, { align = true })
     if contains(o.blocks, "agents") then
-      herdr.watch(self, o.every, function(self, data)
+      herdr.watch(self, function(self, data)
         local list, keys = {}, {}
         for _, a in ipairs(data and data.agents or {}) do
           if a.status == "blocked" or a.status == "done" then

@@ -9,7 +9,7 @@
 --   station.plate      the computer's name on a black sign. opts: text (default: the computer's name), size,
 --                      max_width
 --   station.departure  the herdr agent that needs you most, one line; hidden when none does or herdr is off.
---                      opts: label ("Next"), size, every (seconds between checks, 5), max_width
+--                      opts: label ("Next"), size, max_width
 local ui = locky.ui
 local herdr = require("locky.herdr")
 
@@ -233,9 +233,9 @@ locky.widget.define("station.plate", {
 
 locky.widget.define("station.departure", {
   description = "The herdr agent that needs you most, as a departure line",
-  opts = { label = "Next", size = 15, every = 5, max_width = 560 },
+  opts = { label = "Next", size = 15, max_width = 560 },
   init = function(self)
-    herdr.watch(self, self.opts.every, function(self, data)
+    herdr.watch(self, function(self, data)
       local agent = data and data.need > 0 and data.agents[1] or nil
       local key = agent and table.concat({ agent.kind, agent.title, agent.status, data.need }, "\0") or false
       if key ~= self.state.key then

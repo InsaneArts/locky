@@ -64,9 +64,8 @@ locky.setup({
 ("bold"), `color` (role of the digits, "digit"), `card` (role of the cards, "surface"), `split` (role of
 the split and notches, "bg"), `split_width` (2).
 
-`departures.board`: `rows` (5; more rows make the board taller), `idle` (false), `every` (seconds between
-herdr checks, 3), `tile` (flap size, `{ 19, 27 }`), `gap` (3), `row_gap` (5), `size` (letter size, 21), `font`
-("HelveticaNeue-CondensedBold"), `title` ("Departures"), `offline` and `empty` (the messages for herdr off and
-for no agents).
+`departures.board`: `rows` (5; more rows make the board taller), `idle` (false), `tile` (flap size,
+`{ 19, 27 }`), `gap` (3), `row_gap` (5), `size` (letter size, 21), `font` ("HelveticaNeue-CondensedBold"), `title`
+("Departures"), `offline` and `empty` (the messages for herdr off and for no agents).
 
 `departures.footer`: `size` (11), `color` ("muted"), `tracking` (1.5).
