@@ -98,20 +98,26 @@ Rules that keep the lock screen safe, from [references/plugins.md](references/pl
 
 ## Check
 
-Repeat this loop until both checks pass:
+Write the PNGs to a scratch folder of your own, such as `/tmp`. A widget alone checks against the `default` theme;
+a theme checks as itself. Repeat this loop until `check` passes and the picture is right:
 
-1. Run the files: `"$LOCKY" check --theme <id>`. For a widget, also `"$LOCKY" check --widget <name>`: `check` runs
-   only the widgets a theme places, and `--widget` puts yours alone in the theme (default unless `--theme` names
-   one). Every widget must say `ok` and the last line must say `No problems.`. Fix each error it lists.
-2. Draw the lock screen: `"$LOCKY" render --theme <id> --out /tmp/locky-<id>.png`. For a widget alone, in the
-   middle of a theme: `"$LOCKY" render --theme <id> --widget <name> --out /tmp/locky-<name>.png`.
-3. Open the PNG and look at it. A widget that fails shows its error in red in its place. Fix what you see:
-   text that is cut off, overlaps, low contrast, a widget in the wrong place, an empty space where data should be.
+1. Run the files. A widget: `"$LOCKY" check --widget <name>`, which puts the widget alone in the default theme, so
+   it runs although no theme places it. A theme: `"$LOCKY" check --theme <id>`. Every widget must say `ok` and the
+   last line must say `No problems.`. Fix each error it lists.
+2. Draw the lock screen. A widget: `"$LOCKY" render --theme default --widget <name> --out /tmp/locky-<name>.png`,
+   which draws it alone in the middle. A theme: `"$LOCKY" render --theme <id> --out /tmp/locky-<id>.png`.
+3. Open the PNG and look at it. It is 2880×1800 for the 1440×900 layout; crop a small widget to judge it, such as
+   `sips -c 600 900 --cropOffset 600 990 in.png --out crop.png` for the middle. A widget that fails shows its error
+   in red in its place. Fix what you see: text that is cut off, overlaps, low contrast, a widget in the wrong
+   place, an empty space where data should be.
 
 `render` turns privacy mode on, needs no permission, and opens no window. `--size 1728x1117` tries another
-screen; `--appearance light` or `dark` tries the other system appearance. Themes lay out for 1440×900.
+screen; `--appearance light` or `dark` tries the other system appearance. A widget that uses palette roles, such
+as `accent`, takes each theme's colors: render it on a light theme too, such as `--theme notebook`.
 
 `Locky lock` locks the user's Mac and `Locky preview` opens a window: use `render` instead of both.
+
+[references/create-widget.md](references/create-widget.md) walks through one widget from file to lock screen.
 
 ## Hand over
 
