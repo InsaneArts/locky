@@ -46,7 +46,6 @@ Widget options (`locky.setup({ widgets = { ["phosphor.session"] = { ... } } })`)
 | `clock`, `fetch`, `herdr` | `true` | `false` leaves that command out of the session |
 | `logo` | `true` | `false` drops the padlock next to neofetch's lines |
 | `rows` | `5` | most agents listed; idle ones are only counted |
-| `every` | `5` | seconds between herdr checks |
 | `clock_size` | `28` | the block clock's character size |
 | `glow` | `3` | the text's glow radius; the clock glows 2.5 times as much |
 | `low` | `20` | battery percent at or below which the battery line turns `danger` |

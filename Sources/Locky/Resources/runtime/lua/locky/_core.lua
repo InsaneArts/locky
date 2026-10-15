@@ -965,6 +965,18 @@ function Instance:system(cmd, opts, on_exit)
   end)
 end
 
+--- herdr's agents, for locky.herdr: fn(self, agents) now if they are known, and on each change. agents is false
+--- when herdr is not running, else the host's { agents, fetched }. The host keeps one live connection for every widget.
+function Instance:_herdr(fn)
+  validate("fn", fn, "callable")
+  local now = native.herdr_watch(self.id, function(agents)
+    fn(self, agents)
+  end)
+  if now ~= nil then
+    fn(self, now)
+  end
+end
+
 --- locky.on, owned by this widget: fn(self, data).
 function Instance:on(event, fn)
   validate("event", event, function(v)

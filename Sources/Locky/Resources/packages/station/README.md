@@ -46,7 +46,7 @@ Widget options (`locky.setup({ widgets = { ["station.clock"] = { ... } } })`):
   five times a second. If you move the clock, move all three.
 - `station.date`: `format` (`"EEEE d MMMM"`), `size`, `weight`, `tracking`, `color`.
 - `station.plate`: `text` (default: the computer's name), `size`, `max_width`.
-- `station.departure`: `label` (`"Next"`), `size`, `every` (seconds between herdr checks, 5), `max_width`.
+- `station.departure`: `label` (`"Next"`), `size`, `max_width`.
 
 ## Notes
 

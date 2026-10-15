@@ -62,7 +62,7 @@ locky.setup({
 | `dotmatrix.pulse` | `pitch`, `dot`: keep them equal to the clock's |
 | `dotmatrix.word` | `text` ("LOCKED"), `pitch` (4), `dot` (0.75), `color` ("muted") |
 | `dotmatrix.info` | `format` ("EEE d MMM"), `width` (596), `size` (12), `tracking` (1.5), `low` (20) |
-| `dotmatrix.agents` | `size` (9), `gap` (5), `max` (30), `label` ("AGENTS", or false), `every` (3 seconds) |
+| `dotmatrix.agents` | `size` (9), `gap` (5), `max` (30), `label` ("AGENTS", or false) |
 
 `dotmatrix.pulse` is its own widget so that the clock's dots are not laid out again twice a second.
 Place it with the same anchor and offset as `dotmatrix.clock`; if you move or resize the clock, move or

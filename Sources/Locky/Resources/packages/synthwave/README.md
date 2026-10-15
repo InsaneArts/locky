@@ -64,7 +64,7 @@ locky.theme.extend("synthwave", function(theme) theme.overlay = nil end)        
 | `synthwave.clock` | `format` ("time"), `size` (200), `font` ("Futura-CondensedExtraBold"), `tracking` (3), `glow` (24) |
 | `synthwave.date` | `format` ("EEEE d MMMM"), `size` (17), `tracking` (6), `color` ("accent2"), `glow` (10) |
 | `synthwave.battery` | `size` (15), `color` ("accent2"), `low` (20) |
-| `synthwave.agents` | `size` (8), `gap` (7), `max` (24), `label` ("AGENTS", or false), `every` (3 seconds) |
+| `synthwave.agents` | `size` (8), `gap` (7), `max` (24), `label` ("AGENTS", or false) |
 
 Background params: horizon (points from the top, 560), sun radius (points, 175), grid speed (cells a
 second, 0.45). Overlay params: scanline period (points, 3), darkness (0.18).

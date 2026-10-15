@@ -37,3 +37,36 @@ import Testing
         #expect(try runtime.eval("return require('locky.herdr').parse('not json')") == [.nil])
     }
 }
+
+extension HerdrModuleTests {
+    private func runtime(privacy: Bool = false) throws -> LuaRuntime {
+        let sandbox = try Sandbox()
+        try Settings(["privacy": .bool(privacy)]).save(config: sandbox.config)
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        #expect(runtime.bootForTest().isEmpty)
+        withExtendedLifetime(sandbox) {}
+        return runtime
+    }
+
+    @Test func readsTheScrubbedSnapshot() throws {
+        let json = try String(contentsOf: WeatherTests.fixtures.appending(path: "herdr-snapshot.json"), encoding: .utf8)
+        let runtime = try runtime()
+        let data = try runtime.eval("return require('locky.herdr').parse([==[\(json)]==])").first ?? .nil
+        let agents = data["agents"].array ?? []
+        #expect(agents.count == 12 && data["need"] == .int(2))
+        #expect(agents.prefix(5).map { $0["status"].string } == ["blocked", "done", "working", "working", "working"])
+        #expect(agents[0]["title"] == .string("Add rate limiting to the public endpoints") && agents[0]["workspace"] == .string("Api"))
+        // Each status keeps herdr's order of changes: the oldest first.
+        #expect(agents[0]["id"].string?.hasPrefix("term_") == true && agents.allSatisfy { $0["since"].isNil })
+    }
+
+    @Test func aLongTitleEndsOnAWord() throws {
+        let runtime = try runtime()
+        let title = String(repeating: "word ", count: 12) + "end"
+        let json = #"{"result":{"snapshot":{"agents":[{"terminal_id":"t","agent":"claude","agent_status":"working","terminal_title_stripped":"\#(title)"}]}}}"#
+        let shown = try runtime.eval("return require('locky.herdr').parse([==[\(json)]==]).agents[1].title").first?.string ?? ""
+        #expect(shown == String(repeating: "word ", count: 8).dropLast() + "…")
+        #expect(try runtime.eval("local h = require('locky.herdr') return h.duration(20), h.duration(720), h.duration(7300), h.duration(200000)")
+                == [.string("now"), .string("12m"), .string("2h"), .string("2d")])
+    }
+}

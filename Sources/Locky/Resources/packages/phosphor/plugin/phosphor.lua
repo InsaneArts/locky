@@ -8,7 +8,6 @@
 --     opts.glow       glow radius of the text (default 3); the clock glows 2.5 times as much
 --     opts.clock, opts.fetch, opts.herdr   false leaves that command out; opts.logo false drops neofetch's logo
 --     opts.rows       most agents listed (default 5); idle ones are only counted
---     opts.every      seconds between herdr checks (default 5)
 --     opts.low        battery percent at or below which the battery line turns `danger` (default 20)
 --   phosphor.notice    "Sorry, try again." under the prompt for a few seconds after a wrong password.
 local ui = locky.ui
@@ -111,7 +110,7 @@ local status_words = { blocked = "needs you", done = "done", working = "working"
 
 locky.widget.define("phosphor.session", {
   description = "A shell session: last login, a block clock, neofetch, and herdr agents",
-  opts = { size = 14, clock_size = 28, glow = 3, clock = true, fetch = true, logo = true, herdr = true, rows = 5, every = 5, low = 20 },
+  opts = { size = 14, clock_size = 28, glow = 3, clock = true, fetch = true, logo = true, herdr = true, rows = 5, low = 20 },
   init = function(self)
     local o = self.opts
     local user, host = locky.sys.user().name, locky.sys.hostname().host:gsub("%.local$", "")
@@ -158,7 +157,7 @@ locky.widget.define("phosphor.session", {
     end
 
     if o.herdr then
-      herdr.watch(self, o.every, function(self, data)
+      herdr.watch(self, function(self, data)
         -- Only what the table shows: a change elsewhere in herdr's snapshot draws nothing.
         local key = "off"
         if data then

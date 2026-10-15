@@ -46,7 +46,7 @@ Widget options (`locky.setup({ widgets = { ["poster.numerals"] = { ... } } })`):
   The theme places the hours at the top left and the minutes at the bottom right, so both crops hold on
   screens of any shape. Hours follow your locale's 12- or 24-hour setting.
 - `poster.info`: `blocks` (any of `"date"`, `"week"`, `"user"`, `"host"`, `"agents"`, in order), `size`
-  (14), `rows` (most agents listed, 4), `every` (seconds between herdr checks, 5).
+  (14), `rows` (most agents listed, 4).
 - `poster.weekday`: `size` (11), `tracking` (3.5), `length` (240), `color`.
 - `poster.seconds`: `size` (12), `tick` (7), `bleed` (how far the rule runs past the 12th column, 1200; 0
   stops it at the right margin).

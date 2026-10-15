@@ -113,9 +113,9 @@ local dot_colors = { blocked = "peach", done = "green", working = "blue" }
 
 locky.widget.define("mocha.agents", {
   description = "herdr agents as dots: blocked peach, done green, working blue",
-  opts = { size = 12, dot = 9, every = 5, max = 16 },
+  opts = { size = 12, dot = 9, max = 16 },
   init = function(self)
-    herdr.watch(self, self.opts.every, function(self, data)
+    herdr.watch(self, function(self, data)
       local key = "off"
       if data then
         local parts = {}
