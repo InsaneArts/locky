@@ -59,7 +59,7 @@ struct CustomizationSection: View {
             }
             LabeledContent("Themes") {
                 // File › New Theme…'s action, wherever it is in the responder chain.
-                Button("New Theme…") { NSApp.sendAction(Selector(("newTheme:")), to: nil, from: nil) }
+                Button("New Theme…") { NSApp.sendAction(#selector(AppDelegate.newTheme(_:)), to: nil, from: nil) }
             }
             LabeledContent("Widgets") {
                 Button("New Widget…") { model.newWidget = true }
