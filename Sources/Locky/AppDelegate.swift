@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
         if !tool {
             IntruderLog().prune()
+            WeatherCache.removeOldReplies()
             applyAppSettings()
             // A new fix for the weather's Current Location, if Location Services allows it: nothing asks here.
             model.location.refresh()

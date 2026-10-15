@@ -253,3 +253,27 @@ import Testing
         #expect(view.fittingSize.height > 0)
     }
 }
+
+/// The weather's cache folder after the move to Open-Meteo.
+@Suite struct WeatherCacheTests {
+    @Test func onlyWttrRepliesAreDeleted() throws {
+        let sandbox = try Sandbox()
+        let folder = sandbox.root.appending(path: "Caches")
+        let fm = FileManager.default
+        try fm.createDirectory(at: folder.appending(path: "weather-folder.json"), withIntermediateDirectories: true)
+        let kept = ["forecast-41.72,44.82-c.json", "place-tbilisi.json", "location.json", "weather.json", "weather-notes.txt", "my-weather-x.json"]
+        for name in kept + ["weather-here.json", "weather-tbilisi.json"] {
+            try "{}".write(to: folder.appending(path: name), atomically: true, encoding: .utf8)
+        }
+        // A link with the name stays, and so does the file it points to.
+        let outside = sandbox.root.appending(path: "outside.json")
+        try "{}".write(to: outside, atomically: true, encoding: .utf8)
+        try fm.createSymbolicLink(at: folder.appending(path: "weather-link.json"), withDestinationURL: outside)
+        WeatherCache.removeOldReplies(in: folder)
+        let left = Set(try fm.contentsOfDirectory(atPath: folder.path))
+        #expect(left == Set(kept + ["weather-folder.json", "weather-link.json"]))
+        #expect(fm.fileExists(atPath: outside.path))
+        // A folder that is not there is no error.
+        WeatherCache.removeOldReplies(in: sandbox.root.appending(path: "none"))
+    }
+}
