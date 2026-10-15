@@ -69,6 +69,9 @@ enum Render {
         switch transition.direction {
         case .lock:
             LockTransition.comeIn(stage, style: style, origin: middle, at: start, reduceMotion: false)
+            // At its end the lock drops the mask, as finishComingIn does in a lock: CARenderer draws a full-size mask in
+            // parts in release builds.
+            if transition.progress >= 1 { LockTransition.finishComingIn(stage) }
         case .unlock:
             let field = scene.auth.map { CGPoint(x: $0.view.frame.midX, y: $0.view.frame.midY) } ?? middle
             LockTransition.goOut(stage, style: style, origin: field, at: start)
@@ -106,10 +109,13 @@ enum Render {
         renderer.layer = root
         renderer.bounds = CGRect(x: 0, y: 0, width: width, height: height)
         CATransaction.flush()
-        renderer.beginFrame(atTime: time, timeStamp: nil)
-        renderer.addUpdate(renderer.bounds)
-        renderer.render()
-        renderer.endFrame()
+        // Twice: a masked layer the first frame draws in parts (seen in release builds) is whole on the second.
+        for _ in 0..<2 {
+            renderer.beginFrame(atTime: time, timeStamp: nil)
+            renderer.addUpdate(renderer.bounds)
+            renderer.render()
+            renderer.endFrame()
+        }
         guard let buffer = queue.makeCommandBuffer(), let blit = buffer.makeBlitCommandEncoder() else { return nil }
         blit.synchronize(resource: texture)
         blit.endEncoding()
