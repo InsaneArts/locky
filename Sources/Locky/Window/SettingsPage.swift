@@ -239,9 +239,10 @@ private struct AutoLockSection: View {
     }
 }
 
-/// What the lock screen says and hides, and when its display turns off.
+/// What the lock screen says and hides, how it comes and goes, and when its display turns off.
 private struct LockScreenSection: View {
     let model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: SettingsStore { model.store }
 
@@ -260,7 +261,16 @@ private struct LockScreenSection: View {
                 Text("Hide personal information")
                 Text("Your name and picture, this Mac's name and location, network addresses, and project and task names.")
             }
-            Toggle("Animate locking and unlocking", isOn: store.bool("lock_animation", default: true))
+            Picker("Lock animation", selection: Binding(get: { store.settings.lockAnimation }, set: { style in
+                withAnimation(Motion.rows(reduceMotion)) { store.update { $0.lockAnimation = style } }
+            })) {
+                Text("None").tag(LockTransition.Style?.none)
+                Divider()
+                ForEach(LockTransition.Style.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
+            }
+            if let style = store.settings.lockAnimation {
+                LockAnimationPreview(model: model, style: style, reduceMotion: reduceMotion)
+            }
             // Only while locked and nobody touches the Mac; it turns the display off even when the system's display
             // sleep is Never or another app keeps the display on.
             Picker("Turn the display off", selection: Binding(get: { displayOff }, set: { seconds in
@@ -269,6 +279,29 @@ private struct LockScreenSection: View {
                 ForEach(SettingsPage.displayOffChoices(stored: displayOff), id: \.seconds) { Text($0.title).tag($0.seconds) }
             }
         }
+    }
+}
+
+/// The chosen lock animation in miniature, on the theme in use, under its pop-up. With Reduce Motion, a still picture and
+/// the style Locky uses then.
+private struct LockAnimationPreview: View {
+    let model: AppModel
+    let style: LockTransition.Style
+    let reduceMotion: Bool
+
+    var body: some View {
+        let theme = model.activeTheme
+        VStack(spacing: 6) {
+            TransitionPreview(style: style, theme: theme, settings: model.store.settings, config: model.store.config,
+                              info: model.inspection.theme(theme), reduceMotion: reduceMotion)
+                .frame(width: 260, height: 162.5)
+            if reduceMotion {
+                Text("Reduce Motion is on, so Locky uses Fade.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

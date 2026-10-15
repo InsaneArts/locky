@@ -605,9 +605,10 @@ final class TransitionStage: NSView {
 }
 
 /// The preview's and `render`'s desktop: a few windows on a neutral gradient, and the same picture blurred as the backdrop
-/// shows a desktop. A real desktop shows only through a lock's own window.
+/// shows a desktop. A real desktop shows only through a lock's own window. Settings' preview puts two windows on the
+/// user's own desktop picture.
 enum StandInDesktop {
-    static func picture(size: CGSize, scale: CGFloat) -> CGImage? {
+    static func picture(size: CGSize, scale: CGFloat, wallpaper: CGImage? = nil) -> CGImage? {
         let width = Int(size.width * scale), height = Int(size.height * scale)
         guard width > 0, height > 0, let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
@@ -618,12 +619,20 @@ enum StandInDesktop {
             CGRect(x: x * size.width, y: size.height - (y + h) * size.height, width: w * size.width, height: h * size.height)
         }
         let colors = [CGColor(srgbRed: 0.36, green: 0.42, blue: 0.52, alpha: 1), CGColor(srgbRed: 0.62, green: 0.56, blue: 0.52, alpha: 1)]
-        if let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: [0, 1]) {
+        if let wallpaper {
+            // Filling the screen, as the desktop shows it.
+            let fill = max(size.width / CGFloat(wallpaper.width), size.height / CGFloat(wallpaper.height))
+            let drawn = CGSize(width: CGFloat(wallpaper.width) * fill, height: CGFloat(wallpaper.height) * fill)
+            context.interpolationQuality = .high
+            context.draw(wallpaper, in: CGRect(x: (size.width - drawn.width) / 2, y: (size.height - drawn.height) / 2, width: drawn.width, height: drawn.height))
+        } else if let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: [0, 1]) {
             context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: size.height), end: CGPoint(x: size.width, y: 0), options: [])
         }
         context.setFillColor(CGColor(gray: 1, alpha: 0.35))
         context.fill(rect(0, 0, 1, 0.027))
-        for (index, frame) in [rect(0.06, 0.12, 0.42, 0.5), rect(0.4, 0.3, 0.5, 0.55), rect(0.12, 0.66, 0.26, 0.26)].enumerated() {
+        let windows = wallpaper == nil ? [rect(0.06, 0.12, 0.42, 0.5), rect(0.4, 0.3, 0.5, 0.55), rect(0.12, 0.66, 0.26, 0.26)]
+            : [rect(0.08, 0.14, 0.44, 0.52), rect(0.42, 0.34, 0.48, 0.5)]
+        for (index, frame) in windows.enumerated() {
             let corner = 10.0
             context.setShadow(offset: CGSize(width: 0, height: -8), blur: 30, color: CGColor(gray: 0, alpha: 0.35))
             context.setFillColor(CGColor(gray: index == 1 ? 0.97 : 0.92, alpha: 1))

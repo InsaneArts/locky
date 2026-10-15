@@ -265,3 +265,29 @@ private func pixel(_ image: CGImage, _ x: Int, _ y: Int) -> (red: Int, green: In
         #expect(LockSession.displaysChanged(windows: [laptop, external], screens: [external, laptop]))
     }
 }
+
+/// Settings' preview of the lock animation plays only in the key window while it shows, and never with Reduce Motion.
+@MainActor
+@Suite struct TransitionPreviewTests {
+    @Test func itPlaysOnlyInTheKeyWindow() {
+        #expect(TransitionPreviewView.plays(isKey: true, visible: true, reduceMotion: false))
+        #expect(!TransitionPreviewView.plays(isKey: false, visible: true, reduceMotion: false))
+        #expect(!TransitionPreviewView.plays(isKey: true, visible: false, reduceMotion: false))
+        #expect(!TransitionPreviewView.plays(isKey: true, visible: true, reduceMotion: true))
+    }
+
+    /// Out of a window, or in one that is not key, no screen runs: nothing loads Lua or draws.
+    @Test func itRunsNothingOutOfTheKeyWindow() throws {
+        let sandbox = try Sandbox()
+        let view = TransitionPreviewView(frame: CGRect(x: 0, y: 0, width: 260, height: 162.5))
+        let key = TransitionPreviewView.Key(theme: "default", settings: Settings(), config: sandbox.config)
+        view.show(key, settings: Settings())
+        #expect(!view.isRunning)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: true)
+        window.contentView = view
+        view.show(key, settings: Settings())
+        #expect(!window.isKeyWindow && !view.isRunning)
+        view.stop()
+        #expect(!view.isRunning)
+    }
+}
