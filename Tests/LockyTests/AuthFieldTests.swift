@@ -632,10 +632,11 @@ import Testing
         session.begin()
         defer { session.end("test") }
         let screen = try #require(container.subviews.first as? LockScreenView)
-        let deadline = Date().addingTimeInterval(3)
+        // Ten seconds: in a full run other suites keep the main actor busy.
+        let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
             screen.layoutSubtreeIfNeeded()
-            if screen.message != nil, screen.authSize.width > 0, !screen.widgets.isEmpty { break }
+            if screen.message != nil, screen.authSize.width > 0, !screen.widgets.isEmpty, screen.background != nil { break }
             try await Task.sleep(for: .milliseconds(20))
         }
         let background = try #require(screen.background), widget = try #require(screen.widgets.first)
