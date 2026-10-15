@@ -684,13 +684,13 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
     }
 
-    /// New windows for the displays there are now, with the theme and each widget's latest view, without
-    /// restarting Lua. The password field keeps what was typed.
     /// Whether the shields no longer match the displays: one window per display, at its frame, in order.
     nonisolated static func displaysChanged(windows: [CGRect], screens: [CGRect]) -> Bool {
         windows != screens
     }
 
+    /// New windows for the displays there are now, with the theme and each widget's latest view, without
+    /// restarting Lua. The password field keeps what was typed.
     private func rebuildForDisplays() {
         guard mode == .lock, !ended else { return }
         LogFile.shared.write(level: "info", message: "displays changed: \(NSScreen.screens.count) now", source: "locky")
