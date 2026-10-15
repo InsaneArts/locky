@@ -57,6 +57,21 @@ import Testing
         #expect(screen.widgets[0].placement.anchor == .top)
     }
 
+    /// A theme's problem shows in Settings, not in red over the theme's previews in the windows.
+    @Test func aPreviewInAWindowDrawsNoProblems() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'nowhere' } } }")
+        let container = NSView(frame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        var options = LockSession.Options(theme: "t", container: container)
+        options.path = sandbox.path()
+        let session = LockSession(mode: .embedded, options: options)
+        session.begin()
+        defer { session.end("test") }
+        let screen = try #require(container.subviews.first as? LockScreenView)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(screen.banner == nil)
+    }
+
     /// Lua keeps the second widget's instance while the first comes back: that instance keeps its view, and the new
     /// one does not take it for being the same widget.
     @Test func aKeptInstanceKeepsItsViewWhenAWidgetComesBackBeforeIt() async throws {

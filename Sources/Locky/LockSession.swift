@@ -673,7 +673,8 @@ final class LockSession: NSObject, NSWindowDelegate {
                 screen.wayOut = mode == .lock && emergencyExit
                     ? NSHostingController(rootView: LockMessage(text: nil, model: authModel, exit: true, auth: theme.auth, style: style))
                     : nil
-                if mode != .lock, !started.problems.isEmpty {
+                // Only the `preview` window, a theme author's tool: the windows list problems in Settings.
+                if mode == .preview, !started.problems.isEmpty {
                     screen.banner = NSHostingView(rootView: ProblemsBanner(problems: started.problems))
                 }
             }
@@ -708,7 +709,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             auth = next.theme.auth
         }
         reconcileWidgets(from: old, to: next, on: screen)
-        if next.problems != old.problems {
+        if mode == .preview, next.problems != old.problems {
             screen.banner = next.problems.isEmpty ? nil : NSHostingView(rootView: ProblemsBanner(problems: next.problems))
         }
         screen.layoutNow()
