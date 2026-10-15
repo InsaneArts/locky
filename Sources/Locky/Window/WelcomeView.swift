@@ -117,8 +117,9 @@ struct WelcomeView: View {
         let stored = model.store.settings.autoLock
         let broken = model.store.problem != nil
         return VStack(spacing: 0) {
-            title("Make Locky Your Lock Screen")
             Spacer(minLength: 16)
+            hero("lock.laptopcomputer")
+            title("Make Locky Your Lock Screen")
             Form {
                 Section {
                     Toggle(isOn: autoLock) {
@@ -168,8 +169,9 @@ struct WelcomeView: View {
     /// The safety net, in the words docs/security.md opens with.
     private var safetyPage: some View {
         VStack(spacing: 0) {
+            Spacer(minLength: 16)
+            hero("lifepreserver")
             title("If Something Goes Wrong")
-            Spacer(minLength: 32)
             VStack(alignment: .leading, spacing: 24) {
                 row("lock.trianglebadge.exclamationmark", Self.guardLine)
                 // The lock's own rule: settings.json can turn the way out off.
@@ -179,9 +181,19 @@ struct WelcomeView: View {
                 row("touchid", Self.unlockOnlyLine)
             }
             .padding(.horizontal, 48)
-            Spacer(minLength: 32)
+            .padding(.top, 28)
+            Spacer(minLength: 16)
         }
         .frame(maxHeight: .infinity)
+    }
+
+    /// The large symbol over a page's title, where page 1 has its preview: the page and its title read as one group.
+    private func hero(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 56))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.tint)
+            .accessibilityHidden(true)
     }
 
     private func title(_ text: String) -> some View {
