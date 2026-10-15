@@ -70,13 +70,13 @@ Move to Trash removes a theme you made.
 
 Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, auto-lock, Open at login, a lock
 screen message, Hide personal information, Turn the display off, Touch ID, and a photo after wrong passwords.
-Plugins installs, updates, and removes plugins. Lua Config opens init.lua and shows its problems and each theme
-that does not load. Everything but Open at login saves to `~/.config/locky/settings.json`, which wins over init.lua
+Plugins installs, updates, and removes plugins. General's last section opens the config folder and init.lua, shows
+init.lua's problems, and makes new themes and widgets. Everything but Open at login saves to `~/.config/locky/settings.json`, which wins over init.lua
 key by key: see [settings.md](docs/settings.md).
 
 ## Configure
 
-`~/.config/locky/init.lua` (Settings › Lua Config creates it with examples):
+`~/.config/locky/init.lua` (Settings › General › Config folder creates it with examples):
 
 ```lua
 locky.setup({ theme = "default", palette = { accent = "#ff79c6" } })
@@ -86,15 +86,23 @@ locky.pack.add({ "someone/locky-weather" })
 The same binary is a command line (`Locky.app/Contents/MacOS/Locky`):
 
 ```
-locky check [--theme NAME]        run your config, plugins, and a theme; list every error
-locky health                      like :checkhealth
-locky themes | widgets            what is installed
-locky pack list|sync|update|clean plugins from git, pinned by locky-pack-lock.json
-locky pack check                  which plugins have updates; installs none
-locky login [on|off]              open Locky at login, or not
-locky preview --theme NAME        the lock screen in a window
-locky window [SECTION]            the Themes window, a Settings pane, or the Welcome
+locky check [--theme NAME] [--widget NAME]   run your config, plugins, and a theme; list every error
+locky render --theme NAME --out FILE.png     the lock screen as a PNG, without a window; also --widget NAME,
+                                             --size 1728x1117, --appearance light|dark
+locky health                                 like :checkhealth
+locky themes | widgets                       what is installed
+locky skill install | path                   Locky's skill for coding agents (docs/agents.md)
+locky pack list|sync|update|clean            plugins from git, pinned by locky-pack-lock.json
+locky pack check                             which plugins have updates; installs none
+locky login [on|off]                         open Locky at login, or not
+locky preview --theme NAME                   the lock screen in a window
+locky window [SECTION]                       the Themes window, a Settings pane, or the Welcome
 ```
+
+## Make your own
+
+- [create-widget.md](docs/create-widget.md): write a widget, check it, draw it, and put it on the lock screen.
+- [agents.md](docs/agents.md): have a coding agent, such as Claude Code or Codex, write widgets and themes for you.
 
 ## Docs
 
@@ -112,8 +120,8 @@ locky window [SECTION]            the Themes window, a Settings pane, or the Wel
 Sources/CLua/                 Lua 5.5.1 (unmodified) and locky_bridge.c: time budgets, memory limit, safe calls
 Sources/Locky/Lua/            the runtime: LuaVM, LuaRuntime, the runtime path, system information
 Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the password field
-Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window (General, Plugins,
-                              Lua Config), the Welcome
+Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window (General, Plugins),
+                              the Welcome
 Sources/Locky/Settings/       settings.json, its store, and the theme schedule
 Sources/Locky/System/         the shortcut, auto-lock, login item, power, camera, editors, and the guard's Locky side
 Sources/GuardCore/            the guard's watch and the macOS lock screen call, shared by Locky and locky-guard
