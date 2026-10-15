@@ -78,6 +78,16 @@ import Testing
         #expect(editor.edit.isNil && !editing.colorsChanged)
     }
 
+    /// Customize's colors are the last word, over init.lua's palette, as every change of the window's is.
+    @Test func colorsWinOverInitLua() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ palette = { accent = '#00ff00', fg = '#0000ff' } })")
+        var settings = Locky.Settings()
+        settings.setThemeEdit(ThemeFile.blank, "palette", .table(["accent": .string("#ff0000")]))
+        let shown = await started(ThemeFile.blank, sandbox, settings: settings)
+        #expect(shown.theme.palette["accent"] == "#ff0000" && shown.theme.palette["fg"] == "#0000ff")
+    }
+
     @Test func aFontSavesUndoesAndShows() async throws {
         let editor = try await Editor()
         let editing = editor.editing
