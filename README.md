@@ -59,12 +59,14 @@ are live wallpapers, after the most popular scenes on Wallpaper Engine's Steam W
 
 Pick one in the Themes window (the menu bar icon's Themes…), or in `init.lua` with
 `locky.setup({ theme = "station" })`. `Scripts/snapshot.sh <id> out.png [1728x1117]` renders any theme to a PNG.
+To make your own, see [create-theme.md](docs/create-theme.md).
 
 ## The windows
 
 Themes… in the menu bar icon's menu opens the **Themes** window: the theme in use, live, and every theme as a
-picture. Click one to use it, or use the arrow keys. Customize… edits it on its live lock screen (drag widgets, add
-them from a live gallery, change their options, the background, and where the password field sits). Schedule (the
+picture. Click one to use it, or use the arrow keys. File › New Theme… (⌘N) starts a theme of your own.
+Customize… edits it on its live lock screen (drag widgets, add them from a live gallery, change their options, the
+background, the colors, the font, and where the password field sits). Schedule (the
 clock in the toolbar, or File › Schedule Themes…) changes the theme by time of day or with Light and Dark mode, and
 Move to Trash removes a theme you made.
 
@@ -101,6 +103,7 @@ locky window [SECTION]            the Themes window, a Settings pane, or the Wel
 - [plugins.md](docs/plugins.md): the plugin system, widgets, packages, health, and the safety rules
 - [views.md](docs/views.md): every view and property widgets can draw
 - [widgets.md](docs/widgets.md): the core widgets and their options
+- [create-theme.md](docs/create-theme.md): make a theme in the Themes window or in Lua, and share it
 - [themes.md](docs/themes.md): themes, backgrounds, and shaders
 - [api.md](docs/api.md): the `locky` API
 - [settings.md](docs/settings.md): settings.json, which the windows write, and how it layers over init.lua
