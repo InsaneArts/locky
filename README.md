@@ -15,6 +15,10 @@ open Locky.app                    # the lock icon appears in the menu bar
 swift test                        # the test suite
 ```
 
+A build is signed ad hoc unless a `signing.env` next to `Package.swift` (ignored by git) names a certificate, for
+example `SIGNING_MODE=dev` and `APP_IDENTITY="Developer ID Application: Your Name (TEAMID)"`. macOS ties
+permissions such as Accessibility to the signature, so an ad-hoc build asks for them again after each build.
+
 The first launch opens the Welcome, three short pages:
 
 1. **Welcome to Locky:** your lock screen, live. Lock Now tries a real lock.

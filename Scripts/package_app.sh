@@ -7,6 +7,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 APP_NAME=Locky
+# A local signing.env (ignored by git) can set SIGNING_MODE and APP_IDENTITY for every build: with a certificate, macOS
+# keeps permissions such as Accessibility across builds; an ad-hoc build is a new app to it each time.
+if [[ -f "$ROOT/signing.env" ]]; then source "$ROOT/signing.env"; fi
 BUNDLE_ID=${BUNDLE_ID:-com.tornikegomareli.Locky}
 SIGNING_MODE=${SIGNING_MODE:-adhoc}
 APP_IDENTITY=${APP_IDENTITY:-}
