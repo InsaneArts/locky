@@ -204,6 +204,19 @@ final class AppModel {
         return id
     }
 
+    /// New Theme…: writes the blank theme to the config's themes folder as "Untitled Theme" (or "Untitled Theme 2", …),
+    /// and opens it in Customize at once. It waits for the config's first read, which lists the ids already taken.
+    @discardableResult
+    func newTheme() async throws -> String {
+        await firstRead(within: .seconds(2))
+        let (id, file) = ThemeFile.untitled(taken: ThemeFile.takenIDs(inspection.themes, settings: store.settings, config: store.config))
+        try await file.install(as: id, config: store.config)
+        // A lock that started meanwhile opens nothing: the theme waits in the gallery.
+        refresh()
+        if !locked { customize(id) }
+        return id
+    }
+
     /// Whether `id` is the person's own theme, which Move to Trash may take: a theme that the last read of the config
     /// lists, with a file in the config folder's themes/. A plugin can add any id to that list, so the id must also be a
     /// plain file name (no "/" and no leading "."): then it never leads out of themes/.

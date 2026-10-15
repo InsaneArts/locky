@@ -267,7 +267,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if menuItem.action == #selector(lockNow(_:)) { MainMenu.setKeyEquivalent(hotkeys.shortcut, on: menuItem) }
         return switch menuItem.action {
         case #selector(openThemes(_:)), #selector(openSettings(_:)), #selector(openWelcome(_:)): session?.mode != .lock
+        // A sheet over the Themes window, such as Add Widget, holds it: the new theme would open under it.
+        case #selector(newTheme(_:)): session?.mode != .lock && themesWindow?.window?.attachedSheet == nil
         default: true
+        }
+    }
+
+    /// File › New Theme… and the Settings window's New Theme…: a new theme from the blank one, open in Customize in the
+    /// Themes window. No form comes first: the theme is named Untitled Theme, and Customize renames it.
+    @objc func newTheme(_ sender: Any?) {
+        showWindow(.themes)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await model.newTheme()
+            } catch {
+                guard session?.mode != .lock, let window = themesWindow?.window else { return }
+                let alert = NSAlert()
+                alert.messageText = "Can't Make a New Theme"
+                alert.informativeText = (error as? LuaError)?.message ?? error.localizedDescription
+                alert.beginSheetModal(for: window, completionHandler: nil)
+            }
         }
     }
 

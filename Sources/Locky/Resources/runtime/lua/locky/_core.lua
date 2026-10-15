@@ -986,10 +986,14 @@ function locky.theme.extend(name, patch)
   insert(theme_patches[name], patch)
 end
 
+--- Every theme's name. A theme whose file name starts with "_" is a starting point for others, such as _blank for
+--- New Theme…, and is left out.
 function locky.theme.list()
   local names = {}
   for _, entry in ipairs(native.find_all("themes", ".lua")) do
-    names[#names + 1] = entry.name
+    if entry.name:sub(1, 1) ~= "_" then
+      names[#names + 1] = entry.name
+    end
   end
   sort(names)
   return names
@@ -1271,7 +1275,8 @@ function locky.theme.derive(base, def)
       end
     end
   end
-  theme.description = ("Made from %s."):format(type(theme.name) == "string" and theme.name or base)
+  -- A starting point, such as _blank, is no theme a person chose to start from.
+  theme.description = base:sub(1, 1) ~= "_" and ("Made from %s."):format(type(theme.name) == "string" and theme.name or base) or nil
   theme.name = def.name or theme.name
   return theme
 end
