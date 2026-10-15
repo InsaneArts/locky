@@ -19,12 +19,17 @@ A build is signed ad hoc unless a `signing.env` next to `Package.swift` (ignored
 example `SIGNING_MODE=dev` and `APP_IDENTITY="Developer ID Application: Your Name (TEAMID)"`. macOS ties
 permissions such as Accessibility to the signature, so an ad-hoc build asks for them again after each build.
 
+Locky has one package dependency, [PermissionFlow](https://github.com/jaywcjlove/PermissionFlow) 2.11.3, pinned
+exactly: it guides you through Accessibility, the camera, and Login Items in System Settings. `package_app.sh`
+copies its words into the app. [security.md](docs/security.md#what-locky-asks-macos-for) says what Locky asks
+macOS for, and why.
+
 The first launch opens the Welcome, three short pages:
 
 1. **Welcome to Locky:** your lock screen, live. Lock Now tries a real lock.
 2. **Make Locky Your Lock Screen:** turn on Lock automatically, Open at login, and a Lock Now shortcut, so that
-   Locky locks your Mac. Lock with the Touch ID button makes that button show Locky too. The Apple menu's Lock
-   Screen and ⌃⌘Q still show the macOS lock screen.
+   Locky locks your Mac. Grant Accessibility, and Lock with the Touch ID button makes that button show Locky too.
+   The Apple menu's Lock Screen and ⌃⌘Q still show the macOS lock screen.
 3. **If Something Goes Wrong:** what happens if Locky stops during a lock, and the ⌃⌥⌘Q way out
    ([security.md](docs/security.md#if-something-goes-wrong)).
 
@@ -142,7 +147,8 @@ Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the pass
 Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window (General, Plugins),
                               the Welcome
 Sources/Locky/Settings/       settings.json, its store, and the theme schedule
-Sources/Locky/System/         the shortcut, auto-lock, login item, power, camera, editors, and the guard's Locky side
+Sources/Locky/System/         the shortcut, auto-lock, login item, permissions, power, camera, editors, and the guard's
+                              Locky side
 Sources/GuardCore/            the guard's watch and the macOS lock screen call, shared by Locky and locky-guard
 Sources/LockyGuard/           locky-guard, which locks the Mac if Locky dies or hangs during a lock
 Sources/Locky/Resources/

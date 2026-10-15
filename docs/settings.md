@@ -35,7 +35,7 @@ says so in its windows and in `locky check`, and does not overwrite it.
 | `privacy` | `true` hides your name and picture, this Mac's name, its location (the clocks' city and the weather's place), network addresses, agent titles and workspaces, and git repositories, branches, and commit messages. Plugin widgets decide for themselves | Settings › General › Lock Screen › Hide personal information |
 | `touch_id` | `false` turns Touch ID off (default `true`) | Settings › General › Unlock |
 | `emergency_exit` | `false` stops ⌃⌥⌘Q from switching to the macOS lock screen (default `true`) | — (on unless this key is `false`) |
-| `lock_key` | `true`: the Touch ID button shows Locky's lock instead of the macOS lock screen (default `false`). Needs Accessibility access; see [security.md](security.md#what-locky-guarantees) | Settings › General › Lock with the Touch ID button |
+| `lock_key` | `true`: the Touch ID button shows Locky's lock instead of the macOS lock screen (default `false`). Needs Accessibility access; see [security.md](security.md#what-locky-asks-macos-for) | Settings › General › Lock with the Touch ID button |
 | `shortcut` | `{ "key": 37, "modifiers": ["control", "option", "command"] }`: a virtual key code (37 is L) and modifiers | Settings › General › Lock Now shortcut |
 | `auto_lock` | `{ "idle_minutes": 5, "display_sleep": true, "system_sleep": true, "screen_saver": true }`; a missing key is off. Locky treats `display_sleep` and `screen_saver` as one: when either is `true`, it locks on both. The idle count pauses while a video, a call, or a presentation keeps the display on | Settings › General › Lock Automatically (one switch, "When the screen saver starts or the display turns off", for both keys) |
 | `battery_saver` | `true`: nothing moves on battery either. In Low Power Mode or with Reduce Motion on, nothing moves anyway | — |
@@ -104,9 +104,12 @@ Dock, and its menus have Lock Now in the Locky menu.
   made, Move to Trash (see [themes.md](themes.md#make-and-share-themes-in-the-window)). Edit › Undo (⌘Z) takes
   back each change, and Redo (⇧⌘Z) makes it again. Done returns to the themes. For a theme that does not load,
   Customize shows why, with Open at the file and line.
-- **Settings › General:** Open at login, the Lock Now shortcut, Lock with the Touch ID button, Lock Automatically, the lock screen message, Hide
-  personal information, Lock animation, Turn the display off, Touch ID, and Take a photo; photos taken after wrong
-  passwords show at the top. Under Lock animation, a small preview plays the chosen style on the theme in use, over
+- **Settings › General:** Open at login, the Lock Now shortcut, Accessibility, Lock with the Touch ID button, Lock
+  Automatically, the lock screen message, Hide personal information, Lock animation, Turn the display off, Touch ID,
+  and Take a photo, with Camera under it while it is on; photos taken after wrong passwords show at the top.
+  Accessibility, Camera, and an Open at login that waits for approval in Login Items each have a Grant button that
+  shows the state live (see [security.md](security.md#what-locky-asks-macos-for)). Lock with the Touch ID button waits
+  for Accessibility. Under Lock animation, a small preview plays the chosen style on the theme in use, over
   your desktop picture, while the Settings window is in front. With Reduce Motion on, it shows a still picture and
   says that Locky uses Fade. The Lock Automatically footer says that you may unlock twice when
   macOS also asks for your password after the display turns off. The last section, Customization, has:
@@ -127,4 +130,5 @@ Dock, and its menus have Lock Now in the Locky menu.
   reached the plugins and found each at its newest commit. Each plugin shows the themes and widgets it adds.
 - **Welcome:** a window of its own. It opens by itself on the first launch, and from Help › Welcome to Locky
   after that. It has three pages: a live preview and Lock Now; Lock automatically, Open at login, the Lock Now
-  shortcut, Lock with the Touch ID button, and Accessibility; and what happens if something goes wrong. Done closes it.
+  shortcut, Accessibility with its Grant button, and Lock with the Touch ID button; and what happens if something
+  goes wrong. Done closes it.

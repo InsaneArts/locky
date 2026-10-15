@@ -30,7 +30,7 @@ The Welcome's last page says the same. The sections below give the details.
 - **No lock without the keyboard.** If Locky is not the active app with its lock window key within 1.5
   seconds of a lock, or loses the keyboard during a lock and does not get it back within 1 second, it does
   not stay up, since typing would go to the app behind it. With Accessibility access (Settings › General ›
-  Unlock › Keep the keyboard on the lock screen), it takes the keys with an event tap for the rest of the lock.
+  Accessibility), it takes the keys with an event tap for the rest of the lock.
   Without it, Locky switches to the macOS lock screen. It switches too when another app has secure keyboard
   entry on (Terminal's Secure Keyboard Entry, a focused password field), which hides the keys from any event
   tap.
@@ -48,6 +48,44 @@ The Welcome's last page says the same. The sections below give the details.
   `Locky window` or `Locky preview`.
 - **No menu commands during a lock.** Locky removes its menus, the Services menu included, while a lock is on,
   so none of its menu shortcuts work until you unlock.
+
+## What Locky asks macOS for
+
+Locky asks for each permission where it is used, with a line that says why. The Welcome's second page and
+Settings › General show Accessibility and Login Items the same way. Each row shows its state: Grant, or Granted
+with a green check.
+
+- **Accessibility.** The Touch ID button's tap and the keyboard's event tap need it (see above). Locky asks for it on
+  the Welcome's second page and in Settings › General, just before Lock with the Touch ID button. That switch
+  waits for it. Grant opens System Settings › Privacy & Security › Accessibility (Device Control and Data Access
+  from macOS 27), with a small panel under the System Settings window: drag Locky from the panel into the list.
+  When Locky has the permission, the panel closes and Locky comes to the front.
+- **Camera.** Only for Settings › General › Unlock › Take a photo. When you choose a number of wrong passwords,
+  macOS asks once. If you said no, Grant opens System Settings › Privacy & Security › Camera. The lock never asks:
+  without the permission, it takes no photo.
+- **Login item.** Open at login adds Locky to System Settings › General › Login Items. If you switch it off there,
+  the row says so, and Grant opens Login Items.
+
+Showing a state never asks: Locky reads it with `AXIsProcessTrusted()`, `AVCaptureDevice.authorizationStatus`,
+and `SMAppService`. It reads the states again when you come back to Locky. While the panel is open, it reads
+Accessibility once a second, for 5 minutes at most, and stops when Locky has it. A lock closes the panel at its
+start, and no panel opens during a lock.
+
+macOS ties a permission to the app's signature. A build signed ad hoc is a new app to macOS each time, so an old
+Locky entry can stay on in the Accessibility list while the new build does not have the permission. Remove old
+Locky entries with the − button, then grant it again. See the README's Build section.
+
+### The one dependency
+
+The rows, the panel, and the System Settings links come from
+[PermissionFlow](https://github.com/jaywcjlove/PermissionFlow) (MIT), Locky's only package dependency. Package.swift
+pins it to version 2.11.3 exactly, and Package.resolved pins its commit (`cb96db4`). Locky links its
+`PermissionFlow`, `PermissionFlowCameraStatus`, and `SystemSettingsKit` products. Their source was read before it
+was added: they make no network calls, collect nothing, start no processes, and write no files. They use only
+public APIs: Accessibility and window lists to follow the System Settings window, the `x-apple.systempreferences:`
+URLs, and the drag pasteboard. PermissionFlow asks for Accessibility itself only when its
+`promptForAccessibilityTrust` option is on, and Locky leaves it off. Its translated button words ship in
+`Locky.app/Contents/Resources/PermissionFlow_PermissionFlow.bundle`; `locky health` says if they are missing.
 
 ## What Locky does not do
 

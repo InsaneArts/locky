@@ -97,13 +97,17 @@ final class AppModel {
 
     /// Why the Lock Now shortcut could not be registered, such as another app holding it.
     var shortcutProblem: String?
+    /// Accessibility, the camera, and the login item: what Locky asks macOS for.
+    let permissions: Permissions
     /// Open at login, read again whenever Locky becomes active (back from System Settings).
-    private(set) var loginItem = LoginItem.status
+    var loginItem: LoginItem.Status { permissions.loginItem }
     /// True for the length of a lock (AppDelegate sets it). Nothing is read on didBecomeActive then. As it turns true,
     /// what waits for the person in the windows closes, so the lock alone takes the keyboard: the Schedule popover and
-    /// the Import panel here, the windows' own sheets and alerts that take input as they see it.
+    /// the Import panel here, the windows' own sheets and alerts that take input as they see it, and PermissionFlow's
+    /// panel next to System Settings.
     var locked = false {
         didSet {
+            permissions.locked = locked
             guard locked else { return }
             scheduling = false
             importing = false
@@ -123,27 +127,14 @@ final class AppModel {
     @ObservationIgnored private var pendingCustomize: Bool?
     @ObservationIgnored private var refreshing: Task<Void, Never>?
     @ObservationIgnored private var watchers: [FolderWatcher] = []
-    @ObservationIgnored nonisolated(unsafe) private var activation: NSObjectProtocol?
 
-    init(store: SettingsStore) {
+    init(store: SettingsStore, permissions: Permissions = Permissions()) {
         self.store = store
-        // A lock activates Locky at its start and at every keyboard reclaim: a slow answer about login items must not
-        // hold the main thread then, which runs the guard's heartbeat.
-        activation = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
-                                                            queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, !self.locked else { return }
-                self.loginItem = LoginItem.status
-            }
-        }
-    }
-
-    deinit {
-        if let activation { NotificationCenter.default.removeObserver(activation) }
+        self.permissions = permissions
     }
 
     func setLoginItem(_ on: Bool) throws {
-        defer { loginItem = LoginItem.status }
+        defer { permissions.refresh() }
         try LoginItem.set(on)
     }
 

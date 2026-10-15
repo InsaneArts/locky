@@ -91,6 +91,33 @@ import Testing
         #expect(visit.page == .welcome)
     }
 
+    /// Page 2 with every row it can have (approval in Login Items, a shortcut problem, the Touch ID button) keeps the
+    /// first page's height, and its Form scrolls what does not fit: a Form that grew the window made AppKit's layout
+    /// loop until the app stopped.
+    @MainActor @Test func theSecondPageKeepsTheFirstPagesHeight() async throws {
+        _ = NSApplication.shared
+        let mac = PermissionsTests.Mac()
+        mac.loginItem = .requiresApproval
+        let model = AppModel(store: SettingsStore(config: try Sandbox().config), permissions: Permissions(system: mac.system))
+        model.shortcutProblem = "Another app uses this shortcut."
+        let controller = WelcomeWindowController(model: model) {}
+        let window = try #require(controller.window)
+        controller.show(behind: true)
+        defer { window.orderOut(nil) }
+        func settle() async {
+            for _ in 0..<20 {
+                window.contentView?.layoutSubtreeIfNeeded()
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        await settle()
+        let first = window.frame.height
+        controller.visit.page = .lockScreen
+        await settle()
+        #expect(window.frame.height == first)
+        #expect(mac.quiet)
+    }
+
     /// Each page lays out at the window's width, in light and dark.
     @MainActor @Test(arguments: WelcomeView.Page.allCases, [NSAppearance.Name.aqua, .darkAqua])
     func eachPageBuilds(_ page: WelcomeView.Page, _ appearance: NSAppearance.Name) throws {

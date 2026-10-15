@@ -12,7 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         || CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst())).transition
     private let store = SettingsStore(lastGood: isTool ? nil : SettingsStore.defaultLastGood)
     private lazy var model: AppModel = {
-        let model = AppModel(store: store)
+        // LOCKY_PERMISSIONS=none in a tool run shows each permission as not granted, for screenshots of those rows: a
+        // tool run reads the Terminal's Accessibility, which has it.
+        let notGranted = Self.isTool && ProcessInfo.processInfo.environment["LOCKY_PERMISSIONS"] == "none"
+        let model = AppModel(store: store, permissions: Permissions(system: .live(notGranted: notGranted)))
         model.lockNow = { [weak self] in self?.lockNow(nil) }
         model.preview = { [weak self] theme in self?.preview(theme: theme) }
         model.recordingShortcut = { [weak self] recording in
@@ -89,6 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         statusItem.menu = menu
 
         model.openWindow = { [weak self] in self?.showWindow($0) }
+        // Granted in System Settings with Locky behind: the Touch ID button's tap starts without waiting for Locky to
+        // come forward.
+        if !tool { model.permissions.accessibilityChanged = { [weak self] in self?.applyLockKey() } }
         model.refresh()
         // `locky preview` and `locky lock` (main.swift) start here with their options.
         let launch = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst()))

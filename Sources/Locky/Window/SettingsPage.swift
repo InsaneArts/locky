@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import LocalAuthentication
 import SwiftUI
 
@@ -138,8 +137,8 @@ struct SettingsPage: View {
 }
 
 /// Runs `action` when a lock ends, also while the Settings window is closed. `model.locked` is read here and not in the
-/// page's body, so a lock's start does not build the page again: building UnlockSection reads the Touch ID, Accessibility,
-/// and camera states, and during a lock the main thread runs the guard's heartbeat.
+/// page's body, so a lock's start does not build the page again: building UnlockSection reads the Touch ID state, and
+/// during a lock the main thread runs the guard's heartbeat.
 private struct WhenLockEnds: ViewModifier {
     let model: AppModel
     let action: () -> Void
@@ -185,11 +184,11 @@ private struct PhotosSection: View {
     }
 }
 
-/// Open at login, the Lock Now shortcut, and the Touch ID button: what lets Locky lock at all.
+/// Open at login, the Lock Now shortcut, and the Touch ID button: what lets Locky lock at all. Accessibility comes just
+/// before the button's switch, which waits for it, as on the Welcome.
 private struct StartSection: View {
     let model: AppModel
     @State private var hasButton = LockKeyToggle.hasButton()
-    @State private var trusted = AXIsProcessTrusted()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -201,8 +200,9 @@ private struct StartSection: View {
             if let problem = model.shortcutProblem {
                 WarningLabel(problem)
             }
+            AccessibilityRow(permissions: model.permissions, hasButton: hasButton)
             if hasButton {
-                LockKeyToggle(model: model, trusted: $trusted)
+                LockKeyToggle(model: model)
             }
         }
         .animation(Motion.rows(reduceMotion), value: model.loginItem)
@@ -210,7 +210,6 @@ private struct StartSection: View {
             // A lock activates Locky at its start and at each keyboard reclaim: nothing is read then.
             guard !model.locked else { return }
             hasButton = LockKeyToggle.hasButton()
-            trusted = AXIsProcessTrusted()
         }
     }
 
@@ -355,8 +354,6 @@ private struct MessageField: View {
 private struct UnlockSection: View {
     let model: AppModel
     @State private var hasTouchID = Self.touchIDHardware()
-    @State private var trusted = AXIsProcessTrusted()
-    @State private var cameraStatus = CameraAccess.status
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var store: SettingsStore { model.store }
@@ -373,7 +370,8 @@ private struct UnlockSection: View {
                 withAnimation(Motion.rows(reduceMotion)) {
                     store.update { $0["intruder_photo"] = value.map(LuaValue.int) ?? .nil }
                 }
-                if value != nil { askForCamera() }
+                // Asks for the camera now, while the person is here: during a lock the camera never asks.
+                if value != nil { model.permissions.askForCamera() }
             })) {
                 ForEach(SettingsPage.choices("Never", [2, 3, 5, 10], stored: threshold) { "After \(SettingsPage.plural($0, "wrong password"))" },
                         id: \.value) { Text($0.title).tag($0.value) }
@@ -382,9 +380,10 @@ private struct UnlockSection: View {
                 if threshold != nil { Text("Photos stay on this Mac for up to 30 days.") }
             }
             if threshold != nil {
-                CameraStatus(status: cameraStatus, ask: askForCamera)
+                PermissionRow(title: Self.cameraName, reason: Self.cameraReason, state: model.permissions.camera) {
+                    model.permissions.grantCamera()
+                }
             }
-            KeyboardAccess(trusted: $trusted)
         } header: {
             Text("Unlock")
         } footer: {
@@ -395,14 +394,13 @@ private struct UnlockSection: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // A lock activates Locky at its start and at each keyboard reclaim: nothing is read then.
             guard !model.locked else { return }
-            let touchID = Self.touchIDHardware(), keyboard = AXIsProcessTrusted(), camera = CameraAccess.status
-            withAnimation(Motion.rows(reduceMotion)) {
-                hasTouchID = touchID
-                trusted = keyboard
-                cameraStatus = camera
-            }
+            let touchID = Self.touchIDHardware()
+            withAnimation(Motion.rows(reduceMotion)) { hasTouchID = touchID }
         }
     }
+
+    static let cameraName = "Camera"
+    static let cameraReason = "Lets Locky take a photo after wrong passwords."
 
     /// Whether this Mac has Touch ID, also with its lid closed or in lockout: `biometryType` "is set no matter what the
     /// call returns".
@@ -411,94 +409,27 @@ private struct UnlockSection: View {
         _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
         return context.biometryType == .touchID
     }
-
-    /// Asks for the camera now, while the person is here: during a lock the camera never asks.
-    private func askForCamera() {
-        guard CameraAccess.status == .notDetermined else { return }
-        let animation = Motion.rows(reduceMotion)
-        Task {
-            _ = await CameraAccess.request()
-            let status = CameraAccess.status
-            withAnimation(animation) { cameraStatus = status }
-        }
-    }
 }
 
-/// The camera, while Locky may not use it: a way to ask, or the way to System Settings. Nothing once it may.
-private struct CameraStatus: View {
-    let status: AVAuthorizationStatus
-    let ask: () -> Void
-
-    var body: some View {
-        switch status {
-        case .authorized:
-            EmptyView()
-        case .notDetermined:
-            LabeledContent("Needs camera access.") {
-                Button("Allow…", action: ask)
-            }
-        default:
-            LabeledContent {
-                Button("Open Camera Settings") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")!)
-                }
-            } label: {
-                WarningLabel("Camera access is off.")
-            }
-        }
-    }
-}
-
-/// Accessibility, which lets the lock screen keep the keyboard when another app takes it, while Locky does not have it.
-/// Nothing once it does.
-struct KeyboardAccess: View {
-    @Binding var trusted: Bool
-
-    var body: some View {
-        if !trusted {
-            LabeledContent {
-                Button("Allow…") { trusted = Self.ask() }
-            } label: {
-                Text("Keep the keyboard on the lock screen")
-                Text("Needs Accessibility access.")
-            }
-        }
-    }
-
-    /// Shows macOS's prompt, which leads to Privacy & Security › Accessibility. Returns whether Locky has it now.
-    static func ask() -> Bool {
-        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-    }
-}
-
-/// Lock with the Touch ID button (settings.json's lock_key). Without Accessibility the line under the switch asks for
-/// it, and the switch still saves: the button follows as soon as Locky has it. That Allow… also keeps the keyboard on
-/// the lock screen.
+/// Lock with the Touch ID button (settings.json's lock_key). It waits for Accessibility, whose row comes just before it:
+/// the switch takes a click the moment Locky has it. One that is on stays free to turn off.
 struct LockKeyToggle: View {
     let model: AppModel
-    @Binding var trusted: Bool
 
     static let title = "Lock with the Touch ID button"
     static let subtitle = "Pressing the Touch ID button shows Locky instead of the macOS lock screen."
-    static let needsAccess = "Needs Accessibility access."
 
     var body: some View {
-        Toggle(isOn: model.store.bool("lock_key", default: false)) {
+        let on = model.store.bool("lock_key", default: false)
+        Toggle(isOn: on) {
             Text(Self.title)
-            if trusted {
-                Text(Self.subtitle)
-            } else {
-                // In the subtitle's font, as OpenAtLoginToggle's approval line, so the row keeps its height.
-                HStack(spacing: 8) {
-                    Text(Self.needsAccess)
-                        .foregroundStyle(.secondary)
-                    Button("Allow…") { trusted = KeyboardAccess.ask() }
-                        .buttonStyle(.link)
-                }
-                .font(.subheadline)
-            }
+            Text(Self.subtitle)
         }
+        .disabled(!Self.usable(granted: model.permissions.accessibility == .granted, on: on.wrappedValue))
     }
+
+    /// Whether the switch takes a click: with Accessibility, or to turn it off.
+    nonisolated static func usable(granted: Bool, on: Bool) -> Bool { granted || on }
 
     /// Whether this Mac has a Touch ID button: also with its lid closed, as Unlock with Touch ID reads it.
     static func hasButton() -> Bool { UnlockSection.touchIDHardware() }
