@@ -237,11 +237,11 @@ final class TransitionMask: NSObject {
         float cell = max(u.size.x, u.size.y) / 3.5;
         // Spread the noise, which gathers about the middle, over 0 to 1.
         float v = saturate((fbm(p / cell + float2(3.7, 9.2)) - 0.2) / 0.6);
-        if (u.unlock == 1) {
-            float far = length(max(u.origin, u.size - u.origin));
-            v = mix(v, distance(p, u.origin) / far, 0.55);
-        }
-        const float w = 0.08;
+        // Both ways the shapes grow from the origin (the middle coming in, the field going out), so the noise reads as
+        // an organic edge rather than scattered blobs.
+        float far = length(max(u.origin, u.size - u.origin));
+        v = mix(v, distance(p, u.origin) / far, 0.55);
+        const float w = 0.2;
         float t = mix(-w, 1.0 + w, u.progress);
         float shown = 1.0 - smoothstep(t - w, t, v);
         float edge = (v - (t - 0.5 * w)) / (0.3 * w);
@@ -279,7 +279,7 @@ final class TransitionMask: NSObject {
     fragment float4 transition_light(float4 position [[position]], constant TransitionUniforms &u [[buffer(0)]]) {
         float2 p = position.xy / u.scale;
         float rim = u.tiles == 1 ? 0.0 : dissolve(p, u).y;
-        return float4(float3(0.35 * rim), 0.18 * rim);
+        return float4(float3(0.35 * rim), 0.12 * rim);
     }
     """
 }
