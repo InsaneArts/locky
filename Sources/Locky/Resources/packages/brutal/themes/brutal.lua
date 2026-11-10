@@ -19,7 +19,8 @@ block(M, 48, 768, 372, "#e6ff02", ink, "// CLOCK")
 on(M, 48, 768, 372, "clock", { size = 182, weight = "heavy", color = ink, mono = true, numeric = false, tracking = -5, shadow = 0 }, "center")
 -- Top-right: weather on electric blue
 block(M + 786, 48, 554, 176, "#2b2bff", "#ffffff", "WEATHER")
-on(M + 786, 48, 554, 176, "weather", { style = "hero", color = "#ffffff", multicolor = false }, "leading", 30, 50, 24, 22)
+-- The line style: the hero's high/low row is always "muted" grey, unreadable on blue.
+on(M + 786, 48, 554, 176, "weather", { style = "line", size = 30, color = "#ffffff", muted = "#ffffff", multicolor = false, place = false }, "leading", 30, 50, 24, 22)
 -- Date on coral
 block(M + 786, 244, 268, 176, "#ff6b6b", ink, "DATE")
 on(M + 786, 244, 268, 176, "date", { format = "d", size = 86, weight = "heavy", color = ink, mono = true, numeric = false, shadow = 0 }, "center", 20, 44, 20, 40)
@@ -32,9 +33,7 @@ block(M, 448, 812, 300, "#ffffff", ink, "QUOTE")
 on(M, 448, 812, 300, "quote", { size = 30, color = ink, max_width = 720, text_align = "leading", font = nil }, "top-leading", 34, 62, 30, 26)
 -- Bottom-right: the month on butter
 block(M + 830, 448, 510, 300, "#fff7c2", ink, "CAL")
-on(M + 830, 448, 510, 300, "calendar", { size = 17, title = true, today_color = "#2b2bff", today_text = "#ffffff" }, "center", 30, 58, 24, 26)
--- A bright block framing the password field, keeping the brutalist language at the bottom
-block(493, 742, 454, 78, "#e6ff02", ink, nil)
+on(M + 830, 448, 510, 300, "calendar", { size = 15, title = true, today_color = "#2b2bff", today_text = "#ffffff" }, "center", 30, 48, 24, 14)
 
 return {
   name = "Neo-Brutalism",
