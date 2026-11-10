@@ -45,7 +45,7 @@ return {
 
     -- Bottom: process ticker (fills live) + uptime
     tag("PROC", "bottom-left", { 96, -150 }, "cyan"),
-    { "top", anchor = "bottom-left", offset = { 96, -40 }, opts = { rows = 4, width = 420, size = 12, sort = "cpu" } },
+    { "top", anchor = "bottom-left", offset = { 96, -40 }, opts = { rows = 4, width = 340, size = 12, sort = "cpu" } },
     { "uptime", anchor = "bottom-right", offset = { -96, -46 }, opts = { size = 12, color = "muted", label = "UPTIME" } },
   },
 }
