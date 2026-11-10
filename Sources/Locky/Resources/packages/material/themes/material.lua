@@ -30,7 +30,7 @@ return {
     or { gradient = { mix(primary, "#0c0e12", 0.78), bg }, angle = 160, noise = 0.02 },
   card = { style = "solid", radius = 30, fill = "surface", border = "border" },
   auth = {
-    style = "pill", anchor = "bottom", offset = { 0, -56 }, width = 300, avatar = true, name = false,
+    style = "pill", anchor = "bottom", offset = { 0, -56 }, width = 300, avatar = false, name = false,
     placeholder = "password", focus = "primary", font = { size = 15 },
   },
   widgets = {
