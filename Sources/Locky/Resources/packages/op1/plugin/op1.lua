@@ -9,7 +9,7 @@ locky.widget.define("op1.screen", {
   render = function(self)
     local o = self.opts
     return ui.vstack {
-      width = o.w, height = o.h, background = "#0b0d0b", radius = 6,
+      width = o.w - 48, height = o.h - 44, background = "#0b0d0b", radius = 6,   -- w × h is the outer size, padding included
       border = "#ff6600", border_width = 2, align = "leading", spacing = 8,
       padding = { 22, 24, 22, 24 },
       ui.text("2 · SCREEN", { size = 11, design = "monospaced", weight = "bold", color = o.color, tracking = 3 }),

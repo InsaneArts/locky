@@ -46,7 +46,7 @@ return {
 
     -- Row 1: the big clock (3 cols) and the OLED (1 col)
     card(0, R1, 3, 288, "clock", { size = 164, weight = "bold", design = "monospaced", color = "ink", tracking = -3, mono = true, numeric = false, shadow = 0 }),
-    { "op1.screen", anchor = "top-left", offset = { M + 3 * (CW + G), R1 }, opts = { w = CW, h = 244, color = "#00ff66" } },
+    { "op1.screen", anchor = "top-left", offset = { M + 3 * (CW + G), R1 }, opts = { w = CW, h = 288, color = "#00ff66" } },
 
     -- Row 2: meters, power, disk
     card(0, R2, 2, 176, "system", { style = "bars", width = 560, size = 15, color = "orange", color2 = "green" }, "leading"),
