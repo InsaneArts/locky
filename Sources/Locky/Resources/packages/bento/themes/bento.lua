@@ -5,7 +5,7 @@ local M, G = 48, 16
 local CW = (1440 - 2 * M - 3 * G) / 4        -- 4-column grid: 324
 local function cell(col, row, cols, h)
   local x = M + col * (CW + G)
-  local y = M + row
+  local y = row
   local w = cols * CW + (cols - 1) * G
   return { anchor = "top-left", offset = { x, y }, size = { w, h } }
 end
