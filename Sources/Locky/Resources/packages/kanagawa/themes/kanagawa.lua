@@ -17,11 +17,12 @@ return {
     placeholder = "password", focus = "crystal", font = { size = 14 },
   },
   widgets = {
-    { "clock", anchor = "left", offset = { 112, 118 },
+    -- In the deep water under the front wave: its crest rides 552 ± 25 points down, plus foam.
+    { "clock", anchor = "left", offset = { 112, 214 },
       opts = { size = 132, weight = "thin", color = "foam", tracking = -2, shadow = 0, numeric = false } },
-    { "date", anchor = "left", offset = { 118, 204 },
+    { "date", anchor = "left", offset = { 118, 300 },
       opts = { format = "EEEE · d MMMM", size = 16, weight = "regular", color = "crystal", case = "upper", tracking = 3 } },
-    { "moon", anchor = "top-right", offset = { -96, 96 }, size = { 150, 168 }, card = true, align = "center",
-      opts = { style = "full", size = 13, color = "foam" } },
+    { "moon", anchor = "top-right", offset = { -96, 96 }, size = { 124, 124 }, card = true, align = "center",
+      opts = { style = "symbol", size = 60, color = "foam" } },
   },
 }
