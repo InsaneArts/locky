@@ -20,10 +20,11 @@ return {
   widgets = {
     { "clock", anchor = "center", offset = { 0, -44 },
       opts = { size = 150, weight = "semibold", color = "fg", tracking = 2, shadow = 0, numeric = false, skew = 8, glow = 16 } },
-    { "text", anchor = "center", offset = { 0, 58 }, opts = { text = "現在  ・  N O W", size = 16, color = "cyan", tracking = 4, font = "Menlo" } },
-    { "date", anchor = "center", offset = { 0, 92 }, opts = { format = "EEEE d MMMM", size = 15, color = "muted", case = "upper", tracking = 3 } },
-    { "weather", anchor = "top-right", offset = { -60, 56 }, size = { 220, 92 }, card = true, align = "center", opts = { style = "line", size = 15 } },
-    { "worldclock", anchor = "top-left", offset = { 60, 56 }, size = { 230, 150 }, card = true, align = "top-leading",
+    -- Both lines sit on the bright sun, so they take the darkest violet.
+    { "text", anchor = "center", offset = { 0, 58 }, opts = { text = "現在  ・  N O W", size = 16, color = "skytop", tracking = 4, font = "Menlo" } },
+    { "date", anchor = "center", offset = { 0, 92 }, opts = { format = "EEEE d MMMM", size = 15, color = "skytop", case = "upper", tracking = 3 } },
+    { "weather", anchor = "top-right", offset = { -60, 56 }, size = { 260, 92 }, card = true, align = "center", opts = { style = "line", size = 15, place = false } },
+    { "worldclock", anchor = "top-left", offset = { 60, 56 }, size = { 230, 92 }, card = true, align = "leading",
       opts = { style = "rows", size = 13, zones = { { "Tokyo", "Asia/Tokyo" }, { "LA", "America/Los_Angeles" } } } },
     { "quote", anchor = "bottom", offset = { 0, -128 }, opts = { size = 15, max_width = 620, text_align = "center", color = "fg" } },
   },
