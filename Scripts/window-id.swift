@@ -27,9 +27,15 @@ for _ in 0..<100 {
     let found: [String: Any]?
     let outer = parent.flatMap { parent in windows.first { number($0) == parent }.flatMap(bounds) }
     if let parent {
-        // A sheet lies inside its window's bounds.
+        // A sheet lies over its window, between the window's left and right edges. Under a short window, such as a
+        // Settings pane, it reaches below the window's bottom edge.
         let frame = outer?.insetBy(dx: -1, dy: -1)
-        found = frame.flatMap { frame in windows.first { number($0) != parent && bounds($0).map(frame.contains) == true } }
+        found = frame.flatMap { frame in
+            windows.first { window in
+                guard number(window) != parent, let sheet = bounds(window) else { return false }
+                return sheet.intersects(frame) && sheet.minX >= frame.minX && sheet.maxX <= frame.maxX
+            }
+        }
     } else {
         found = windows.first { window in
             let title = window[kCGWindowName as String] as? String ?? ""
