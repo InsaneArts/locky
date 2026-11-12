@@ -26,8 +26,10 @@ BIN="$ROOT/Locky.app/Contents/MacOS/Locky"
 TOOL="$ROOT/.build/window-id"
 [[ -x "$TOOL" && "$TOOL" -nt "$ROOT/Scripts/window-id.swift" ]] || swiftc -O -o "$TOOL" "$ROOT/Scripts/window-id.swift"
 
+MADE=""
 if [[ -z "${LOCKY_CONFIG_DIR:-}" ]]; then
   CONFIG=$(mktemp -d)
+  MADE=$CONFIG
   echo '{ "privacy": true }' > "$CONFIG/settings.json"
 else
   CONFIG=$(cd "$LOCKY_CONFIG_DIR" && pwd)
@@ -39,7 +41,7 @@ ARGS=(window "$SECTION" --behind --size "${SIZE:-1240x780}")
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \
   LOCKY_APPEARANCE="${APPEARANCE:-}" "$BIN" "${ARGS[@]}" >/dev/null 2>&1 &
 PID=$!
-trap 'kill $PID 2>/dev/null || true' EXIT
+trap 'kill $PID 2>/dev/null || true; [[ -z "$MADE" ]] || rm -rf "$MADE"' EXIT
 # Any titled window: the Themes window ("Themes", or the theme's name in Customize), the Settings window (its
 # pane's name), or the Welcome.
 ID=$("$TOOL" "$PID" "") || { echo "No Locky window appeared" >&2; exit 1; }

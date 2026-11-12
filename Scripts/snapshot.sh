@@ -20,8 +20,10 @@ BIN="$ROOT/Locky.app/Contents/MacOS/Locky"
 TOOL="$ROOT/.build/window-id"
 [[ -x "$TOOL" && "$TOOL" -nt "$ROOT/Scripts/window-id.swift" ]] || swiftc -O -o "$TOOL" "$ROOT/Scripts/window-id.swift"
 
+MADE=""
 if [[ -z "${LOCKY_CONFIG_DIR:-}" ]]; then
   CONFIG=$(mktemp -d)
+  MADE=$CONFIG
   echo '{ "privacy": true }' > "$CONFIG/settings.json"
 else
   CONFIG=$(cd "$LOCKY_CONFIG_DIR" && pwd)
@@ -29,7 +31,7 @@ fi
 LOCKY_CONFIG_DIR="$CONFIG" LOCKY_RESOURCES="$ROOT/Sources/Locky/Resources" LOCKY_WALLPAPER="${LOCKY_WALLPAPER:-none}" \
   LOCKY_APPEARANCE="${APPEARANCE:-}" "$BIN" preview --theme "$THEME" --size "$SIZE" --behind >/dev/null 2>&1 &
 PID=$!
-trap 'kill $PID 2>/dev/null || true' EXIT
+trap 'kill $PID 2>/dev/null || true; [[ -z "$MADE" ]] || rm -rf "$MADE"' EXIT
 ID=$("$TOOL" "$PID") || { echo "No preview window appeared" >&2; exit 1; }
 sleep "${WAIT:-4}"
 screencapture -x -o -l "$ID" "$OUT"
