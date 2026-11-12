@@ -235,7 +235,10 @@ final class LuaRuntime: @unchecked Sendable {
         for (index, id) in previous.instances.enumerated() {
             if let id, !disabled.contains(id) { running[index] = id }
         }
-        func same(_ a: Theme.Placement, _ b: Theme.Placement) -> Bool { a.known && a.widget == b.widget && a.options == b.options }
+        // The family too: an instance keeps the one it was made with (Customize's Size picker sets it).
+        func same(_ a: Theme.Placement, _ b: Theme.Placement) -> Bool {
+            a.known && a.widget == b.widget && a.family == b.family && a.options == b.options
+        }
         var instances = [Int?](repeating: nil, count: theme.widgets.count)
         // The same place first, so equal widgets keep their order; then anywhere, for a widget that moved in the list.
         for (index, placement) in theme.widgets.enumerated() where old.indices.contains(index) && same(old[index], placement) {

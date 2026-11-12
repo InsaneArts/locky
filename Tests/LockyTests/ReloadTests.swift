@@ -41,6 +41,21 @@ import Testing
         #expect(try runtime.sync { try runtime.call("render", [.int(old)], budget: 1) }.first?.isNil ?? true)
     }
 
+    /// Customize's Size picker sets a family. The instance keeps the family it was made with, and render draws by it, so
+    /// a new family needs a new instance, as a new option does.
+    @Test func aNewFamilyStartsANewInstance() async throws {
+        let sandbox = try sandbox()
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        defer { runtime.stop() }
+        let started = await runtime.start(theme: "t")
+        let reloaded = try #require(await runtime.reload(theme: "t", settings: edit([
+            .table(["ref": .int(1), "widget": .string("counter"), "family": .string("small")]),
+            .table(["ref": .int(2), "widget": .string("counter")]),
+        ]), previous: started))
+        #expect(reloaded.instances[0] != started.instances[0] && reloaded.instances[0] != nil)
+        #expect(reloaded.instances[1] == started.instances[1])
+    }
+
     @Test func aWidgetMovedInTheListKeepsItsInstance() async throws {
         let sandbox = try sandbox()
         let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
