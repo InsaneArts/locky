@@ -27,8 +27,8 @@ import Testing
         #expect(AppModel.Section.settings.title == "General")
         #expect(AppModel.Section.panes == [.settings, .lockScreen, .unlock, .customization, .plugins])
         // The old Lua Config pane, remembered from an older Locky, is no pane now: General opens.
-        defer { UserDefaults.standard.removeObject(forKey: SettingsTabViewController.paneKey) }
-        UserDefaults.standard.set("config", forKey: SettingsTabViewController.paneKey)
+        defer { UserDefaults.standard.removeObject(forKey: SettingsWindowController.paneKey) }
+        UserDefaults.standard.set("config", forKey: SettingsWindowController.paneKey)
         #expect(SettingsWindowController.lastPane == .settings)
     }
 
@@ -43,30 +43,47 @@ import Testing
         #expect(CLI.GUILaunch.parse(["preview"]).window == nil)
     }
 
-    /// Minimize and zoom are dimmed in the Settings window and hidden in the Welcome; a pane change gives the window the
-    /// pane's title and size, with the top edge where it was, and is remembered.
-    @Test func theSettingsWindowFollowsItsPanes() throws {
+    /// The views of class `type` in `view` that show. SwiftUI keeps a pane it replaced in the window, invisible, for a moment.
+    private func views<V: NSView>(_ type: V.Type, in view: NSView?) -> [V] {
+        guard let view, !view.isHidden, view.alphaValue > 0 else { return [] }
+        return ((view as? V).map { [$0] } ?? []) + view.subviews.flatMap { views(type, in: $0) }
+    }
+
+    /// Minimize and zoom are dimmed in the Settings window and hidden in the Welcome. The Settings window has one size
+    /// for every pane; its sidebar lists the panes, the pane it selects names the window, and is remembered.
+    @Test func theSettingsWindowFollowsItsSidebar() async throws {
         _ = NSApplication.shared
         let defaults = UserDefaults.standard
-        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
+        defer { defaults.removeObject(forKey: SettingsWindowController.paneKey) }
         let model = AppModel(store: SettingsStore(config: try Sandbox().config))
-        let settings = try #require(SettingsWindowController(model: model, onClose: {}).window)
+        let controller = SettingsWindowController(model: model, onClose: {})
+        let settings = try #require(controller.window)
         #expect(settings.standardWindowButton(.miniaturizeButton)?.isEnabled == false)
         #expect(settings.standardWindowButton(.zoomButton)?.isEnabled == false)
-        #expect(settings.title == "General" && settings.contentRect(forFrameRect: settings.frame).size == SettingsTabViewController.size(of: .settings))
-        let items = try #require(settings.toolbar?.items)
-        #expect(items.map(\.label) == ["General", "Lock Screen", "Unlock", "Customization", "Plugins"])
-        // The top edge goes at the screen's, where Plugins fits under it.
-        let visible = try #require((settings.screen ?? NSScreen.main)?.visibleFrame)
-        settings.setFrameTopLeftPoint(CGPoint(x: visible.minX + 40, y: visible.maxY))
+        controller.show(.settings, behind: true)
+        defer { settings.close() }
+        #expect(settings.contentRect(forFrameRect: settings.frame).size == SettingsWindowController.size)
+        // The sidebar: one row for each pane, at its width, with General selected.
+        var sidebar: NSTableView?
+        #expect(await wait {
+            settings.contentView?.layoutSubtreeIfNeeded()
+            sidebar = views(NSTableView.self, in: settings.contentView).first { $0.numberOfRows == AppModel.Section.panes.count }
+            return sidebar?.selectedRow == 0 && settings.title == "General"
+        }, "\(String(describing: sidebar?.selectedRow)) \(settings.title)")
+        let list = try #require(sidebar)
+        #expect(await wait { list.enclosingScrollView?.frame.width == SettingsWindowController.sidebarWidth },
+                "\(String(describing: list.enclosingScrollView?.frame))")
+        // A click on Plugins' row.
         let top = settings.frame.maxY
-        let plugins = try #require(items.last)
-        NSApp.sendAction(try #require(plugins.action), to: plugins.target, from: plugins)
-        #expect(settings.title == "Plugins" && settings.contentRect(forFrameRect: settings.frame).size == CGSize(width: 560, height: 520))
-        #expect(settings.frame.maxY == top)
-        #expect(SettingsWindowController.lastPane == .plugins)
+        list.selectRowIndexes([4], byExtendingSelection: false)
+        list.delegate?.tableViewSelectionDidChange?(Notification(name: NSTableView.selectionDidChangeNotification, object: list))
+        #expect(await wait { controller.visit.pane == .plugins && settings.title == "Plugins" }, "\(controller.visit.pane) \(settings.title)")
+        #expect(settings.contentRect(forFrameRect: settings.frame).size == SettingsWindowController.size && settings.frame.maxY == top)
+        // The pane is remembered. With no wait between the two lines: the tests share the key.
+        controller.visit.pane = .unlock
+        #expect(SettingsWindowController.lastPane == .unlock)
         // Only a pane comes back.
-        defaults.set("welcome", forKey: SettingsTabViewController.paneKey)
+        defaults.set("welcome", forKey: SettingsWindowController.paneKey)
         #expect(SettingsWindowController.lastPane == .settings)
 
         let welcome = try #require(WelcomeWindowController(model: model, onClose: {}).window)
@@ -77,135 +94,53 @@ import Testing
         #expect(welcome.frame.width > 0 && abs(welcome.frame.midX - screen.visibleFrame.midX) < 1)
     }
 
-    /// A pane change keeps the window's top edge only while the window then fits: else it moves up, and on a screen
-    /// shorter than the pane it takes the screen's height, so the pane scrolls.
-    @Test func aPaneChangeKeepsTheWindowOnScreen() async throws {
-        _ = NSApplication.shared
-        let defaults = UserDefaults.standard
-        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
-        let model = AppModel(store: SettingsStore(config: try Sandbox().config))
-        let controller = SettingsWindowController(model: model, onClose: {})
-        let settings = try #require(controller.window)
-        let visible = try #require((settings.screen ?? NSScreen.main)?.visibleFrame)
-        controller.show(.plugins, behind: true)
-        defer { settings.close() }
-        // Plugins low on the screen: General's height no longer fits under its top edge.
-        settings.setFrameTopLeftPoint(CGPoint(x: visible.minX + 40, y: visible.minY + 300))
-        let items = try #require(settings.toolbar?.items)
-        let general = try #require(items.first)
-        NSApp.sendAction(try #require(general.action), to: general.target, from: general)
-        #expect(settings.title == "General")
-        // The window goes there over 0.2 s.
-        #expect(await wait { settings.frame.minY >= visible.minY && settings.frame.maxY <= visible.maxY }, "\(settings.frame) in \(visible)")
-
+    /// The window keeps its top edge only while it then fits on its screen: else it moves up, and on a screen shorter
+    /// than it, it takes the screen's height, so the pane scrolls.
+    @Test func theSettingsWindowStaysOnScreen() {
         let short = CGRect(x: 0, y: 40, width: 1440, height: 600)
-        let tall = CGRect(x: 100, y: 0, width: 640, height: 833)
-        #expect(SettingsTabViewController.fitted(tall, in: short) == CGRect(x: 100, y: 40, width: 640, height: 600))
-        let low = CGRect(x: 100, y: 10, width: 640, height: 400)
-        #expect(SettingsTabViewController.fitted(low, in: short) == CGRect(x: 100, y: 40, width: 640, height: 400))
-        let fits = CGRect(x: 100, y: 100, width: 640, height: 400)
-        #expect(SettingsTabViewController.fitted(fits, in: short) == fits)
+        let tall = CGRect(x: 100, y: 0, width: 780, height: 833)
+        #expect(SettingsWindowController.fitted(tall, in: short) == CGRect(x: 100, y: 40, width: 780, height: 600))
+        let low = CGRect(x: 100, y: 10, width: 780, height: 400)
+        #expect(SettingsWindowController.fitted(low, in: short) == CGRect(x: 100, y: 40, width: 780, height: 400))
+        let fits = CGRect(x: 100, y: 100, width: 780, height: 400)
+        #expect(SettingsWindowController.fitted(fits, in: short) == fits)
+        #expect(SettingsWindowController.fitted(tall, in: nil) == tall)
     }
 
-    /// The height of the rows of the pane that `settings` shows: its form's document, in the whole points a window has.
-    private func rows(of settings: NSWindow) -> CGFloat? {
-        func form(in view: NSView) -> NSScrollView? { (view as? NSScrollView) ?? view.subviews.lazy.compactMap(form(in:)).first }
-        settings.contentView?.layoutSubtreeIfNeeded()
-        return settings.contentView.flatMap(form(in:))?.documentView?.frame.height.rounded(.up)
-    }
-
-    /// Waits until `settings` is as tall as its pane's rows.
-    private func fitsItsRows(_ settings: NSWindow) async -> Bool {
-        await wait { rows(of: settings).map { $0 > 0 && $0 == settings.contentRect(forFrameRect: settings.frame).height } ?? false }
-    }
-
-    /// A pane's window is as tall as the pane's rows: nothing scrolls, and nothing is empty under the last row.
-    @Test(arguments: [AppModel.Section.settings, .lockScreen, .unlock, .customization])
-    func aPaneIsAsTallAsItsRows(_ pane: AppModel.Section) async throws {
-        _ = NSApplication.shared
-        defer { UserDefaults.standard.removeObject(forKey: SettingsTabViewController.paneKey) }
-        let controller = SettingsWindowController(model: AppModel(store: SettingsStore(config: try Sandbox().config)), onClose: {})
-        let settings = try #require(controller.window)
-        controller.show(pane, behind: true)
-        defer { settings.close() }
-        #expect(await fitsItsRows(settings), "\(pane): \(settings.frame), rows \(String(describing: rows(of: settings)))")
-        #expect(settings.contentRect(forFrameRect: settings.frame).width == SettingsTabViewController.width)
-    }
-
-    /// On a screen shorter than General, the window takes the screen's height and General scrolls, so its last rows
-    /// can be reached. A later pane change on a taller screen gives General its full height again.
-    @Test func onAShortScreenGeneralScrolls() async throws {
-        _ = NSApplication.shared
-        let defaults = UserDefaults.standard
-        defer { defaults.removeObject(forKey: SettingsTabViewController.paneKey) }
-        let sandbox = try Sandbox()
-        try sandbox.write("settings.json", #"{ "privacy": true }"#)
-        let controller = SettingsWindowController(model: AppModel(store: SettingsStore(config: sandbox.config)), onClose: {})
-        let settings = try #require(controller.window)
-        let tabs = try #require(settings.contentViewController as? SettingsTabViewController)
-        controller.show(.settings, behind: true)
-        defer { settings.close() }
-        #expect(await fitsItsRows(settings))
-        let full = settings.frame
-        tabs.place(settings, full, in: CGRect(x: 0, y: 40, width: 1440, height: 300), animate: false)
-        #expect(await wait { rows(of: settings).map { $0 > settings.contentRect(forFrameRect: settings.frame).height } ?? false })
-        #expect(settings.frame.height == 300, "\(settings.frame)")
-        #expect(settings.frame.minY == 40)
-
-        tabs.place(settings, full, in: CGRect(x: 0, y: 0, width: 1440, height: 2000), animate: false)
-        #expect(settings.frame.height == full.height)
-        #expect(rows(of: settings) == settings.contentRect(forFrameRect: settings.frame).height)
-    }
-
-    /// A window fitted to a short screen gets General's full height again when it opens again on a tall one.
-    @Test func reopeningOnATallScreenGivesGeneralItsHeight() async throws {
-        _ = NSApplication.shared
-        defer { UserDefaults.standard.removeObject(forKey: SettingsTabViewController.paneKey) }
-        let sandbox = try Sandbox()
-        try sandbox.write("settings.json", #"{ "privacy": true }"#)
-        let controller = SettingsWindowController(model: AppModel(store: SettingsStore(config: sandbox.config)), onClose: {})
-        let settings = try #require(controller.window)
-        let tabs = try #require(settings.contentViewController as? SettingsTabViewController)
-        controller.show(.settings, behind: true)
-        defer { settings.close() }
-        // The real screen is the tall one: General gets the height of its rows there.
-        #expect(await fitsItsRows(settings))
-        let full = settings.frame.height
-        try #require(full > 300)
-        tabs.place(settings, settings.frame, in: CGRect(x: 0, y: 40, width: 1440, height: 300), animate: false)
-        #expect(settings.frame.height == 300)
-        settings.close()
-        controller.show(.settings, behind: true)
-        #expect(settings.frame.height == full, "\(settings.frame)")
-    }
-
-    /// The Message field saves when focus leaves it, and closing the window is one way focus leaves.
-    @Test func theMessageSavesWhenTheSettingsWindowCloses() async throws {
+    /// The Message field saves when focus leaves it and when it goes: another pane takes the Lock Screen pane's place, or
+    /// the window closes. One test for both: SwiftUI gives the keyboard to one window's field at a time.
+    @Test func theMessageSavesWhenItsFieldGoes() async throws {
         let sandbox = try Sandbox()
         let model = await loaded(sandbox)
         // AppDelegate keeps the controller, the window's delegate.
         let controller = SettingsWindowController(model: model, onClose: {})
         let window = try #require(controller.window)
-        try #require(window.contentViewController as? SettingsTabViewController).select(.lockScreen)
-        func field(in view: NSView) -> NSTextField? {
-            if let field = view as? NSTextField, field.isEditable { return field }
-            return view.subviews.lazy.compactMap(field(in:)).first
+        defer { UserDefaults.standard.removeObject(forKey: SettingsWindowController.paneKey) }
+        /// Types `text` over the Message field's `old` text, as a person does: the text reaches the page, and nothing saves yet.
+        func type(_ text: String, over old: String) async throws {
+            var message: NSTextField?
+            #expect(await wait {
+                window.contentView?.layoutSubtreeIfNeeded()
+                message = views(NSTextField.self, in: window.contentView).first { $0.isEditable && $0.stringValue == old }
+                return message != nil
+            })
+            let editing = try #require(message)
+            #expect(window.makeFirstResponder(editing))
+            let editor = try #require(editing.currentEditor() as? NSTextView)
+            editor.insertText(text, replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
+            try await Task.sleep(for: .milliseconds(300))
         }
-        var message: NSTextField?
-        #expect(await wait {
-            window.contentView?.layoutSubtreeIfNeeded()
-            message = field(in: window.contentView!)
-            return message != nil
-        })
-        let editing = try #require(message)
-        #expect(window.makeFirstResponder(editing))
-        let editor = try #require(editing.currentEditor() as? NSTextView)
-        editor.insertText("Call 555", replacementRange: NSRange(location: 0, length: 0))
-        // As a person types: the text reaches the page before the window closes.
-        try await Task.sleep(for: .milliseconds(300))
+        controller.visit.pane = .lockScreen
+        try await type("Call 555", over: "")
         #expect(model.store.settings["message"].isNil)
-        window.performClose(nil)
+        controller.visit.pane = .unlock
         #expect(await wait { model.store.settings["message"] == .string("Call 555") })
+
+        controller.visit.pane = .lockScreen
+        try await type("Call 911", over: "Call 555")
+        #expect(model.store.settings["message"] == .string("Call 555"))
+        window.performClose(nil)
+        #expect(await wait { model.store.settings["message"] == .string("Call 911") })
     }
 
     /// Any process can send a size with a request: NaN or infinity would reach AppKit, which traps on it, and a frame

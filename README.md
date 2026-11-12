@@ -88,11 +88,11 @@ background, the colors, the font, and where the password field sits). Schedule (
 clock in the toolbar, or File › Schedule Themes…) changes the theme by time of day or with Light and Dark mode, and
 Move to Trash removes a theme you made.
 
-Settings… (⌘,) opens the **Settings** window, with five panes. General has Open at login, the Lock Now shortcut, Lock
-with the Touch ID button, and auto-lock. Lock Screen has the lock screen message, Hide personal information, Lock
-animation (seven styles, with a preview), and Turn the display off. Unlock has Touch ID and a photo after wrong
-passwords. Customization opens the config folder and init.lua, shows init.lua's problems, and makes new themes and
-widgets. Plugins installs, updates, and removes plugins. Everything but Open at login saves to
+Settings… (⌘,) opens the **Settings** window, with five panes in its sidebar. General has Open at login, the Lock Now
+shortcut, Lock with the Touch ID button, and auto-lock. Lock Screen has the lock screen message, Hide personal
+information, Lock animation (seven styles, with a preview), and Turn the display off. Unlock has Touch ID and a photo
+after wrong passwords. Customization opens the config folder and init.lua, shows init.lua's problems, and makes new
+themes and widgets. Plugins installs, updates, and removes plugins. Everything but Open at login saves to
 `~/.config/locky/settings.json`, which wins over init.lua key by key: see [settings.md](docs/settings.md).
 
 ## Configure

@@ -8,8 +8,7 @@ final class AppModel {
     enum Section: String, CaseIterable, Identifiable {
         /// The Themes window.
         case themes
-        /// The Settings window's panes: General, Lock Screen, Unlock, Customization, Plugins. Each fits its rows without
-        /// scrolling: as one pane, General was taller than a MacBook's screen.
+        /// The Settings window's panes: General, Lock Screen, Unlock, Customization, Plugins.
         case settings, lockScreen = "lock-screen", unlock, customization, plugins
         /// The Welcome window.
         case welcome
@@ -43,11 +42,11 @@ final class AppModel {
         var symbol: String {
             switch self {
             case .themes: "paintpalette"
-            case .settings: "gearshape"
-            case .lockScreen: "lock.display"
-            case .unlock: "lock.open"
-            case .customization: "wrench.and.screwdriver"
-            case .plugins: "puzzlepiece.extension"
+            case .settings: "gearshape.fill"
+            case .lockScreen: "lock.fill"
+            case .unlock: "lock.open.fill"
+            case .customization: "wrench.and.screwdriver.fill"
+            case .plugins: "puzzlepiece.extension.fill"
             case .welcome: "hand.wave"
             }
         }

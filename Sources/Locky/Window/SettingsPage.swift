@@ -362,7 +362,7 @@ private struct LockAnimationPreview: View {
     }
 }
 
-/// The lock screen message. It saves on Return and when the field loses focus.
+/// The lock screen message. It saves on Return, when the field loses focus, and when another pane takes its place.
 private struct MessageField: View {
     let model: AppModel
     @State private var text = ""
@@ -383,6 +383,7 @@ private struct MessageField: View {
                 .frame(maxWidth: 320)
         }
         .onAppear { text = saved }
+        .onDisappear(perform: save)
         .onChange(of: saved) { if !focused { text = saved } }
     }
 
