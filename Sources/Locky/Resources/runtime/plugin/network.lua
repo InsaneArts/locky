@@ -123,25 +123,8 @@ locky.widget.define("network", {
   choices = { style = { "line", "chart" } },
   init = function(self)
     self.state.history, self.state.up_history, self.state.ports = {}, {}, {}
-    self:system({ "networksetup", "-listallhardwareports" }, function(self, result)
-      for port, device in result.stdout:gmatch("Hardware Port: ([^\n]+)\nDevice: (%S+)") do
-        self.state.ports[device] = port
-      end
-    end)
-    -- The interface carrying the default route, and its address, now and again a minute later.
-    self:every(60, function(self)
-      self:system({ "route", "-n", "get", "default" }, function(self, result)
-        local interface = result.stdout:match("interface: (%S+)")
-        if not interface then
-          self:set({ interface = false })
-          return
-        end
-        self:system({ "ipconfig", "getifaddr", interface }, function(self, address)
-          self:set({ interface = interface, address = address.code == 0 and address.stdout:match("%S+") or nil })
-        end)
-      end)
-    end)
-    self:every(self.opts.every, function(self)
+    -- One reading of the interface's byte counters; each one after the first gives the rates.
+    local function read(self)
       local interface = self.state.interface
       if not interface then
         return
@@ -170,7 +153,30 @@ locky.widget.define("network", {
         end
         s.last = { down = inbytes, up = outbytes, at = now }
       end)
+    end
+    self:system({ "networksetup", "-listallhardwareports" }, function(self, result)
+      for port, device in result.stdout:gmatch("Hardware Port: ([^\n]+)\nDevice: (%S+)") do
+        self.state.ports[device] = port
+      end
     end)
+    -- The interface carrying the default route, and its address, now and again a minute later.
+    self:every(60, function(self)
+      self:system({ "route", "-n", "get", "default" }, function(self, result)
+        local interface = result.stdout:match("interface: (%S+)")
+        if not interface then
+          self:set({ interface = false })
+          return
+        end
+        self:system({ "ipconfig", "getifaddr", interface }, function(self, address)
+          self:set({ interface = interface, address = address.code == 0 and address.stdout:match("%S+") or nil })
+          -- The first reading at once, so the rates show one interval into a lock rather than two.
+          if not self.state.last then
+            read(self)
+          end
+        end)
+      end)
+    end)
+    self:every(self.opts.every, read)
   end,
   render = function(self)
     local o, s = self.opts, self.state
