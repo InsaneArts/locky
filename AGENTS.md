@@ -10,6 +10,10 @@ themes, and packs depend on it, and on the formats of settings.json and the them
   and then with no change (the first frame of a way out); run it again before you suspect your change.
 - A theme or a widget: `locky check --theme ID`, then `locky render --theme ID --out x.png`, and look at the picture.
   From the source tree: `LOCKY_RESOURCES=$PWD/Sources/Locky/Resources .build/debug/Locky check --theme ID`.
+- A window: `INSTALL=0 Scripts/package_app.sh`, then `Scripts/window-shot.sh themes out.png`, and look at the picture.
+  Only the packaged app has the Liquid Glass look (package_app.sh names the SDK in the binary); `swift build` and the
+  tests draw windows as macOS 15 does. The Themes window follows Scene's look (~/Development/Scene): Design.swift has
+  the shared pieces.
 - Work on your own config folder: `LOCKY_CONFIG_DIR=$(mktemp -d)`. ~/.config/locky is the owner's.
 - The lock itself (the keyboard, Touch ID, the hand-over to the macOS lock screen) has tests for its parts only:
   ask the owner to lock and unlock on a real Mac.
