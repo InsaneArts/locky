@@ -85,6 +85,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var handingOver = false
     /// A pending check that the lock holds the keyboard.
     private var keyboardCheck: Task<Void, Never>?
+    /// Lock only: once a second, whether another app's window shows above the shields (watchWindowsAbove).
+    private var aboveCheck: Task<Void, Never>?
     private var keyboardObserver: NSObjectProtocol?
     private var activityMonitor: Any?
     private var idleTimer: Task<Void, Never>?
@@ -227,6 +229,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         if mode == .lock {
             installEmergencyExit()
             reclaimKeyboardSoon()
+            watchWindowsAbove()
             // The kiosk options (no app switching, no Force Quit) apply only while Locky is the active app, and a
             // non-activating shield does not activate it, even when clicked. Input to the lock is the moment macOS
             // grants an activation: ask then.
@@ -312,6 +315,7 @@ final class LockSession: NSObject, NSWindowDelegate {
         touchIDFallback?.cancel()
         revealTask?.cancel()
         keyboardCheck?.cancel()
+        aboveCheck?.cancel()
         if let keyTap {
             CGEvent.tapEnable(tap: keyTap.port, enable: false)
             CFRunLoopRemoveSource(CFRunLoopGetMain(), keyTap.source, .commonModes)
@@ -513,6 +517,36 @@ final class LockSession: NSObject, NSWindowDelegate {
         if secureInput { return .handOver }
         if tapped { return .keep }
         return trusted ? .tap : .handOver
+    }
+
+    /// macOS draws some windows above every app's, the shields' level included: "Allow accessory to connect?" for a
+    /// new keyboard, for one. Anyone at the Mac could answer it, so the lock hands over to the macOS lock screen, which
+    /// keeps such prompts until the Mac is unlocked.
+    private func watchWindowsAbove() {
+        aboveCheck = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !ended else { return }
+                guard !handingOver, let shield = windows.first, shield.windowNumber > 0 else { continue }
+                let above = CGWindowListCopyWindowInfo([.optionOnScreenAboveWindow], CGWindowID(shield.windowNumber)) as? [[String: Any]] ?? []
+                if let owner = Self.windowsAbove(above, ownPID: getpid()).first {
+                    handOver("a window of \(owner) showed above the lock")
+                }
+            }
+        }
+    }
+
+    /// The apps whose windows, of `above` (CGWindowListCopyWindowInfo's, over the shields), show something: not the
+    /// lock's own, not the window server's (the pointer), and not empty or transparent ones.
+    nonisolated static func windowsAbove(_ above: [[String: Any]], ownPID: Int32) -> [String] {
+        above.compactMap { info in
+            guard let pid = info[kCGWindowOwnerPID as String] as? Int32, pid != ownPID,
+                  (info[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+                  let bounds = info[kCGWindowBounds as String] as? [String: Double],
+                  (bounds["Width"] ?? 0) > 1, (bounds["Height"] ?? 0) > 1 else { return nil }
+            let owner = info[kCGWindowOwnerName as String] as? String ?? "process \(pid)"
+            return owner == "Window Server" ? nil : owner
+        }
     }
 
     /// Secure keyboard entry is on for another app (Terminal's Secure Keyboard Entry, a focused password field).

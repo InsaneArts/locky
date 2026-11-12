@@ -34,6 +34,9 @@ The Welcome's last page says the same. The sections below give the details.
   Without it, Locky switches to the macOS lock screen. It switches too when another app has secure keyboard
   entry on (Terminal's Secure Keyboard Entry, a focused password field), which hides the keys from any event
   tap.
+- **Nothing shows above the lock.** macOS draws some windows above every app's, Locky's lock included, such as
+  "Allow accessory to connect?" when a keyboard is plugged in. Anyone at the Mac could answer one, so within a
+  second Locky switches to the macOS lock screen, which keeps such prompts until you unlock.
 - **Every key goes to the password field.** The field has the keyboard from the lock's first frame, also while it is
   hidden (a theme that shows it on activity, or the ambient mode). If anything takes the keyboard from it, the next key gives it back
   before its character lands, and so does a click anywhere on the lock. While the event tap holds the keys, Locky asks

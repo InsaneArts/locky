@@ -20,7 +20,8 @@ themes, and packs depend on it, and on the formats of settings.json and the them
   Lua runs on its own queue (LuaRuntime), with time budgets and a memory limit; a file whose open would block (a pipe,
   a device) is refused.
 - A lock holds the keyboard, or hands over to the macOS lock screen (LockSession.checkKeyboard). During a hand-over
-  nothing takes the keyboard; after one that fails, the lock asks for it again.
+  nothing takes the keyboard; after one that fails, the lock asks for it again. It hands over too when another app's
+  window shows above it (watchWindowsAbove): macOS draws its accessory prompt above every app.
 - locky-guard locks the Mac with the macOS lock screen if Locky dies or hangs during a lock.
 - settings.json is written atomically, and only when it reads without an error. A broken file stays as it is, and
   Locky goes on with the last good settings (~/Library/Application Support/Locky/settings-last-good.json).
