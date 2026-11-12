@@ -27,15 +27,17 @@ import Testing
         for autoLock in [AutoLockSettings(idleMinutes: 5, systemSleep: true), AutoLockSettings(idleMinutes: 2.5, displaySleep: true, screenSaver: true),
                          AutoLockSettings(screenSaver: true)] {
             var settings = Settings()
-            settings.autoLock = autoLock
+            settings.setAutoLock(autoLock)
             try settings.save(config: sandbox.config)
             #expect(Settings.load(config: sandbox.config).settings.autoLock == autoLock)
         }
         // Only what is on is written, whole minutes as integers.
-        #expect(AutoLockSettings(idleMinutes: 5, systemSleep: true).settingsValue == .table(["idle_minutes": .int(5), "system_sleep": .bool(true)]))
+        var written = Settings()
+        written.setAutoLock(AutoLockSettings(idleMinutes: 5, systemSleep: true))
+        #expect(written["auto_lock"] == .table(["idle_minutes": .int(5), "system_sleep": .bool(true)]))
         // All off drops the key.
         var settings = Settings(["auto_lock": .table(["display_sleep": .bool(true)])])
-        settings.autoLock = AutoLockSettings()
+        settings.setAutoLock(AutoLockSettings())
         #expect(settings.values.isEmpty)
     }
 }

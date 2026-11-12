@@ -28,24 +28,11 @@ struct AutoLockSettings: Equatable, Sendable {
                   screenSaver: value["screen_saver"].bool ?? false)
     }
 
-    /// Only what is on, and nil when nothing is, which drops the key from settings.json.
-    var settingsValue: LuaValue {
-        var table: [String: LuaValue] = [:]
-        if let idleMinutes { table["idle_minutes"] = Int(exactly: idleMinutes).map(LuaValue.int) ?? .double(idleMinutes) }
-        if displaySleep { table["display_sleep"] = .bool(true) }
-        if systemSleep { table["system_sleep"] = .bool(true) }
-        if screenSaver { table["screen_saver"] = .bool(true) }
-        return table.isEmpty ? .nil : .table(table)
-    }
 }
 
 extension Settings {
-    /// The four triggers. Setting it rebuilds auto_lock from them and drops other keys: the windows write through
-    /// `setAutoLock` instead.
-    var autoLock: AutoLockSettings {
-        get { AutoLockSettings(self["auto_lock"]) }
-        set { self["auto_lock"] = newValue.settingsValue }
-    }
+    /// The four triggers. The windows write them through `setAutoLock`, which keeps the keys it does not know.
+    var autoLock: AutoLockSettings { AutoLockSettings(self["auto_lock"]) }
 
     /// Sets one auto_lock key in place (nil removes it). Every other key, unknown ones too, stays; an empty table removes
     /// auto_lock.
