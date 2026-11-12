@@ -388,9 +388,13 @@ final class LockSession: NSObject, NSWindowDelegate {
         }
         let workspace = NSWorkspace.shared.notificationCenter
         // While the display sleeps nobody sees the widgets: their timers pause until it wakes.
-        observe(workspace, NSWorkspace.screensDidSleepNotification) { $0.runtime?.setPaused(true) }
+        observe(workspace, NSWorkspace.screensDidSleepNotification) {
+            $0.runtime?.setPaused(true)
+            $0.setBackgroundsAsleep(true)
+        }
         observe(workspace, NSWorkspace.screensDidWakeNotification) {
             $0.runtime?.setPaused(false)
+            $0.setBackgroundsAsleep(false)
             $0.touchID?.restart()
             $0.displayOff?.noteActivity()
             $0.ambient?.noteActivity()
@@ -456,6 +460,17 @@ final class LockSession: NSObject, NSWindowDelegate {
         guard mode != .embedded else { return }
         authModel.capsLock = Self.capsLock(NSEvent.modifierFlags)
         if mode == .lock { reclaimKeyboard() } else { screens.first?.focusField() }
+    }
+
+    /// Moving shaders and videos stop while the displays sleep, and go on when they wake: no one sees them meanwhile.
+    /// (A lock can last a night; Lua's timers pause the same way.)
+    private func setBackgroundsAsleep(_ asleep: Bool) {
+        func walk(_ view: NSView) {
+            (view as? ShaderView)?.setAsleep(asleep)
+            (view as? VideoView)?.setAsleep(asleep)
+            view.subviews.forEach(walk)
+        }
+        screens.forEach(walk)
     }
 
     /// macOS treats activation as a request it may refuse: ask a few times, and check that the lock holds the

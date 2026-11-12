@@ -432,6 +432,15 @@ final class PictureView: NSView, BackgroundLoading {
     }
 }
 
+extension ShaderView {
+    /// The displays slept or woke: a display that is off shows nothing, so a moving shader stops drawing until they wake.
+    /// A still one (drawn once) stays as it is.
+    func setAsleep(_ asleep: Bool) {
+        guard !enableSetNeedsDisplay else { return }
+        isPaused = asleep
+    }
+}
+
 /// Plays a video on a silent loop, like a Wallpaper Engine video wallpaper.
 final class VideoView: NSView, BackgroundLoading {
     private let player = AVQueuePlayer()
@@ -445,8 +454,17 @@ final class VideoView: NSView, BackgroundLoading {
         shade.backgroundColor = NSColor.black.withAlphaComponent(dim).cgColor
     }
 
+    /// As ShaderView's: no frames while the displays sleep.
+    func setAsleep(_ asleep: Bool) {
+        guard playing else { return }
+        if asleep { player.pause() } else { player.play() }
+    }
+
+    private let playing: Bool
+
     /// Not `playing`, it shows the video's first frame.
     init(url: URL, dim: Double, playing: Bool = true) {
+        self.playing = playing
         super.init(frame: .zero)
         wantsLayer = true
         let playerLayer = AVPlayerLayer(player: player)

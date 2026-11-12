@@ -48,6 +48,22 @@ import Testing
         #expect(corner.red < 20 && corner.green < 20 && corner.blue < 20, "corner: \(corner)")
     }
 
+    /// While the displays sleep a moving shader stops drawing, and goes on when they wake. A still one stays still.
+    @Test func aShaderSleepsWithTheDisplays() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("shaders/flat.metal", "float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) { return float4(1); }")
+        let url = sandbox.config.appending(path: "shaders/flat.metal")
+        let moving = try #require(ShaderView.make(url: url, colors: [], speed: 1, resolution: 1, fps: 30, params: [], dim: 0) as? ShaderView)
+        let still = try #require(ShaderView.make(url: url, colors: [], speed: 1, resolution: 1, fps: 0, params: [], dim: 0) as? ShaderView)
+        #expect(!moving.isPaused && still.isPaused)
+        moving.setAsleep(true)
+        still.setAsleep(true)
+        #expect(moving.isPaused && still.isPaused)
+        moving.setAsleep(false)
+        still.setAsleep(false)
+        #expect(!moving.isPaused && still.isPaused)
+    }
+
     @Test func anUnknownThemeFails() async throws {
         let sandbox = try Sandbox()
         await #expect(throws: Render.Failure.self) {
