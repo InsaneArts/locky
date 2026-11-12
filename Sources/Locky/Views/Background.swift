@@ -60,6 +60,10 @@ enum Backgrounds {
             picture.set(blur: blur, dim: dim, tint: nil, tintAmount: 0)
         case (.video(let before, _), .video(let after, let dim), let video as VideoView) where before == after:
             video.set(dim: dim)
+        case (.shader(let before, _, let speed, let resolution, let fps, _, _),
+              .shader(let after, let colors, let newSpeed, let newResolution, let newFPS, let params, let dim), let shader as ShaderView)
+            where before == after && speed == newSpeed && resolution == newResolution && fps == newFPS:
+            shader.set(colors: colors, params: params, dim: dim)
         case (.color, .color(let hex), let gradient as GradientView), (.gradient, .color(let hex), let gradient as GradientView):
             gradient.set(colors: [hex, hex], angle: 180, noise: 0)
         case (.color, .gradient(let colors, let angle, let noise), let gradient as GradientView),
@@ -83,7 +87,7 @@ protocol BackgroundLoading: AnyObject {
 /// theme ships a .metal file and no binary. See docs/themes.md for the contract.
 final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
     /// Matches LockyParams in the shader header below.
-    private struct Params {
+    fileprivate struct Params {
         var colors: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>)
         var values: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>)
         var count: Int32
@@ -101,7 +105,7 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
 
     private var pipeline: MTLRenderPipelineState!
     private var queue: MTLCommandQueue!
-    private var params: Params!
+    fileprivate var params: Params!
     private var speed: Float = 1
     private var resolutionScale: CGFloat = 1
     private var start = CACurrentMediaTime()
@@ -203,7 +207,7 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
         }
     }
 
-    nonisolated private static func makeParams(colors: [String], values: [Double], dim: Double) -> Params {
+    nonisolated fileprivate static func makeParams(colors: [String], values: [Double], dim: Double) -> Params {
         var rgb = colors.prefix(8).map { hex -> SIMD4<Float> in
             // Not a color (a role the palette lacks, a typo): black. NSColor.black is gray, with no red component to
             // read: reading it raises, which ended the app.
@@ -433,6 +437,12 @@ final class PictureView: NSView, BackgroundLoading {
 }
 
 extension ShaderView {
+    /// Other colors, parameters, or dim for the same shader: no new view, so no new compile. A still one draws again.
+    func set(colors: [String], params values: [Double], dim: Double) {
+        params = Self.makeParams(colors: colors, values: values, dim: dim)
+        if isPaused { needsDisplay = true }
+    }
+
     /// The displays slept or woke: a display that is off shows nothing, so a moving shader stops drawing until they wake.
     /// A still one (drawn once) stays as it is.
     func setAsleep(_ asleep: Bool) {

@@ -64,6 +64,23 @@ import Testing
         #expect(!moving.isPaused && still.isPaused)
     }
 
+    /// Customize's Dim slider, or a color, on a shader: the view takes the change in place. A new view would compile
+    /// the shader again at each step of the slider. Another shader needs a new view.
+    @Test func aShaderTakesANewDimInPlace() throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("shaders/flat.metal", "float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) { return float4(1); }")
+        try sandbox.write("shaders/other.metal", "float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) { return float4(0); }")
+        let url = sandbox.config.appending(path: "shaders/flat.metal")
+        let old = Theme.Background.shader(url: url, colors: ["#000000"], speed: 1, resolution: 1, fps: 30, params: [], dim: 0)
+        let view = Backgrounds.makeView(old, screen: nil)
+        #expect(view is ShaderView)
+        let dimmer = Theme.Background.shader(url: url, colors: ["#ff0000"], speed: 1, resolution: 1, fps: 30, params: [2], dim: 0.4)
+        #expect(Backgrounds.update(view, from: old, to: dimmer))
+        let other = Theme.Background.shader(url: sandbox.config.appending(path: "shaders/other.metal"), colors: [], speed: 1, resolution: 1,
+                                            fps: 30, params: [], dim: 0)
+        #expect(!Backgrounds.update(view, from: dimmer, to: other))
+    }
+
     @Test func anUnknownThemeFails() async throws {
         let sandbox = try Sandbox()
         await #expect(throws: Render.Failure.self) {
