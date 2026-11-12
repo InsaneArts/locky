@@ -184,9 +184,9 @@ final class LockSession: NSObject, NSWindowDelegate {
                 if node != nil { self?.answered.insert(id) }
                 self?.deliver(id, replacingViews: true) { $0.present(node) }
             } },
-            failed: { [weak self] id, message, disabled in Task { @MainActor in
+            failed: { [weak self] id, message, _ in Task { @MainActor in
                 self?.answered.insert(id)
-                self?.deliver(id, replacingViews: false) { $0.fail(message, disabled: disabled) }
+                self?.deliver(id, replacingViews: false) { $0.fail(message) }
             } }
         ))
         self.runtime = runtime
@@ -949,7 +949,7 @@ final class LockSession: NSObject, NSWindowDelegate {
                     hosts[id, default: []].append(host)
                     latest[id]?.forEach { $0(host) }
                 } else {
-                    host.fail("theme \(theme.id): no widget named \"\(placement.widget)\"", disabled: true)
+                    host.fail("theme \(theme.id): no widget named \"\(placement.widget)\"")
                 }
             }
             if main {
@@ -1044,7 +1044,7 @@ final class LockSession: NSObject, NSWindowDelegate {
                 let own = old.instances.firstIndex(of: id).flatMap { views.indices.contains($0) ? views[$0] : nil }
                 if own !== host { latest[id]?.forEach { $0(host) } }
             } else {
-                host.fail("theme \(next.theme.id): no widget named \"\(next.theme.widgets[index].widget)\"", disabled: true)
+                host.fail("theme \(next.theme.id): no widget named \"\(next.theme.widgets[index].widget)\"")
             }
         }
     }

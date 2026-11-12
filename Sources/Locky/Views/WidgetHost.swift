@@ -6,7 +6,6 @@ import SwiftUI
 final class WidgetModel {
     var node: Node?
     var error: String?
-    var disabled = false
     /// The content's natural size, in points; the screen view lays widgets out with it.
     var contentSize: CGSize = .zero
 }
@@ -74,9 +73,8 @@ final class WidgetHost: NSView {
         model.error = nil
     }
 
-    func fail(_ message: String, disabled: Bool) {
+    func fail(_ message: String) {
         model.error = message
-        model.disabled = disabled
     }
 
     /// The frame for this widget on a screen of `bounds`, at `scale`. A widget without a size takes its
