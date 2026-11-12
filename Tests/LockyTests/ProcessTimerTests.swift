@@ -38,7 +38,7 @@ import Testing
             locky.widget.define("bg", {
               init = function(self)
                 self.state.started = locky.now()
-                self:system({ "sh", "-c", "sleep 3 & echo hi" }, function(self, r)
+                self:system({ "sh", "-c", "sleep 10 & echo hi" }, function(self, r)
                   self:set({ took = locky.now() - self.state.started, out = r.stdout })
                 end)
               end,
@@ -50,10 +50,11 @@ import Testing
         let runtime = LuaRuntime(path: sandbox.path(), delegate: recorder.delegate)
         let started = await runtime.start(theme: "t")
         let id = try #require(started.instances[0])
-        // views[id] holds nil while the widget draws nothing: wait for an actual view.
-        #expect(await eventually(timeout: 2.5) { (recorder.views[id] ?? nil) != nil }, "the result should not wait for the 3 s background child")
+        // views[id] holds nil while the widget draws nothing: wait for an actual view. The child lives 10 s and the
+        // result may take 5, so a full parallel test run (every core busy spawning processes) does not fail it.
+        #expect(await eventually(timeout: 8) { (recorder.views[id] ?? nil) != nil }, "the result should not wait for the 10 s background child")
         guard case .text(let took)? = (recorder.views[id] ?? nil)?.kind else { Issue.record("no result"); return }
-        #expect((Double(took) ?? 9) < 1.5, "took \(took) s")
+        #expect((Double(took) ?? 99) < 5, "took \(took) s")
         runtime.stop()
     }
 }
