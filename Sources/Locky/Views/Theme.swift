@@ -97,81 +97,6 @@ struct Theme: Sendable, Equatable {
         font: FontSpec(), background: .color("#000000"), overlay: nil, card: Card(), auth: Auth(), widgets: []
     )
 
-    init(id: String, name: String, description: String?, directory: URL?, palette: [String: String], font: FontSpec,
-         background: Background, overlay: Background?, card: Card, auth: Auth, widgets: [Placement]) {
-        self.id = id
-        self.name = name
-        self.description = description
-        self.directory = directory
-        self.palette = palette
-        self.font = font
-        self.background = background
-        self.overlay = overlay
-        self.card = card
-        self.auth = auth
-        self.widgets = widgets
-    }
-
-    init(lua value: LuaValue, path: RuntimePath) throws {
-        id = value["id"].string ?? "theme"
-        name = value["name"].string ?? id
-        description = value["description"].string
-        directory = value["dir"].string.map { URL(fileURLWithPath: $0) }
-        palette = (value["palette"].table ?? [:]).compactMapValues(\.string)
-        font = Self.font(value["font"])
-
-        let card = value["card"]
-        self.card = Card(style: card["style"].string ?? "glass", radius: card["radius"].number ?? 22,
-                         fill: card["fill"].string, border: card["border"].string)
-
-        let auth = value["auth"]
-        self.auth = Auth(
-            style: auth["style"].string ?? "pill",
-            anchor: auth["anchor"].string.flatMap(Anchor.init(rawValue:)) ?? .bottom,
-            offset: Self.point(auth["offset"]) ?? CGPoint(x: 0, y: -60),
-            width: auth["width"].number ?? 240,
-            avatar: auth["avatar"].bool ?? true,
-            name: auth["name"].bool ?? true,
-            hint: auth["hint"].bool ?? true,
-            placeholder: auth["placeholder"].string,
-            font: Self.font(auth["font"]),
-            prompt: auth["prompt"].string,
-            reveal: auth["reveal"].string ?? "always",
-            idle: Self.seconds(auth["idle"], 1...3600, 20),
-            dim: Self.seconds(auth["dim"], 0...1, 0),
-            focus: auth["focus"].string ?? "accent",
-            size: auth["font"]["size"].number ?? 14,
-            hintAlign: auth["hint_align"].string ?? (auth["style"].string == "terminal" ? "leading" : "center"),
-            glow: auth["glow"].bool == true ? 6 : auth["glow"].number,
-            ringWidth: auth["ring"]["width"].number,
-            ringFill: auth["ring"]["fill"].string,
-            ringGlow: auth["ring"]["glow"].bool ?? false
-        )
-
-        let defaultCard = self.card.style
-        widgets = (value["widgets"].array ?? []).map { entry in
-            let card: String? = switch entry["card"] {
-            case .bool(true): defaultCard
-            case .string(let style): style
-            default: nil
-            }
-            return Placement(
-                widget: entry["widget"].string ?? "?",
-                anchor: entry["anchor"].string.flatMap(Anchor.init(rawValue:)) ?? .center,
-                offset: Self.point(entry["offset"]) ?? .zero,
-                size: Self.point(entry["size"]).map { CGSize(width: $0.x, height: $0.y) },
-                align: entry["align"].string,
-                card: card,
-                family: entry["family"].string,
-                allDisplays: entry["display"].string == "all",
-                known: entry["known"].bool ?? false,
-                options: entry["opts"]
-            )
-        }
-        background = try Self.background(value["background"], palette: palette, directory: directory, path: path)
-        overlay = value["overlay"].table == nil ? nil : try Self.background(value["overlay"], palette: palette, directory: directory, path: path)
-    }
-
     private static func font(_ value: LuaValue) -> FontSpec {
         FontSpec(family: value["family"].string, design: value["design"].string, weight: value["weight"].string)
     }
@@ -237,5 +162,68 @@ struct Theme: Sendable, Equatable {
             return .gradient(colors: colors.map { resolve($0, palette) }, angle: value["angle"].number ?? 180, noise: value["noise"].number ?? 0)
         }
         return .color(resolve(value["color"].string ?? "bg", palette))
+    }
+}
+
+// In an extension, so Swift still makes Theme's memberwise init (Theme.fallback uses it).
+extension Theme {
+    init(lua value: LuaValue, path: RuntimePath) throws {
+        id = value["id"].string ?? "theme"
+        name = value["name"].string ?? id
+        description = value["description"].string
+        directory = value["dir"].string.map { URL(fileURLWithPath: $0) }
+        palette = (value["palette"].table ?? [:]).compactMapValues(\.string)
+        font = Self.font(value["font"])
+
+        let card = value["card"]
+        self.card = Card(style: card["style"].string ?? "glass", radius: card["radius"].number ?? 22,
+                         fill: card["fill"].string, border: card["border"].string)
+
+        let auth = value["auth"]
+        self.auth = Auth(
+            style: auth["style"].string ?? "pill",
+            anchor: auth["anchor"].string.flatMap(Anchor.init(rawValue:)) ?? .bottom,
+            offset: Self.point(auth["offset"]) ?? CGPoint(x: 0, y: -60),
+            width: auth["width"].number ?? 240,
+            avatar: auth["avatar"].bool ?? true,
+            name: auth["name"].bool ?? true,
+            hint: auth["hint"].bool ?? true,
+            placeholder: auth["placeholder"].string,
+            font: Self.font(auth["font"]),
+            prompt: auth["prompt"].string,
+            reveal: auth["reveal"].string ?? "always",
+            idle: Self.seconds(auth["idle"], 1...3600, 20),
+            dim: Self.seconds(auth["dim"], 0...1, 0),
+            focus: auth["focus"].string ?? "accent",
+            size: auth["font"]["size"].number ?? 14,
+            hintAlign: auth["hint_align"].string ?? (auth["style"].string == "terminal" ? "leading" : "center"),
+            glow: auth["glow"].bool == true ? 6 : auth["glow"].number,
+            ringWidth: auth["ring"]["width"].number,
+            ringFill: auth["ring"]["fill"].string,
+            ringGlow: auth["ring"]["glow"].bool ?? false
+        )
+
+        let defaultCard = self.card.style
+        widgets = (value["widgets"].array ?? []).map { entry in
+            let card: String? = switch entry["card"] {
+            case .bool(true): defaultCard
+            case .string(let style): style
+            default: nil
+            }
+            return Placement(
+                widget: entry["widget"].string ?? "?",
+                anchor: entry["anchor"].string.flatMap(Anchor.init(rawValue:)) ?? .center,
+                offset: Self.point(entry["offset"]) ?? .zero,
+                size: Self.point(entry["size"]).map { CGSize(width: $0.x, height: $0.y) },
+                align: entry["align"].string,
+                card: card,
+                family: entry["family"].string,
+                allDisplays: entry["display"].string == "all",
+                known: entry["known"].bool ?? false,
+                options: entry["opts"]
+            )
+        }
+        background = try Self.background(value["background"], palette: palette, directory: directory, path: path)
+        overlay = value["overlay"].table == nil ? nil : try Self.background(value["overlay"], palette: palette, directory: directory, path: path)
     }
 }
