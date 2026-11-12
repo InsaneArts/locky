@@ -127,30 +127,8 @@ enum Editors {
     /// or what the shell profile adds. The shell runs /usr/bin/env, so its own syntax plays no part: zsh, bash,
     /// and fish work alike. nil when the shell fails or takes longer than `timeout` seconds.
     static func loginPath(shell: String, timeout: Double = 3) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: shell)
-        process.arguments = ["-l", "-c", "/usr/bin/env"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        process.standardInput = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        nonisolated(unsafe) var data = Data()
-        let read = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
-            data = output.fileHandleForReading.readDataToEndOfFile()
-            read.signal()
-        }
-        // A profile that waits for input or the network is stopped. A program it left running may hold the
-        // pipe open after the shell ends; the read gives up on that too.
-        guard read.wait(timeout: .now() + timeout) == .success else {
-            process.terminate()
-            return nil
-        }
+        // A profile that waits for input or the network is stopped.
+        guard let data = ProgramOutput.read(shell, ["-l", "-c", "/usr/bin/env"], timeout: timeout) else { return nil }
         let lines = String(decoding: data, as: UTF8.self).split(separator: "\n")
         return lines.last { $0.hasPrefix("PATH=") }.map { String($0.dropFirst(5)) }
     }

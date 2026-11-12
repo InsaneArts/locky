@@ -360,19 +360,11 @@ enum HerdrSocket {
     static let programs = ["/opt/homebrew/bin/herdr", "/usr/local/bin/herdr",
                            FileManager.default.homeDirectoryForCurrentUser.appending(path: ".local/bin/herdr").path]
 
-    /// The default running session's socket, from `herdr session list --json`; nil without herdr.
+    /// The default running session's socket, from `herdr session list --json`; nil without herdr, or when it does not
+    /// answer within 3 seconds: a hung herdr must not hold the thread that watches it.
     static func sessionPath() -> String? {
-        guard let program = programs.first(where: FileManager.default.isExecutableFile(atPath:)) else { return nil }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: program)
-        process.arguments = ["session", "list", "--json"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        process.standardInput = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return nil }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        guard let program = programs.first(where: FileManager.default.isExecutableFile(atPath:)),
+              let data = ProgramOutput.read(program, ["session", "list", "--json"], timeout: 3) else { return nil }
         return sessionPath(in: data)
     }
 
