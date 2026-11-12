@@ -135,6 +135,8 @@ final class HerdrService: @unchecked Sendable {
     private func loop(_ run: Run) {
         var model = HerdrModel()
         var failures = 0
+        // Quick tries after a pane went away, since the last session that worked.
+        var paneRetries = 0
         var found: String?
         while !run.isCancelled {
             // A socket found by asking herdr stays the one to try.
@@ -145,10 +147,16 @@ final class HerdrService: @unchecked Sendable {
                 // Returns when the agents' panes changed: subscribe again, at once.
                 try session(at: path, run: run, model: &model)
                 failures = 0
+                paneRetries = 0
                 continue
             } catch Ending.paneNotFound {
-                if !pause(0.2, run) { return }
-                continue
+                // The pane went away between the snapshot and the subscription: again at once, a few times. A herdr
+                // that keeps naming a pane it cannot find gets the backoff below.
+                paneRetries += 1
+                if paneRetries <= 3 {
+                    if !pause(0.2, run) { return }
+                    continue
+                }
             } catch Ending.unreachable {
                 publish(.offline, from: run)
             } catch {

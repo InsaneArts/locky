@@ -275,6 +275,19 @@ final class States: @unchecked Sendable {
         #expect(server.log.filter { $0 == "subscribe" }.count == 2)
     }
 
+    /// A herdr that keeps naming a pane it cannot find gets a few quick tries, then the backoff: not a snapshot and a
+    /// subscription five times a second for as long as the lock shows.
+    @Test func aPaneThatNeverComesBackGetsTheBackoff() async throws {
+        let server = try FakeHerdrServer(agents: Self.agents)
+        server.rejectSubscriptions(1000)
+        let service = HerdrService(socket: { _ in server.path }, backoff: [1, 2], safety: 60), states = States()
+        let id = service.subscribe(states.add)
+        defer { service.unsubscribe(id) }
+        try await Task.sleep(for: .seconds(2))
+        // The first, three quick tries, and one after the first 1 s pause.
+        #expect(server.log.filter { $0 == "subscribe" }.count <= 6, "\(server.log.filter { $0 == "subscribe" }.count) subscriptions")
+    }
+
     @Test func aStatusChangeShowsAtOnce() async throws {
         let server = try FakeHerdrServer(agents: Self.agents)
         let service = service(server.path), states = States()
