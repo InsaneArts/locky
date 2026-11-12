@@ -280,7 +280,6 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             var result = await Inspection.load(config: config, settings: store.settings)
             guard !Task.isCancelled else { return }
-            if let problem = store.problem { result.problems.insert(problem, at: 0) }
             inspection = result
             revision += 1
             // A customizeInUse waited for this read, and customize() ends the wait. During a lock nothing opens: the
