@@ -996,9 +996,6 @@ final class LockSession: NSObject, NSWindowDelegate {
             auth = next.theme.auth
         }
         reconcileWidgets(from: old, to: next, on: screen)
-        if mode == .preview, next.problems != old.problems {
-            screen.banner = next.problems.isEmpty ? nil : NSHostingView(rootView: ProblemsBanner(problems: next.problems))
-        }
         screen.layoutNow()
         return true
     }
@@ -1531,8 +1528,8 @@ final class LockScreenView: NSView {
         }
     }
 
-    /// A new background over the old one once it has loaded, so the screen never goes blank: at once in the theme
-    /// editor's preview, else faded in. It replaces one still loading.
+    /// A new background over the old one once it has loaded, so the screen never goes blank. It replaces one still
+    /// loading.
     func replaceBackground(with view: NSView) {
         incomingBackground?.removeFromSuperview()
         incomingBackground = nil
@@ -1551,23 +1548,10 @@ final class LockScreenView: NSView {
                 try? await Task.sleep(for: .milliseconds(30))
             }
             guard let self, incomingBackground === view else { return }
-            guard fadesIn else {
-                view.alphaValue = 1
-                incomingBackground = nil
-                background = view
-                return
-            }
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.25
-                context.timingFunction = Motion.easeOut
-                view.animator().alphaValue = 1
-            }, completionHandler: {
-                MainActor.assumeIsolated { [weak self] in
-                    guard let self, incomingBackground === view else { return }
-                    incomingBackground = nil
-                    background = view
-                }
-            })
+            // At once: only the theme editor's preview replaces a background (reload), and it fades in as a whole.
+            view.alphaValue = 1
+            incomingBackground = nil
+            background = view
         }
     }
 
