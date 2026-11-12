@@ -487,8 +487,11 @@ import Testing
         let session = LockSession(mode: .embedded, options: options)
         session.begin()
         let screen = try #require(container.subviews.first as? LockScreenView)
-        let deadline = Date().addingTimeInterval(3)
-        while screen.background == nil, Date() < deadline { try? await Task.sleep(for: .milliseconds(20)) }
+        // The theme in place, its hint too: a full parallel test run can take seconds to get there.
+        let deadline = Date().addingTimeInterval(10)
+        while screen.background == nil || (reveal == "activity" && screen.glanceHint == nil), Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
         return (session, screen)
     }
 
