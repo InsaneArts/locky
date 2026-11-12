@@ -50,9 +50,6 @@ static void *locky_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
         return NULL;
     }
     g->used = g->used - old + nsize;
-    if (g->used > g->peak) {
-        g->peak = g->used;
-    }
     if (g->soft_limit > 0 && g->used > g->soft_limit) {
         g->over_soft = 1;
     }

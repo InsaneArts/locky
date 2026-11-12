@@ -93,16 +93,6 @@ enum LuaValue: Sendable, Equatable {
         case .function: "function"
         }
     }
-
-    /// Every registry reference inside this value, so the owner can release them.
-    var refs: [LuaRef] {
-        switch self {
-        case .function(let ref): [ref]
-        case .array(let values): values.flatMap(\.refs)
-        case .table(let values): values.values.flatMap(\.refs)
-        default: []
-        }
-    }
 }
 
 extension LuaValue {

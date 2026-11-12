@@ -28,7 +28,6 @@ typedef struct LockyGuard {
                            * ends then even if it used no CPU time, since waiting holds the Lua queue too */
     int timed_out;        /* set once the deadline passes; cleared when the protected call returns */
     size_t used;          /* bytes the state holds now */
-    size_t peak;
     size_t soft_limit;    /* above this, Lua code fails with a memory error at its next check */
     size_t hard_limit;    /* an allocation that would pass this fails at once */
     int over_soft;        /* set by the allocator; the hook collects garbage, then checks again */
@@ -71,7 +70,6 @@ double locky_cpu_now(void);
 static inline const char *locky_lua_release(void) { return LUA_RELEASE; }
 
 /* Function-like macros and variadic functions Swift cannot import. */
-static inline void locky_gc_collect(lua_State *L) { lua_gc(L, LUA_GCCOLLECT); }
 static inline int locky_registryindex(void) { return LUA_REGISTRYINDEX; }
 static inline void locky_pop(lua_State *L, int n) { lua_settop(L, -(n) - 1); }
 

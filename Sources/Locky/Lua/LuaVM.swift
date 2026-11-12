@@ -51,9 +51,7 @@ final class LuaVM {
     }
 
     var memoryUsed: Int { Int(guardBox.pointee.used) }
-    var memoryPeak: Int { Int(guardBox.pointee.peak) }
 
-    func collectGarbage() { locky_gc_collect(state) }
 
     // MARK: Loading and calling
 
@@ -89,7 +87,7 @@ final class LuaVM {
 
     /// Calls a function under a time budget in seconds. Throws the Lua error, traceback included.
     @discardableResult
-    func call(_ ref: LuaRef, _ args: [LuaValue] = [], budget: Double, allowFunctions: Bool = false) throws -> [LuaValue] {
+    func call(_ ref: LuaRef, _ args: [LuaValue] = [], budget: Double) throws -> [LuaValue] {
         let L = state
         let top = lua_gettop(L)
         defer { lua_settop(L, top) }
@@ -101,7 +99,7 @@ final class LuaVM {
         var remaining = Self.conversionLimit
         var results: [LuaValue] = []
         for index in top + 1 ..< lua_gettop(L) + 1 {
-            results.append(try value(at: index, in: L, allowFunctions: allowFunctions, remaining: &remaining))
+            results.append(try value(at: index, in: L, allowFunctions: false, remaining: &remaining))
         }
         return results
     }
@@ -134,7 +132,6 @@ final class LuaVM {
         liveRefs -= 1
     }
 
-    func release(_ refs: [LuaRef]) { refs.forEach(release) }
 
     // MARK: Natives
 

@@ -75,7 +75,7 @@ import Testing
         #expect {
             try run(vm, "local t = {} for i = 1, 1e9 do t[i] = ('x'):rep(64) .. i end", budget: 10)
         } throws: { ($0 as? LuaError)?.message.contains("not enough memory") == true }
-        vm.collectGarbage()
+        _ = try run(vm, "collectgarbage()")
         #expect(vm.memoryUsed < 16 << 20)
         #expect(try run(vm, "return 'still alive'") == [.string("still alive")])
     }

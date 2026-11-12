@@ -367,7 +367,6 @@ final class LuaRuntime: @unchecked Sendable {
     }
 
     /// Lua memory in bytes, for tests and health. Read on the queue.
-    var memoryUsed: Int { vm?.memoryUsed ?? 0 }
 
     /// Errors so far in init.lua, plugin scripts, and themes. Read on the queue.
     var problemsSoFar: [String] { problems }
