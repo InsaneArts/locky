@@ -392,6 +392,26 @@ import Testing
         #expect(!manager.apply(updates).ok)
     }
 
+    /// An update that applies nothing leaves the lockfile as it was, by hand formatting too: dotfiles diffs stay empty.
+    @Test func applyingNothingLeavesTheLockfileAlone() throws {
+        let sandbox = try Sandbox()
+        let repo = try makePlugin(in: sandbox, greeting: "hello")
+        let manager = try synced(repo, in: sandbox)
+        _ = try commit("hi", in: repo)
+        let updates = manager.run(.check).updates
+        let lockfile = sandbox.path().lockfile
+        // The same lockfile, formatted by hand: on one line.
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: lockfile))
+        let handWritten = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        try handWritten.write(to: lockfile, atomically: true, encoding: .utf8)
+        #expect(try PackManager.readLockfile(lockfile).plugins["hello"] != nil)
+        // The same revision the check saw, so the update is refused only for its target.
+        var stale = try #require(updates.first)
+        stale.latest = "not-a-revision"
+        #expect(!manager.apply([stale]).ok)
+        #expect(try String(contentsOf: lockfile, encoding: .utf8) == handWritten)
+    }
+
     @Test func onlyEncryptedSourcesAreAccepted() throws {
         let sandbox = try Sandbox()
         for src in ["http://example.com/x.git", "file:///tmp/x", "/tmp/x", "git://example.com/x"] {

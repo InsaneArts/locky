@@ -214,6 +214,7 @@ struct PackManager {
         } catch {
             return Report(lines: ["cannot read \(LuaError.shortenPaths(path.lockfile.path)): \(error.localizedDescription). Fix or delete it; nothing was changed."], ok: false)
         }
+        let read = lockfile
         var lines: [String] = [], ok = true
         for update in updates {
             let dir = path.packs.appending(path: update.name)
@@ -232,11 +233,14 @@ struct PackManager {
             lockfile.plugins[update.name]?.rev = latest
             lines.append("updated \(update.name) \(entry.rev.prefix(7)) → \(latest.prefix(7))")
         }
-        do {
-            try writeLockfile(lockfile)
-        } catch {
-            ok = false
-            lines.append("cannot write \(LuaError.shortenPaths(path.lockfile.path)): \(error.localizedDescription)")
+        // As run does: a lockfile nothing changed keeps its own formatting.
+        if lockfile != read {
+            do {
+                try writeLockfile(lockfile)
+            } catch {
+                ok = false
+                lines.append("cannot write \(LuaError.shortenPaths(path.lockfile.path)): \(error.localizedDescription)")
+            }
         }
         return Report(lines: lines, ok: ok)
     }
