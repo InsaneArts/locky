@@ -97,6 +97,8 @@ struct ThemeEditorPage: View {
                 .previewFrame()
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The canvas lies on the theme's own colors, as the theme's page in the gallery does.
+                .background { AmbientBackground(info: info, id: info.id, isLight: ThemeLook(palette: info.palette).isLight) }
                 .inspector(isPresented: $inspectorShown) {
                     Group {
                         if let current {
