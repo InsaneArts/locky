@@ -257,7 +257,9 @@ struct NodeView: View, Equatable {
     /// A date template with a seconds field ("ss", "s") outside quoted literals.
     static func showsSeconds(_ format: String) -> Bool {
         var quoted = false
-        for character in format {
+        // The "s" of the prefix is no seconds field.
+        let fields = format.hasPrefix("skeleton:") ? format.dropFirst("skeleton:".count) : Substring(format)
+        for character in fields {
             if character == "'" { quoted.toggle() } else if !quoted, character == "s" { return true }
         }
         return false

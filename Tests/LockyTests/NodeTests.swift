@@ -67,4 +67,13 @@ import Testing
         #expect(SystemInfo.format(date, "HH:mm") == "09:05")
         #expect(!SystemInfo.format(date, "skeleton:MMMMd").isEmpty)
     }
+
+    /// Digits roll unless the format shows seconds. The "s" of "skeleton:" is not a seconds field.
+    @Test func onlyASecondsFieldShowsSeconds() {
+        #expect(NodeView.showsSeconds("HH:mm:ss"))
+        #expect(NodeView.showsSeconds("skeleton:jms"))
+        #expect(!NodeView.showsSeconds("HH:mm"))
+        #expect(!NodeView.showsSeconds("skeleton:EEEEdMMMM"))
+        #expect(!NodeView.showsSeconds("EEEE 'stamp'"))
+    }
 }
