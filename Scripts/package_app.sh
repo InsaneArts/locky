@@ -62,6 +62,14 @@ if [[ "$CONF" == "release" ]] && grep -q "could not load resource bundle" "$APP/
 fi
 xattr -cr "$APP"
 
+# macOS draws an app's windows by the SDK its binary names: Liquid Glass from 26 on, the look of macOS 15 before. SwiftPM
+# writes the deployment target there instead of the SDK it built with, so Locky's windows kept the old look beside apps
+# built in Xcode. The binary names the SDK that built it. Before signing: this changes the binary.
+BIN="$APP/Contents/MacOS/$APP_NAME"
+MINOS=$(xcrun vtool -show-build "$BIN" | awk '/minos/ { print $2; exit }')
+xcrun vtool -set-build-version macos "$MINOS" "$(xcrun --show-sdk-version)" -replace -output "$BIN" "$BIN" \
+  2> >(grep -v "code signature will be invalid" >&2)
+
 # The guard first, then the app that contains it. Every mode, ad-hoc too, signs with the hardened runtime, so
 # DYLD_INSERT_LIBRARIES and other injected code cannot hook Locky or its guard. The runtime blocks the camera
 # (intruder photos) and Location Services (the weather's Current Location) unless Locky.entitlements allows them.
