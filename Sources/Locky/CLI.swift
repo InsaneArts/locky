@@ -156,7 +156,8 @@ enum CLI {
               widgets                list widgets
               render --theme NAME [--widget NAME] --out FILE.png [--size 1440x900] [--appearance light|dark]
                      [--transition lock|unlock --at 0.0…1.0 [--style STYLE]]
-                                     draw a theme's lock screen to a PNG, with privacy mode on;
+                                     draw a theme's lock screen to a PNG, with privacy mode on,
+                                     once widgets that fetch data have it (3 seconds at most);
                                      --widget draws only that widget, in the middle;
                                      --transition draws the lock's way in or out at that point,
                                      in STYLE (\(LockTransition.Style.allCases.map(\.rawValue).joined(separator: ", ")))

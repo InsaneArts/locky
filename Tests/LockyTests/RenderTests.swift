@@ -56,4 +56,24 @@ import Testing
             try await Render.image(theme: "plain", widget: "circle", size: CGSize(width: 200, height: 120), appearance: nil, config: sandbox.config)
         }
     }
+
+    /// A widget that draws nothing until its data comes (network, processes, weather) is drawn with it, not blank.
+    @Test func aWidgetWaitingForDataDrawsOnceItComes() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/later.lua", """
+            locky.widget.define("later", {
+              init = function(self) self:after(0.4, function(self) self:set({ ready = true }) end) end,
+              render = function(self)
+                if not self.state.ready then return nil end
+                return locky.ui.rect({ width = 40, height = 40, color = "#00ff00" })
+              end,
+            })
+            """)
+        try sandbox.write("themes/plain.lua", """
+            return { name = "Plain", background = { color = "#000000" }, widgets = { { "later", anchor = "center" } } }
+            """)
+        let image = try await Render.image(theme: "plain", size: CGSize(width: 400, height: 250), appearance: nil, config: sandbox.config)
+        let middle = pixel(image, 400, 250)
+        #expect(middle.green > 200 && middle.red < 50, "middle: \(middle)")
+    }
 }

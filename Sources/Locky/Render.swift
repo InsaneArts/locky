@@ -41,6 +41,8 @@ enum Render {
         defer { session.end("rendered") }
         if let failed = session.started?.failed, failed.theme == theme { throw Failure(description: LuaError(failed.problem).summary) }
         if let widget, session.started?.theme.widgets.first?.known != true { throw Failure(description: "no widget named \"\(widget)\"") }
+        // Ready means every widget answered, nil included: one that waits for data gets a moment to draw it.
+        await session.waitForContent(within: .seconds(3))
         let now = CACurrentMediaTime()
         // Before the layout: views added after it leave the container's layer where the renderer does not see it.
         if let transition, let scene = container.subviews.first as? LockScreenView {

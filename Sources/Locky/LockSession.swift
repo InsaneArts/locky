@@ -50,6 +50,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     var onReady: (() -> Void)?
     /// Instances that have drawn or failed at least once.
     private var heard = Set<Int>()
+    /// Instances that have drawn something (not nil) or failed: what `locky render` waits for.
+    private var answered = Set<Int>()
     /// Embedded only: called after each layout of the screen, so the theme editor's canvas follows the widgets.
     var onLayout: (() -> Void)?
 
@@ -178,8 +180,14 @@ final class LockSession: NSObject, NSWindowDelegate {
 
         // The app's copy of settings.json: while the file has an error, that is the last one that read without one.
         let runtime = LuaRuntime(path: options.path, environment: environment, settings: options.settings, delegate: LuaRuntime.Delegate(
-            present: { [weak self] id, node in Task { @MainActor in self?.deliver(id, replacingViews: true) { $0.present(node) } } },
-            failed: { [weak self] id, message, disabled in Task { @MainActor in self?.deliver(id, replacingViews: false) { $0.fail(message, disabled: disabled) } } }
+            present: { [weak self] id, node in Task { @MainActor in
+                if node != nil { self?.answered.insert(id) }
+                self?.deliver(id, replacingViews: true) { $0.present(node) }
+            } },
+            failed: { [weak self] id, message, disabled in Task { @MainActor in
+                self?.answered.insert(id)
+                self?.deliver(id, replacingViews: false) { $0.fail(message, disabled: disabled) }
+            } }
         ))
         self.runtime = runtime
 
@@ -273,6 +281,17 @@ final class LockSession: NSObject, NSWindowDelegate {
         let ready = onReady
         onReady = nil
         ready?()
+    }
+
+    /// Waits, up to `limit`, until every widget has drawn something (or failed) and measured itself. A widget that
+    /// waits for data (network, processes, weather) draws nothing until its first reply. `locky render` only: a lock
+    /// never waits for Lua.
+    func waitForContent(within limit: Duration) async {
+        let deadline = ContinuousClock.now + limit
+        while !ended, ContinuousClock.now < deadline, let started, let screen = screens.first,
+              !(started.instances.allSatisfy { $0.map(answered.contains) ?? true } && screen.widgets.allSatisfy(\.isSettled)) {
+            try? await Task.sleep(for: .milliseconds(30))
+        }
     }
 
     /// Every widget has drawn (or failed) and measured itself, and the background has loaded.
