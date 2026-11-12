@@ -37,8 +37,8 @@ import Testing
         #expect(Provides.summary(model: model, folder: sandbox.packs) == nil)
     }
 
-    @Test(arguments: [(.sync, "Couldn't install plugins"), (.update, "Couldn't update plugins"), (.clean, "Couldn't remove the plugin"),
-                      (.check, "Couldn't check for updates")] as [(PackManager.Action, String)])
+    @Test(arguments: [(.sync, "Couldn’t install plugins"), (.update, "Couldn’t update plugins"), (.clean, "Couldn’t remove the plugin"),
+                      (.check, "Couldn’t check for updates")] as [(PackManager.Action, String)])
     func aFailedRunSaysWhatFailed(_ action: PackManager.Action, _ title: String) {
         #expect(PluginsPage.failure(action) == title)
     }

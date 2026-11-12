@@ -220,7 +220,7 @@ private struct PhotosSection: View {
                             .keyboardShortcut(.defaultAction)
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("This can't be undone.")
+                        Text("This can’t be undone.")
                     }
             }
         } footer: {
@@ -240,7 +240,7 @@ private struct StartSection: View {
 
     var body: some View {
         Section {
-            OpenAtLoginToggle(model: model, subtitle: waitsOnLocky ? "Locky locks only while it's open." : nil)
+            OpenAtLoginToggle(model: model, subtitle: waitsOnLocky ? "Locky locks only while it’s open." : nil)
             ShortcutRecorder("Lock Now shortcut", shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
                 model.store.update { $0.shortcut = shortcut }
             }), onRecordingChange: model.recordingShortcut)
@@ -312,7 +312,7 @@ private struct LockScreenSections: View {
                 store.update { SettingsPage.setPrivacy(on, base: model.inspection.base["privacy"], in: &$0) }
             })) {
                 Text("Hide personal information")
-                Text("Your name and picture, this Mac's name and location, network addresses, and project and task names.")
+                Text("Your name and picture, this Mac’s name and location, network addresses, and project and task names.")
             }
         }
         Section {

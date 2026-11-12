@@ -87,7 +87,7 @@ struct PluginsPage: View {
             if !canChange {
                 Section {
                     HStack(spacing: 8) {
-                        WarningLabel("settings.json has an error, so plugins can't change.")
+                        WarningLabel("settings.json has an error, so plugins can’t change.")
                         // General shows the error and restores the last good settings.
                         Button("Show General") { model.openWindow(.settings) }
                             .buttonStyle(.link)
@@ -204,11 +204,11 @@ struct PluginsPage: View {
     /// The failure section's title for a run of `action`.
     static func failure(_ action: PackManager.Action) -> String {
         switch action {
-        case .sync: "Couldn't install plugins"
-        case .update: "Couldn't update plugins"
-        case .clean: "Couldn't remove the plugin"
-        case .check: "Couldn't check for updates"
-        case .list: "Couldn't list plugins"
+        case .sync: "Couldn’t install plugins"
+        case .update: "Couldn’t update plugins"
+        case .clean: "Couldn’t remove the plugin"
+        case .check: "Couldn’t check for updates"
+        case .list: "Couldn’t list plugins"
         }
     }
 

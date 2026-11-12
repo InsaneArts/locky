@@ -208,7 +208,7 @@ struct NewWidgetSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("New Widget").font(.headline)
-            Text("A widget is a small Lua file in your config folder. A coding agent with Locky's skill writes it for you, checks it, and looks at it on the lock screen until it is right.")
+            Text("A widget is a small Lua file in your config folder. A coding agent with Locky’s skill writes it for you, checks it, and looks at it on the lock screen until it is right.")
                 .fixedSize(horizontal: false, vertical: true)
             Form {
                 Section {
