@@ -102,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         // `locky preview` and `locky lock` (main.swift) start here with their options.
         let launch = CLI.GUILaunch.parse(Array(CommandLine.arguments.dropFirst()))
         if let mode = launch.mode {
-            var options = LockSession.Options(theme: launch.theme, previewSize: launch.size ?? CGSize(width: 1440, height: 900),
+            var options = LockSession.Options(theme: launch.theme ?? scheduledTheme(), previewSize: launch.size ?? CGSize(width: 1440, height: 900),
                                               behind: launch.behind, settings: store.settings)
             options.animated = mode == .lock && animates(.user)
             options.showsTransition = launch.transition
