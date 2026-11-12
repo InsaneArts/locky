@@ -98,7 +98,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     private var powerObserver: PowerObserver?
     /// settings.json's display_off, or the system's display sleep: the displays go dark after that many seconds without
     /// input.
-    private var displayOff: DisplayOff?
+    private var displayOff: AmbientTimer<ContinuousClock>?
     /// Lock only: neither idle display sleep nor the screen saver takes over the shield; displayOff turns the displays off.
     private var displayAwake: DisplayAssertion?
     /// settings.json's ambient_after: only the background shows after that many seconds without input.
@@ -1134,7 +1134,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     /// assertion holds that back), and the ambient mode. Input also tells the field whether Caps Lock is on.
     private func watchInput() {
         if mode == .lock, let seconds = Power.displayOffSeconds(setting: options.settings.displayOff, system: Power.systemDisplaySleep) {
-            displayOff = DisplayOff(after: seconds, sleep: { Power.sleepDisplays() })
+            // The ambient mode's timer: once the quiet time is up the displays go off, and input starts it again.
+            displayOff = AmbientTimer(after: seconds, clock: ContinuousClock()) { off in if off { Power.sleepDisplays() } }
         }
         if let seconds = options.settings.ambientAfter {
             ambient = AmbientTimer(after: seconds, clock: ContinuousClock()) { [weak self] on in self?.setAmbient(on) }

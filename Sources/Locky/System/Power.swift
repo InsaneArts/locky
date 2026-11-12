@@ -85,7 +85,7 @@ extension Settings {
 }
 
 /// While a lock is on: an assertion that keeps idle display sleep, and with it the screen saver, from taking over the
-/// shield. The lock turns the displays off itself (DisplayOff). A closed lid or system sleep still sleep the Mac, and
+/// shield. The lock turns the displays off itself (display_off). A closed lid or system sleep still sleep the Mac, and
 /// macOS releases the assertion if Locky exits.
 @MainActor
 final class DisplayAssertion {
@@ -137,7 +137,7 @@ final class AmbientTimer<C: Clock> where C.Duration == Duration {
     private var stopped = false
     private(set) var isAmbient = false
 
-    /// `seconds` counts up to a day, as DisplayOff's does.
+    /// `seconds` counts up to a day: Duration cannot hold every Double.
     init(after seconds: Double, clock: C, onChange: @escaping (_ ambient: Bool) -> Void) {
         self.seconds = .seconds(min(max(seconds, 0), 86_400))
         self.clock = clock
@@ -227,51 +227,5 @@ final class PowerObserver {
         guard now != last else { return }
         last = now
         onChange()
-    }
-}
-
-/// Turns the displays off when the lock screen sees no key press or mouse movement for a while. It turns them off
-/// once; the next activity starts the count again.
-@MainActor
-final class DisplayOff {
-    private let seconds: Duration
-    private let sleep: () -> Void
-    private var lastActivity = ContinuousClock.now
-    private var timer: Task<Void, Never>?
-    private var stopped = false
-
-    /// `seconds` counts up to a day: Duration cannot hold every Double.
-    init(after seconds: Double, sleep: @escaping () -> Void) {
-        self.seconds = .seconds(min(max(seconds, 0), 86_400))
-        self.sleep = sleep
-        arm()
-    }
-
-    /// A key press or mouse movement. Cheap enough for every mouse-moved event: it notes the time, and sets a timer
-    /// only when the displays went off.
-    func noteActivity() {
-        lastActivity = .now
-        if timer == nil, !stopped { arm() }
-    }
-
-    func stop() {
-        stopped = true
-        timer?.cancel()
-        timer = nil
-    }
-
-    private func arm() {
-        let deadline = lastActivity + seconds
-        timer = Task { [weak self] in
-            try? await Task.sleep(until: deadline, clock: .continuous)
-            guard !Task.isCancelled else { return }
-            self?.fire()
-        }
-    }
-
-    private func fire() {
-        timer = nil
-        // Activity since the timer was set moved the deadline.
-        if lastActivity + seconds > .now { arm() } else { sleep() }
     }
 }
