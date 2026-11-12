@@ -64,9 +64,6 @@ enum LockTransition {
         var title: String { rawValue.capitalizedFirst }
     }
 
-    /// The style a lock uses: Fade with Reduce Motion on, whatever the setting.
-    nonisolated static func style(_ style: Style, reduceMotion: Bool) -> Style { reduceMotion ? .fade : style }
-
     /// A lock comes in animated only after Lock Now or inactivity, with the display awake. While a display sleeps (or is
     /// about to, or the Mac is) the animations may stall, and on wake the screen must already be covered: those locks
     /// cover it at once, opaque from the first frame.

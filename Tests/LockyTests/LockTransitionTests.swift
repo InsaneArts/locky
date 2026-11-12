@@ -31,8 +31,6 @@ import Testing
     /// Reduce Motion: every style fades, in a quarter second coming in.
     @Test(arguments: LockTransition.Style.allCases)
     func reduceMotionFadesEveryStyle(_ style: LockTransition.Style) {
-        #expect(LockTransition.style(style, reduceMotion: true) == .fade)
-        #expect(LockTransition.style(style, reduceMotion: false) == style)
         #expect(LockTransition.length(.lock, style: style, reduceMotion: true) == 0.25)
         // Each way in takes 0.5 to 0.75 s, and the way out no longer.
         let lock = LockTransition.length(.lock, style: style), unlock = LockTransition.length(.unlock, style: style)
