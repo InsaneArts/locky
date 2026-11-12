@@ -202,7 +202,15 @@ final class LuaRuntime: @unchecked Sendable {
             problems.append("theme \(theme.id): no widget named \"\(placement.widget)\"")
             return nil
         }
-        guard let id = (try? call("create", [.int(index + 1)], budget: Budget.create).first)?.int else { return nil }
+        let created: LuaValue?
+        do {
+            created = try call("create", [.int(index + 1)], budget: Budget.create).first
+        } catch {
+            // Before the widget's own code runs: its options could not be made (settings.json's or locky.setup's).
+            report("theme \(theme.id): \(placement.widget) did not start: \(LuaError.shortenPaths(String(describing: error)))")
+            return nil
+        }
+        guard let id = created?.int else { return nil }
         do {
             try call("init", [.int(id)], budget: Budget.initialize)
         } catch {

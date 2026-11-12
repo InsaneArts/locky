@@ -236,3 +236,19 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: sandbox.root.appending(path: "logs/locky.old.log").path))
     }
 }
+
+@Suite struct WidgetStartTests {
+    /// A widget whose options cannot be made (locky.setup gives it a string, not a table) does not start, and says why
+    /// instead of leaving only "not started".
+    @Test func aWidgetThatCannotStartSaysWhy() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("init.lua", "locky.setup({ widgets = { box = 'big' } })")
+        try sandbox.write("plugin/box.lua", "locky.widget.define('box', { render = function() return locky.ui.text('box') end })")
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'box' } } }")
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: Recorder().delegate)
+        defer { runtime.stop() }
+        let started = await runtime.start(theme: "t")
+        #expect(started.instances == [nil])
+        #expect(started.problems.contains { $0.contains("box") && $0.contains("table") }, "\(started.problems)")
+    }
+}
