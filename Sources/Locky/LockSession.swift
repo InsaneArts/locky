@@ -429,7 +429,8 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     private func reclaimKeyboard() {
-        guard mode == .lock, !ended else { return }
+        // Not while the macOS lock screen comes up: it takes the keyboard, and the lock ends once it is up.
+        guard mode == .lock, !ended, !handingOver else { return }
         NSApp.activate()
         windows.first?.makeKeyAndOrderFront(nil)
         NSApp.presentationOptions = Self.kioskOptions
@@ -507,7 +508,8 @@ final class LockSession: NSObject, NSWindowDelegate {
 
     private func checkKeyboard(_ reason: String) {
         keyboardCheck = nil
-        guard mode == .lock, !ended else { return }
+        // During a hand-over the macOS lock screen takes the keyboard; one that fails checks again (handOver).
+        guard mode == .lock, !ended, !handingOver else { return }
         let secureInput = Self.secureInputElsewhere
         switch Self.keyboardAction(holds: holdsKeyboard, tapped: keyTap != nil, trusted: AXIsProcessTrusted(), secureInput: secureInput) {
         case .keep:
@@ -515,7 +517,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             guard !holdsKeyboard else { return }
             // And ask for the keyboard again each second: once whatever took it is gone (the screen saver, a system
             // prompt), the shield is key again, and the field shows that it takes the typing.
-            if !handingOver { reclaimKeyboard() }
+            reclaimKeyboard()
             keyboardCheck = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
@@ -1171,6 +1173,8 @@ final class LockSession: NSObject, NSWindowDelegate {
         guard mode == .lock, !ended, !handingOver else { return }
         guard SystemLock.engage(reason: reason) else {
             LogFile.shared.write(level: "error", message: "cannot switch to the macOS lock screen (\(reason)); the lock stays", source: "locky")
+            // A lock that stays must hold the keyboard, or typing goes to the app behind it: ask again, and check.
+            keyboardTaken()
             return
         }
         handingOver = true
@@ -1186,6 +1190,7 @@ final class LockSession: NSObject, NSWindowDelegate {
             guard let self, !ended else { return }
             handingOver = false
             LogFile.shared.write(level: "error", message: "the macOS lock screen did not come up (\(reason)); the lock stays", source: "locky")
+            keyboardTaken()
         }
     }
 
