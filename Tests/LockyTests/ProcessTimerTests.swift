@@ -32,6 +32,33 @@ import Testing
 
 @Suite struct ChildProcessTests {
     /// A program that leaves a background child holding its output pipe still reports soon after it exits.
+    /// A program that cannot start (here, in a folder that is not there) reports code 126, and Locky goes on: the
+    /// pipes and the exit it waited for must not keep it waiting, or crash it when the process object goes.
+    @Test func aProgramThatCannotStartReports126() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("plugin/nowhere.lua", """
+            locky.widget.define("nowhere", {
+              init = function(self)
+                self:system({ "true" }, { cwd = "/no/such/folder/locky" }, function(self, r)
+                  self:set({ code = r.code, err = r.stderr })
+                end)
+              end,
+              render = function(self) return self.state.code and locky.ui.text(tostring(self.state.code)) or nil end,
+            })
+            """)
+        try sandbox.write("themes/t.lua", "return { widgets = { { 'nowhere' } } }")
+        let recorder = Recorder()
+        let runtime = LuaRuntime(path: sandbox.path(), delegate: recorder.delegate)
+        let started = await runtime.start(theme: "t")
+        let id = try #require(started.instances[0])
+        #expect(await eventually(timeout: 5) { (recorder.views[id] ?? nil) != nil })
+        guard case .text(let code)? = (recorder.views[id] ?? nil)?.kind else { Issue.record("no result"); return }
+        #expect(code == "126")
+        // The runtime still answers: the failed start left nothing behind on its queue.
+        #expect(try runtime.eval("return 1 + 1").first == .int(2))
+        runtime.stop()
+    }
+
     @Test func aBackgroundChildDoesNotHoldTheResult() async throws {
         let sandbox = try Sandbox()
         try sandbox.write("plugin/bg.lua", """
