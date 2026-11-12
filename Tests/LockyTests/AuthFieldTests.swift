@@ -242,6 +242,18 @@ import Testing
             #expect(AuthModel(defaults: defaults).waitLeft == 0)
         }
     }
+
+    /// Touch ID unlocks while a wrong password is still being checked: the check's late "no" does not count against
+    /// the next lock.
+    @MainActor @Test func aFailureAfterTheUnlockCountsForNothing() {
+        withDefaults { defaults in
+            let model = AuthModel(defaults: defaults)
+            model.succeeded()
+            model.failed()
+            #expect(model.wrong == 0)
+            #expect(PasswordAttempts.load(defaults) == PasswordAttempts())
+        }
+    }
 }
 
 @Suite struct ContrastTests {

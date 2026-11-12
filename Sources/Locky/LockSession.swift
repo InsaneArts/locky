@@ -841,7 +841,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     private func wrongPassword() {
         // From the third, or with a wait, the lock names ⌃⌥⌘Q, in its own row.
         screens.first?.needsLayout = true
-        guard mode == .lock, intruder.wrongPassword() else { return }
+        guard mode == .lock, !ended, intruder.wrongPassword() else { return }
         capturing = Task { [weak self] in
             do {
                 let url = try await IntruderCamera().capture()

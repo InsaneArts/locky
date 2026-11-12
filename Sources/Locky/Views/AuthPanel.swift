@@ -60,6 +60,8 @@ final class AuthModel {
     @ObservationIgnored var onSlowCheck: () -> Void = {}
     /// Whole seconds left in the wait before the next try (0: none). Waits outlast the lock: see PasswordAttempts.
     private(set) var waitLeft = 0
+    /// This lock is over: the password or Touch ID unlocked it.
+    @ObservationIgnored private var unlocked = false
     /// A wait has disabled the field in this lock: one after its wrong passwords, or one that a count carried over from
     /// an earlier lock (after ⌃⌥⌘Q, or a relaunch) starts, at once or at this lock's first wrong password.
     private(set) var waited = false
@@ -109,6 +111,8 @@ final class AuthModel {
 
     /// A wrong password: counted here and across locks, and the next try waits as the policy says.
     func failed() {
+        // A check that answers after Touch ID unlocked: the lock is over, and its "no" must not count against the next.
+        guard !unlocked else { return }
         wrong += 1
         wrongShown = true
         if let defaults { attempts = PasswordAttempts.load(defaults) }
@@ -119,6 +123,7 @@ final class AuthModel {
 
     /// The password or Touch ID unlocked: the count starts again.
     func succeeded() {
+        unlocked = true
         attempts = PasswordAttempts()
         if let defaults { attempts.save(defaults) }
     }
