@@ -278,7 +278,7 @@ final class AppModel {
         refreshing = Task {
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
-            var result = await Inspection.load(config: config, settings: store.settings)
+            let result = await Inspection.load(config: config, settings: store.settings)
             guard !Task.isCancelled else { return }
             inspection = result
             revision += 1
