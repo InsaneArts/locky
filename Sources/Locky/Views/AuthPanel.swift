@@ -226,10 +226,10 @@ final class TouchID {
         guard wanted, !running, !gaveUp, readyGeneration == generation else { return }
         running = true
         let generation = generation
-        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "unlock your Mac") { success, error in
+        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "unlock your Mac") { [weak self] success, error in
             let code = (error as? LAError)?.code
             let description = error?.localizedDescription
-            Task { @MainActor [weak self] in self?.finished(success, code, description, generation) }
+            Task { @MainActor in self?.finished(success, code, description, generation) }
         }
     }
 
