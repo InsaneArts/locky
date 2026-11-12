@@ -155,7 +155,29 @@ import Testing
         let start = Date()
         let result = try runtime.eval("return select(2, pcall(io.open, '\(fifo)'))")
         #expect(result.first?.string?.contains("only regular files") == true)
+        for call in ["pcall(loadfile, '\(fifo)')", "pcall(dofile, '\(fifo)')", "locky.fs.read('\(fifo)')"] {
+            let refused = try runtime.eval("return select(2, \(call))")
+            #expect(refused.first?.string?.contains("only regular files") == true, "\(call)")
+        }
         #expect(Date().timeIntervalSince(start) < 1)
+    }
+
+    /// locky.fs.read's 16 MB limit counts the file a symlink points at, not the link.
+    @Test func aLinkDoesNotHideALargeFile() throws {
+        let runtime = try runtime()
+        let folder = FileManager.default.temporaryDirectory.appending(path: "locky-big-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let big = folder.appending(path: "big"), link = folder.appending(path: "link")
+        #expect(FileManager.default.createFile(atPath: big.path, contents: nil))
+        // Sparse: 17 MB long, and next to nothing on the disk.
+        let handle = try FileHandle(forWritingTo: big)
+        try handle.truncate(atOffset: 17 << 20)
+        try handle.close()
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: big)
+        let result = try runtime.eval("return select('#', locky.fs.read('\(link.path)')), select(2, locky.fs.read('\(link.path)'))")
+        #expect(result.first == .int(2))
+        #expect(result.dropFirst().first?.string?.contains("larger than 16 MB") == true)
     }
 }
 

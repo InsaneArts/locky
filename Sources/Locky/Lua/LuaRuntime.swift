@@ -621,9 +621,15 @@ final class LuaRuntime: @unchecked Sendable {
             // Files and JSON.
             "fs_read": { call in
                 let url = Self.expand(try call.string(1, "path"))
+                // stat follows a symlink to its file, so the limit counts the file and not the link. A pipe or a device
+                // would block the queue inside open(2), where no time budget reaches.
+                var info = stat()
+                if stat(url.path, &info) == 0 {
+                    let kind = info.st_mode & S_IFMT
+                    if kind != S_IFREG, kind != S_IFDIR { return [.nil, .string("only regular files can be read")] }
+                    if info.st_size > 16 << 20 { return [.nil, .string("file is larger than 16 MB")] }
+                }
                 do {
-                    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                    if let size = attributes[.size] as? Int, size > 16 << 20 { return [.nil, .string("file is larger than 16 MB")] }
                     return [.string(String(decoding: try Data(contentsOf: url), as: UTF8.self))]
                 } catch {
                     return [.nil, .string(error.localizedDescription)]

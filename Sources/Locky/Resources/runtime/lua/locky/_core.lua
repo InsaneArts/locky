@@ -174,26 +174,30 @@ function load(chunk, chunkname, _, ...)
   return rethrow_load(raw_load(chunk, chunkname, "t", ...))
 end
 
+-- Opening a named pipe or a device blocks inside C, where no time budget reaches: only regular files and
+-- new files open, in loadfile, dofile, and io.
+local function check(path)
+  if type(path) == "string" and native.fs_kind(path) == "other" then
+    error(path .. ": only regular files can be opened", 3)
+  end
+end
+
 function loadfile(path, _, ...)
+  check(path)
   return raw_loadfile(path, "t", ...)
 end
 
 function dofile(path)
+  check(path)
   local chunk = assert(loadfile(path))
   return chunk()
 end
 
--- Opening a named pipe or a device blocks inside C, where no time budget reaches: only regular files and
--- new files open. Writing, removing, and renaming files needs the "files" grant.
+-- Writing, removing, and renaming files needs the "files" grant.
 do
   local raw_open, raw_lines, raw_input, raw_output = io.open, io.lines, io.input, io.output
   local raw_remove, raw_rename, raw_tmpname = os.remove, os.rename, os.tmpname
   local find = string.find
-  local function check(path)
-    if type(path) == "string" and native.fs_kind(path) == "other" then
-      error(path .. ": only regular files can be opened", 3)
-    end
-  end
   io.open = function(path, mode, ...)
     if type(mode) == "string" and find(mode, "[wa+]") then
       require_grant("files", "io.open", 2)
