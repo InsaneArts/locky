@@ -79,7 +79,8 @@ import Testing
         let grid = UserDefaults.standard.bool(forKey: "themeEditorGrid")
         let ready = await wait(window) {
             overlay = Self.find(CanvasOverlay.self, in: window.contentView!)
-            return overlay.map { !$0.isHidden && $0.preview!.canvas?.grid == grid && $0.preview!.editables.contains { $0.item == .widget(0) } } ?? false
+            // No force unwrap while polling: a preview not there yet fails this test, not the whole run.
+            return overlay.map { !$0.isHidden && $0.preview?.canvas?.grid == grid && $0.preview?.editables.contains { $0.item == .widget(0) } == true } ?? false
         }
         try #require(ready, "the canvas never showed the theme's widgets")
         return Page(sandbox: sandbox, model: model, window: window, overlay: overlay!)
