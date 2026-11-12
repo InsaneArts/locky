@@ -131,6 +131,9 @@ import Testing
         #expect(await wait { window.firstResponder !== window && !(window.firstResponder is CanvasOverlay) },
                 "first responder: \(String(describing: window.firstResponder))")
         #expect(await downArrowMoves(window, model), "the list takes the arrows after Customize")
+        // Return opens Customize for the theme in use.
+        press(window, 36, "\r")
+        #expect(await wait { model.editingTheme == model.activeTheme })
     }
 
     /// A theme that does not load has no canvas: why it does not load takes the keyboard instead, and gives it back.

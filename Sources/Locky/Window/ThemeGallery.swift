@@ -71,16 +71,9 @@ struct ThemeGallery: View {
         }
         .overlay { if !model.inspection.loaded { ProgressView().controlSize(.small) } }
         .focused($listFocused)
-        // An explicit assignment moves focus where .defaultFocus does not. The list cannot take the keyboard at once:
-        // when Customize ends, its canvas has it and leaves the window a moment after this view appears, and AppKit then
-        // gives the keyboard to the window. So the list asks until it has it: a few tries as a rule, and 100 at most,
-        // which is five seconds on an idle Mac.
-        .task {
-            for _ in 0..<100 where !listFocused && !Task.isCancelled {
-                listFocused = true
-                try? await Task.sleep(for: .milliseconds(50))
-            }
-        }
+        // An explicit assignment moves focus where .defaultFocus does not, on the next turn of the run loop. After
+        // Customize, the window gives the list the keyboard once the canvas has left it (LockyWindowController).
+        .onAppear { DispatchQueue.main.async { listFocused = true } }
         .onKeyPress(.return) {
             guard loads(model.activeTheme) else { return .ignored }
             model.customize(model.activeTheme)

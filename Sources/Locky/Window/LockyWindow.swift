@@ -6,6 +6,7 @@ import SwiftUI
 final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuItemValidation {
     let model: AppModel
     private let onClose: () -> Void
+    private var keyboard: NSKeyValueObservation?
 
     /// The smallest content size. A size asked for (`Locky window --size`) never goes under it.
     static let minimumSize = CGSize(width: 980, height: 640)
@@ -33,6 +34,26 @@ final class LockyWindowController: NSWindowController, NSWindowDelegate, NSMenuI
         }
         super.init(window: window)
         window.delegate = self
+        // On the main actor's next turn, once AppKit has finished the change.
+        keyboard = window.observe(\.firstResponder) { [weak self] _, _ in
+            Task { @MainActor in self?.returnKeyboardToList() }
+        }
+    }
+
+    /// The gallery's list has the keyboard whenever nothing else in the window does, so the arrow keys and Return work
+    /// without a click. When Customize ends, its canvas has the keyboard, and leaves the window a moment after the
+    /// gallery is back: AppKit then gives the keyboard to the window, for nobody.
+    private func returnKeyboardToList() {
+        guard let window, window.firstResponder === window, model.editingTheme == nil,
+              let list = Self.list(in: window.contentView) else { return }
+        window.makeFirstResponder(list)
+    }
+
+    /// The first list that shows in `view`: SwiftUI keeps a page it replaced in the window, invisible, for a moment.
+    private static func list(in view: NSView?) -> NSTableView? {
+        guard let view, !view.isHidden, view.alphaValue > 0 else { return nil }
+        if let table = view as? NSTableView { return table }
+        return view.subviews.lazy.compactMap { list(in: $0) }.first
     }
 
     required init?(coder: NSCoder) { fatalError() }
