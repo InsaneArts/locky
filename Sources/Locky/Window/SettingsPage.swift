@@ -231,16 +231,19 @@ private struct PhotosSection: View {
     }
 }
 
-/// Open at login, the Lock Now shortcut, and the Touch ID button: what lets Locky lock at all. Accessibility comes just
-/// before the button's switch, which waits for it, as on the Welcome.
+/// Open at login, then the two ways to lock now: the shortcut and the Touch ID button. Accessibility comes just before
+/// the button's switch, which waits for it, as on the Welcome.
 private struct StartSection: View {
     let model: AppModel
     @State private var hasButton = LockKeyToggle.hasButton()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Section {
+        Section("App") {
             OpenAtLoginToggle(model: model, subtitle: waitsOnLocky ? "Locky locks only while it’s open." : nil)
+        }
+        .animation(Motion.rows(reduceMotion), value: model.loginItem)
+        Section("Lock Now") {
             ShortcutRecorder("Lock Now shortcut", shortcut: Binding(get: { model.store.settings.shortcut }, set: { shortcut in
                 model.store.update { $0.shortcut = shortcut }
             }), onRecordingChange: model.recordingShortcut)
@@ -252,7 +255,6 @@ private struct StartSection: View {
                 LockKeyToggle(model: model)
             }
         }
-        .animation(Motion.rows(reduceMotion), value: model.loginItem)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // A lock activates Locky at its start and at each keyboard reclaim: nothing is read then.
             guard !model.locked else { return }
@@ -306,7 +308,7 @@ private struct LockScreenSections: View {
 
     var body: some View {
         let displayOff = SettingsPage.whole(store.settings.displayOff)
-        Section {
+        Section("Message and Privacy") {
             MessageField(model: model)
             Toggle(isOn: Binding(get: { model.privacy }, set: { on in
                 store.update { SettingsPage.setPrivacy(on, base: model.inspection.base["privacy"], in: &$0) }
@@ -315,7 +317,7 @@ private struct LockScreenSections: View {
                 Text("Your name and picture, this Mac’s name and location, network addresses, and project and task names.")
             }
         }
-        Section {
+        Section("Animation and Display") {
             Picker("Lock animation", selection: Binding(get: { store.settings.lockAnimation }, set: { style in
                 withAnimation(Motion.rows(reduceMotion)) { store.update { $0.lockAnimation = style } }
             })) {
@@ -407,10 +409,12 @@ private struct UnlockSection: View {
 
     var body: some View {
         let threshold = photoThreshold
-        Section {
-            if hasTouchID {
+        if hasTouchID {
+            Section("Touch ID") {
                 Toggle("Unlock with Touch ID", isOn: store.bool("touch_id", default: true))
             }
+        }
+        Section {
             Picker(selection: Binding(get: { threshold }, set: { value in
                 withAnimation(Motion.rows(reduceMotion)) {
                     store.update { $0["intruder_photo"] = value.map(LuaValue.int) ?? .nil }
@@ -429,6 +433,8 @@ private struct UnlockSection: View {
                     model.permissions.grantCamera()
                 }
             }
+        } header: {
+            Text("Wrong Passwords")
         } footer: {
             if store.settings.emergencyExit {
                 Text("If something goes wrong on the lock screen, press ⌃⌥⌘Q to switch to the macOS lock screen.")

@@ -19,7 +19,7 @@ struct CustomizationSection: View {
     var body: some View {
         // The config's own problems. A theme that does not load says so in the Themes window.
         let problems = Self.rows(model.inspection.problems, config: model.store.config)
-        Section {
+        Section("Config") {
             LabeledContent {
                 if exists {
                     OpenInButton(model: model, file: file, error: $openError)
@@ -62,7 +62,7 @@ struct CustomizationSection: View {
         .task(id: model.revision) { exists = FileManager.default.fileExists(atPath: file.path) }
         // A problem's Open needs the editors before the Open in button has shown.
         .task { await model.findEditors() }
-        Section {
+        Section("Themes and Widgets") {
             LabeledContent("Themes") {
                 // File › New Theme…'s action, wherever it is in the responder chain.
                 Button("New Theme…") { NSApp.sendAction(#selector(AppDelegate.newTheme(_:)), to: nil, from: nil) }
@@ -72,7 +72,7 @@ struct CustomizationSection: View {
             }
             AgentSkillRow(model: model)
         }
-        Section {
+        Section("Troubleshooting") {
             LabeledContent("Log") {
                 Button("Open") {
                     LogFile.shared.write(level: "info", message: "log opened", source: "locky")
