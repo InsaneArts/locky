@@ -32,6 +32,22 @@ import Testing
         #expect(bottom.blue > 200 && bottom.red < 50, "bottom: \(bottom)")
     }
 
+    /// A shader color that is no palette role and no hex (a typo, or a role the theme does not define) draws black,
+    /// as a missing color does: it must not crash the lock.
+    @Test func aShaderColorThatIsNoColorDrawsBlack() async throws {
+        let sandbox = try Sandbox()
+        try sandbox.write("shaders/first.metal", """
+            float4 shade(float2 uv, float t, float2 res, constant LockyParams &p) { return float4(locky_color(p, 1), 1); }
+            """)
+        try sandbox.write("themes/typo.lua", """
+            return { name = "Typo", palette = { bg = "#ffffff" }, background = { shader = "first", colors = { "bg", "accent2" } }, widgets = {} }
+            """)
+        let image = try await Render.image(theme: "typo", size: CGSize(width: 200, height: 120), appearance: nil, config: sandbox.config)
+        // A corner: at this size the password field covers the middle.
+        let corner = pixel(image, 10, 10)
+        #expect(corner.red < 20 && corner.green < 20 && corner.blue < 20, "corner: \(corner)")
+    }
+
     @Test func anUnknownThemeFails() async throws {
         let sandbox = try Sandbox()
         await #expect(throws: Render.Failure.self) {

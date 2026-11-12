@@ -205,7 +205,9 @@ final class ShaderView: MTKView, MTKViewDelegate, BackgroundLoading {
 
     nonisolated private static func makeParams(colors: [String], values: [Double], dim: Double) -> Params {
         var rgb = colors.prefix(8).map { hex -> SIMD4<Float> in
-            let c = NSColor(hex: hex) ?? .black
+            // Not a color (a role the palette lacks, a typo): black. NSColor.black is gray, with no red component to
+            // read: reading it raises, which ended the app.
+            guard let c = NSColor(hex: hex) else { return SIMD4(0, 0, 0, 1) }
             return SIMD4(Float(c.redComponent), Float(c.greenComponent), Float(c.blueComponent), Float(c.alphaComponent))
         }
         while rgb.count < 8 { rgb.append(rgb.last ?? .zero) }
