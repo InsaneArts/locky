@@ -4,7 +4,7 @@ import SwiftUI
 import Testing
 @testable import Locky
 
-/// The gallery's pure parts: Import Theme…'s checks, the grid's columns, and where an arrow key goes.
+/// The gallery's pure parts: Import Theme…'s checks.
 @MainActor
 @Suite struct ThemeGalleryTests {
     private let edit: LuaValue = .table(["widgets": .array([.table(["widget": .string("clock"), "anchor": .string("center")])])])
@@ -45,73 +45,47 @@ import Testing
         let file = ThemeFile(base: "default", name: "Lake", edits: [edit])
         #expect(ThemeImport.check(try file.source(), inspection: inspection, config: sandbox.config) == .success(file))
     }
+}
 
-    // MARK: The grid
-
-    /// The window's content at 980, 1240, and 1600 pt wide, less the page's padding; and a width under one column.
-    @Test(arguments: [(932, 4), (1192, 6), (1232, 6), (100, 1)] as [(CGFloat, Int)])
-    func theGridFitsColumnsAsTheAdaptiveItemDoes(_ width: CGFloat, _ columns: Int) {
-        #expect(ThemeGallery.columns(width: width) == columns)
+/// A theme's colors as the windows show them: its dots, its accent, and whether its page is light.
+@Suite struct ThemeLookTests {
+    /// The accent comes first, then the theme's other colors, the most colorful first. Two roles of one color make
+    /// one dot, and a color with alpha counts as it looks over the background.
+    @Test func theDotsAreTheThemesOwnColorsTheAccentFirst() {
+        let look = ThemeLook(palette: ["bg": "#000000", "fg": "#ffffff", "muted": "#ffffff80", "accent": "#ff0000", "danger": "#ff0000",
+                                       "sky": "#0000ff", "surface": "#101010"])
+        #expect(look.swatches == ["#ff0000", "#0000ff", "#ffffff", "#808080", "#101010", "#000000"])
+        #expect(look.accent == "#ff0000")
     }
 
-    /// Three columns of eight themes, and Event Horizon does not load:
-    ///
-    ///     Aurora   Bauhaus  Deep Blue
-    ///     Dots     Event    Fog
-    ///     Gruvbox  Haze
-    private let themes = ["aurora", "bauhaus", "deepblue", "dots", "event", "fog", "gruvbox", "haze"].map { id in
-        Inspection.ThemeInfo(id: id, name: id, error: id == "event" ? "themes/event.lua:3: attempt to index a nil value" : nil)
+    @Test func atMostSixDots() {
+        let palette = Dictionary(uniqueKeysWithValues: (0..<12).map { ("c\($0)", String(format: "#%02x%02x00", $0 * 20, 255 - $0 * 20)) })
+        #expect(ThemeLook(palette: palette).swatches.count == 6)
     }
 
-    private func neighbor(_ id: String, _ direction: MoveCommandDirection, rightToLeft: Bool = false) -> String? {
-        ThemeGallery.neighbor(of: id, in: themes, columns: 3, direction: direction, rightToLeft: rightToLeft)
+    /// A theme with no colors of its own shows Locky's defaults.
+    @Test func aThemeWithoutColorsShowsTheDefaults() {
+        let look = ThemeLook(palette: [:])
+        #expect(look.accent == "#0a84ff")
+        #expect(look.swatches.first == "#0a84ff" && look.swatches.count == 6)
+        #expect(!look.isLight)
     }
 
-    @Test func leftAndRightStepByOneAndUpAndDownByARow() {
-        #expect(neighbor("aurora", .right) == "bauhaus" && neighbor("bauhaus", .left) == "aurora")
-        #expect(neighbor("deepblue", .right) == "dots" && neighbor("dots", .left) == "deepblue")
-        #expect(neighbor("aurora", .down) == "dots" && neighbor("dots", .up) == "aurora")
-        #expect(neighbor("dots", .down) == "gruvbox" && neighbor("fog", .up) == "deepblue")
-    }
-
-    @Test func aStepPastEitherEndGoesNowhere() {
-        #expect(neighbor("aurora", .left) == nil && neighbor("aurora", .up) == nil)
-        #expect(neighbor("haze", .right) == nil && neighbor("haze", .down) == nil)
-        // No theme under Fog: the last row is short.
-        #expect(neighbor("fog", .down) == nil)
-    }
-
-    /// No tile is in use, such as when the theme's file was deleted: a step forward finds the first theme that loads, and
-    /// a step back the last, as a list with no selection does.
-    @Test func anArrowWithNoThemeInUseStartsAtAnEnd() {
-        #expect(neighbor("gone", .right) == "aurora" && neighbor("gone", .down) == "aurora")
-        #expect(neighbor("gone", .left) == "haze" && neighbor("gone", .up) == "haze")
-        #expect(neighbor("gone", .left, rightToLeft: true) == "aurora" && neighbor("gone", .right, rightToLeft: true) == "haze")
-        // Event Horizon does not load, at either end.
-        let ends = [themes[4], themes[0], themes[1], themes[4]]
-        #expect(ThemeGallery.neighbor(of: "gone", in: ends, columns: 3, direction: .right, rightToLeft: false) == "aurora")
-        #expect(ThemeGallery.neighbor(of: "gone", in: ends, columns: 3, direction: .left, rightToLeft: false) == "bauhaus")
-        #expect(ThemeGallery.neighbor(of: "gone", in: [themes[4]], columns: 3, direction: .down, rightToLeft: false) == nil)
-    }
-
-    @Test func aThemeThatDoesNotLoadIsSkipped() {
-        #expect(neighbor("dots", .right) == "fog" && neighbor("fog", .left) == "dots")
-        #expect(neighbor("bauhaus", .down) == "haze" && neighbor("haze", .up) == "bauhaus")
-        // Nothing that loads after it: the step goes nowhere.
-        let last = [themes[0], themes[4]]
-        #expect(ThemeGallery.neighbor(of: "aurora", in: last, columns: 3, direction: .right, rightToLeft: false) == nil)
-    }
-
-    /// A right-to-left grid starts on the right, so the left arrow goes on through the list.
-    @Test func leftAndRightSwapForRightToLeft() {
-        #expect(neighbor("bauhaus", .left, rightToLeft: true) == "deepblue")
-        #expect(neighbor("bauhaus", .right, rightToLeft: true) == "aurora")
-        #expect(neighbor("aurora", .down, rightToLeft: true) == "dots")
+    /// The page is light for a light background, and the words on the accent read on it.
+    @Test func aLightThemeHasALightPageAndReadableWordsOnItsAccent() {
+        let poster = ThemeLook(palette: ["bg": "#F1EFE8", "fg": "#0A0A0A", "accent": "#DA291C"])
+        #expect(poster.isLight)
+        // The cream background reads on the red: it is the words' color.
+        #expect(poster.onAccent == "#f1efe8")
+        // A pale accent on a pale background: black words.
+        #expect(ThemeLook(palette: ["bg": "#ffffff", "accent": "#ffee88"]).onAccent == "#000000")
+        // A dark accent on a dark background: white words.
+        #expect(ThemeLook(palette: ["bg": "#000000", "accent": "#220000"]).onAccent == "#ffffff")
     }
 }
 
-/// The Themes window as Locky makes it, out of sight. The grid has the keyboard when the gallery shows, and again after
-/// Customize, whose canvas takes the keyboard and leaves the window after the gallery is back.
+/// The Themes window as Locky makes it, out of sight. The sidebar's list has the keyboard when the gallery shows, and
+/// again after Customize, whose canvas takes the keyboard and leaves the window after the gallery is back.
 @MainActor
 @Suite(.serialized) struct GalleryKeyboardTests {
     private func wait(_ timeout: Double = 5, _ condition: () -> Bool) async -> Bool {
@@ -128,15 +102,15 @@ import Testing
         }
     }
 
-    /// Whether the right arrow changes the theme in use, as it does while the grid has the keyboard.
-    private func rightArrowMoves(_ window: NSWindow, _ model: AppModel, within timeout: Double = 2) async -> Bool {
+    /// Whether the down arrow changes the theme in use, as it does while the list has the keyboard.
+    private func downArrowMoves(_ window: NSWindow, _ model: AppModel, within timeout: Double = 2) async -> Bool {
         let before = model.activeTheme
-        press(window, 124, String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), function: true)
+        press(window, 125, String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), function: true)
         return await wait(timeout) { model.activeTheme != before }
     }
 
     @Test(arguments: ["Done", "Escape"])
-    func theGridHasTheKeysAgainAfterCustomize(_ way: String) async throws {
+    func theListHasTheKeysAgainAfterCustomize(_ way: String) async throws {
         _ = NSApplication.shared
         let sandbox = try Sandbox()
         try sandbox.write("settings.json", #"{ "privacy": true }"#)
@@ -148,7 +122,7 @@ import Testing
         let window = try #require(controller.window)
         defer { window.close() }
         try #require(await wait { window.firstResponder !== window })
-        #expect(await rightArrowMoves(window, model), "the grid takes the arrows before Customize")
+        #expect(await downArrowMoves(window, model), "the list takes the arrows before Customize")
 
         model.customize(model.activeTheme)
         try #require(await wait { window.firstResponder is CanvasOverlay })
@@ -156,12 +130,12 @@ import Testing
         #expect(model.editingTheme == nil)
         #expect(await wait { window.firstResponder !== window && !(window.firstResponder is CanvasOverlay) },
                 "first responder: \(String(describing: window.firstResponder))")
-        #expect(await rightArrowMoves(window, model), "the grid takes the arrows after Customize")
+        #expect(await downArrowMoves(window, model), "the list takes the arrows after Customize")
     }
 
     /// A theme that does not load has no canvas: why it does not load takes the keyboard instead, and gives it back.
     @Test(arguments: ["Done", "Escape"])
-    func theGridHasTheKeysAgainAfterCustomizeForAThemeThatDoesNotLoad(_ way: String) async throws {
+    func theListHasTheKeysAgainAfterCustomizeForAThemeThatDoesNotLoad(_ way: String) async throws {
         _ = NSApplication.shared
         let sandbox = try Sandbox()
         try sandbox.write("settings.json", #"{ "privacy": true }"#)
@@ -180,9 +154,9 @@ import Testing
         try await Task.sleep(for: .milliseconds(200))
         if way == "Done" { model.finishEditing() } else { press(window, 53, "\u{1b}") }
         #expect(await wait { model.editingTheme == nil })
-        // The grid takes the keyboard a turn after it shows; nothing in the window tells when, so the arrow tries again.
+        // The list takes the keyboard a turn after it shows; nothing in the window tells when, so the arrow tries again.
         var moved = false
-        for _ in 0..<10 where !moved { moved = await rightArrowMoves(window, model, within: 0.3) }
-        #expect(moved, "the grid takes the arrows after Customize")
+        for _ in 0..<10 where !moved { moved = await downArrowMoves(window, model, within: 0.3) }
+        #expect(moved, "the list takes the arrows after Customize")
     }
 }

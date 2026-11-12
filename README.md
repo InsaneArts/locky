@@ -80,8 +80,9 @@ To make your own, see [create-theme.md](docs/create-theme.md).
 
 ## The windows
 
-Themes… in the menu bar icon's menu opens the **Themes** window: the theme in use, live, and every theme as a
-picture. Click one to use it, or use the arrow keys. File › New Theme… (⌘N) starts a theme of your own.
+Themes… in the menu bar icon's menu opens the **Themes** window: every theme in the sidebar, with its picture and
+its colors, and the theme in use on a page of its own, live, over its own colors. Click a theme to use it, or use the
+arrow keys. File › New Theme… (⌘N) starts a theme of your own.
 Customize… edits it on its live lock screen (drag widgets, add them from a live gallery, change their options, the
 background, the colors, the font, and where the password field sits). Schedule (the
 clock in the toolbar, or File › Schedule Themes…) changes the theme by time of day or with Light and Dark mode, and

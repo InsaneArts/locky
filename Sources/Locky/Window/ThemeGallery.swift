@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The Themes window's home, while no theme is being customized: the theme in use, live, and every theme as a picture.
-/// A click on a tile makes it the theme a lock uses. The grid is one stop in the key loop: the arrow keys change the
-/// theme in use as a click does, and Return opens Customize for it.
+/// The Themes window's home, while no theme is being customized, laid out as Scene lays out its themes: every theme in
+/// the sidebar, and the theme in use on a page of its own, live, over its own colors. The sidebar's selection is the
+/// theme a lock uses: a click or an arrow key changes it, and Return opens Customize for it.
 struct ThemeGallery: View {
     let model: AppModel
     /// The theme that did not load on the last lock, until a file of it changes or Dismiss.
@@ -13,69 +13,24 @@ struct ThemeGallery: View {
     @State private var trashError: String?
     /// Why the editor did not open at the error of the theme in use, if it did not.
     @State private var openError: String?
-    @State private var gridWidth: CGFloat = 0
-    @FocusState private var gridFocused: Bool
+    @FocusState private var listFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         // Under a schedule the theme in use follows the clock and the Mac's appearance, and SwiftUI observes neither:
         // the timeline reads the page again each minute (a slot starts on the minute), and colorScheme when the
-        // appearance changes. So In Use, the preview, and the ring change with the slot while the window stays open.
+        // appearance changes. So the page and the selection change with the slot while the window stays open.
         let _ = colorScheme
         TimelineView(.everyMinute) { _ in
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        if let failure {
-                            FailureBanner(failure: failure, model: model, dismiss: dismissFailure)
-                                .transition(.opacity)
-                        }
-                        // Nothing saves settings.json while it has an error, so a click on a tile changes nothing.
-                        if model.store.problem != nil {
-                            HStack(spacing: 8) {
-                                WarningLabel("settings.json has an error, so the theme can't change.")
-                                Button("Open Settings") { model.openWindow(.settings) }
-                                    .buttonStyle(.link)
-                            }
-                        }
-                        header
-                        if model.inspection.loaded {
-                            grid(proxy)
-                        } else {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(height: 120)
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    // 24 on every side: the top's last 7 are the scroll view's.
-                    .padding(.horizontal, 24)
-                    .padding(.top, 17)
-                    .padding(.bottom, 24)
-                    .frame(maxWidth: 1280)
-                    .frame(maxWidth: .infinity)
-                }
-                // An arrow key scrolls a tile only as far as its top, and the in-use ring is drawn 7 pt outside the tile:
-                // 7 pt more at the top keeps the ring clear of the toolbar.
-                .safeAreaPadding(.top, 7)
+            NavigationSplitView {
+                sidebar
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 340)
+            } detail: {
+                page
             }
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                // File › New Theme…'s action, which the app's delegate answers.
-                Button("New Theme", systemImage: "plus") { NSApp.sendAction(#selector(AppDelegate.newTheme(_:)), to: nil, from: nil) }
-                    .help("Make a new theme and customize it")
-                Button("Schedule", systemImage: "clock.arrow.2.circlepath") { model.scheduling = true }
-                    .help("Change the theme by time of day or with Light and Dark mode")
-                    .popover(isPresented: Binding(get: { model.scheduling }, set: { model.scheduling = $0 }), arrowEdge: .bottom) {
-                        SchedulePopover(model: model)
-                    }
-                Button("Preview", systemImage: "play.rectangle") { model.preview(nil) }
-                    .help("Show the theme in use full size")
-            }
-        }
+        .toolbar(removing: .title)
         .fileImporter(isPresented: Binding(get: { model.importing }, set: { model.importing = $0 }), allowedContentTypes: [ThemeFile.type]) { result in
             if case .success(let url) = result { importTheme(url) }
         }
@@ -98,62 +53,158 @@ struct ThemeGallery: View {
         }
     }
 
+    // MARK: The sidebar
+
+    private var sidebar: some View {
+        List(selection: Binding(get: { model.activeTheme as String? }, set: { id in if let id { model.use(id) } })) {
+            if model.inspection.loaded {
+                Section("Themes") {
+                    ForEach(model.inspection.themesByName) { info in
+                        ThemeRow(info: info, problem: info.error.map { ConfigProblem($0, config: model.store.config) })
+                            .tag(info.id)
+                            // A theme that does not load is not one a lock can use.
+                            .selectionDisabled(info.error != nil)
+                            .contextMenu { actions(info) }
+                    }
+                }
+            }
+        }
+        .overlay { if !model.inspection.loaded { ProgressView().controlSize(.small) } }
+        .focused($listFocused)
+        // An explicit assignment moves focus where .defaultFocus does not. The list cannot take the keyboard at once:
+        // when Customize ends, its canvas has it and leaves the window a moment after this view appears, and AppKit then
+        // gives the keyboard to the window. So the list asks until it has it: a few tries as a rule, and 100 at most,
+        // which is five seconds on an idle Mac.
+        .task {
+            for _ in 0..<100 where !listFocused && !Task.isCancelled {
+                listFocused = true
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+        }
+        .onKeyPress(.return) {
+            guard loads(model.activeTheme) else { return .ignored }
+            model.customize(model.activeTheme)
+            return .handled
+        }
+    }
+
+    /// A theme that does not load has only Move to Trash, and only when it is the person's own.
+    @ViewBuilder private func actions(_ info: Inspection.ThemeInfo) -> some View {
+        if info.error == nil {
+            Button("Customize…") { model.customize(info.id) }
+            Button("Preview") { model.preview(info.id) }
+        }
+        if model.canTrash(info.id) {
+            if info.error == nil { Divider() }
+            Button("Move to Trash") { trash(info.id) }
+        }
+    }
+
     // MARK: The theme in use
 
-    private var header: some View {
+    private var page: some View {
         let id = model.activeTheme
         let info = model.inspection.theme(id)
+        let look = ThemeLook(palette: info?.palette ?? [:])
+        return GeometryReader { viewport in
+            // As wide as the page, and the preview at most 60% of the window's height, so the name and Customize stay in
+            // view. The words under the preview line up with its edges.
+            let width = max(280, min(min(viewport.size.width, 1040) - 72, viewport.size.height * 0.6 * 1.6))
+            ScrollView {
+                VStack(spacing: 22) {
+                    if let failure {
+                        FailureBanner(failure: failure, model: model, dismiss: dismissFailure)
+                            .transition(.opacity)
+                    }
+                    // Nothing saves settings.json while it has an error, so a click on a theme changes nothing.
+                    if model.store.problem != nil {
+                        HStack(spacing: 8) {
+                            WarningLabel("settings.json has an error, so the theme can't change.")
+                            Button("Open Settings") { model.openWindow(.settings) }
+                                .buttonStyle(.link)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    preview(id, info: info)
+                        .frame(height: width / 1.6)
+                        .hairline(cornerRadius: 10)
+                        .shadow(color: .black.opacity(0.3), radius: 30, y: 16)
+                        .accessibilityHidden(true)
+                    // Empty until the config is read: before that, the name would be the raw id, such as "default".
+                    if model.inspection.loaded { header(id, info: info, look: look) }
+                }
+                .frame(width: width)
+                .padding(.top, 12)
+                .padding(.bottom, 32)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .background { AmbientBackground(info: info, id: id, isLight: look.isLight) }
+        // The page takes the theme's own light or dark look, as Scene's theme pages do.
+        .environment(\.colorScheme, look.isLight ? .light : .dark)
+        .toolbar {
+            // Without a title, the buttons would sit next to the sidebar.
+            if #available(macOS 26, *) { ToolbarSpacer(.flexible) }
+            ToolbarItemGroup {
+                // File › New Theme…'s action, which the app's delegate answers.
+                Button("New Theme", systemImage: "plus") { NSApp.sendAction(#selector(AppDelegate.newTheme(_:)), to: nil, from: nil) }
+                    .help("Make a new theme and customize it")
+                Button("Schedule", systemImage: "clock.arrow.2.circlepath") { model.scheduling = true }
+                    .help("Change the theme by time of day or with Light and Dark mode")
+                    .popover(isPresented: Binding(get: { model.scheduling }, set: { model.scheduling = $0 }), arrowEdge: .bottom) {
+                        SchedulePopover(model: model)
+                    }
+            }
+        }
+        // An editor that did not open belongs to the theme it was asked for.
+        .onChange(of: id) { openError = nil }
+    }
+
+    private func header(_ id: String, info: Inspection.ThemeInfo?, look: ThemeLook) -> some View {
         // Why Customize… is dimmed: the theme's error, in the words Lua Config uses, or that no theme has the id, such as
         // after its file was deleted in Finder.
         let problem: ConfigProblem? = if let info { info.error.map { ConfigProblem($0, config: model.store.config) } }
             else { ConfigProblem("Locky has no theme named “\(id)”.", config: model.store.config) }
-        return HStack(alignment: .center, spacing: 24) {
-            preview(id, info: info)
-                .aspectRatio(1.6, contentMode: .fit)
-                .containerRelativeFrame(.horizontal) { width, _ in min(max(width * 0.45, 280), 440) }
-                .previewFrame()
-                .accessibilityHidden(true)
-            // Empty until the config is read: before that, the name would be the raw id, such as "default".
-            VStack(alignment: .leading, spacing: 4) {
-                if model.inspection.loaded {
-                    Text("In Use")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
+        return HStack(alignment: .center, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(info?.name ?? id)
-                        .font(.largeTitle.bold())
+                        .font(.system(size: 32, weight: .bold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    if let problem {
-                        HStack(spacing: 8) {
-                            WarningLabel(problem.message)
-                                .lineLimit(3)
-                                .textSelection(.enabled)
-                            OpenProblemButton(model: model, problem: problem, error: $openError)
-                                .buttonStyle(.link)
-                        }
-                        if let openError { WarningLabel(openError) }
-                    } else if let description = info?.description {
-                        Text(description)
-                            .foregroundStyle(.secondary)
+                    Pill(text: "In Use", color: Color(hex: look.accent) ?? .accentColor)
+                }
+                if let problem {
+                    HStack(spacing: 8) {
+                        WarningLabel(problem.message)
                             .lineLimit(3)
+                            .textSelection(.enabled)
+                        OpenProblemButton(model: model, problem: problem, error: $openError)
+                            .buttonStyle(.link)
                     }
-                    if let schedule = model.store.settings.schedule {
-                        Label(schedule.summary(model.inspection), systemImage: "clock.arrow.2.circlepath")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
-                    }
-                    Button("Customize…") { model.customize(id) }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .disabled(!loads(id))
-                        .padding(.top, 8)
+                    if let openError { WarningLabel(openError) }
+                } else if let description = info?.description {
+                    Text(description)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                if info != nil { PaletteDots(colors: look.swatches, size: 14).padding(.top, 6) }
+                if let schedule = model.store.settings.schedule {
+                    Label(schedule.summary(model.inspection), systemImage: "clock.arrow.2.circlepath")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
                 }
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 12)
+            Button("Preview") { model.preview(nil) }
+                .buttonStyle(CapsuleButtonStyle(fill: .primary.opacity(0.1), label: .primary))
+                .help("Show the theme in use full size")
+            Button("Customize…") { model.customize(id) }
+                .buttonStyle(CapsuleButtonStyle(fill: Color(hex: look.accent) ?? .accentColor, label: Color(hex: look.onAccent) ?? .white))
+                .disabled(!loads(id))
         }
-        // An editor that did not open belongs to the theme it was asked for.
-        .onChange(of: id) { openError = nil }
     }
 
     /// The live lock screen of `id`. `info` is set after the initializer, so this call does not depend on where
@@ -165,85 +216,11 @@ struct ThemeGallery: View {
         return preview
     }
 
-    // MARK: The grid
-
-    private func grid(_ proxy: ScrollViewProxy) -> some View {
-        let themes = model.inspection.themesByName
-        let active = model.activeTheme
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 16, alignment: .top)],
-                         alignment: .leading, spacing: 20) {
-            ForEach(themes) { info in
-                ThemeTile(info: info, problem: info.error.map { ConfigProblem($0, config: model.store.config) }, inUse: info.id == active,
-                          canTrash: model.canTrash(info.id),
-                          use: { use(info.id) }, customize: { model.customize(info.id) },
-                          preview: { model.preview(info.id) }, trash: { trash(info.id) })
-                    .id(info.id)
-            }
-        }
-        .focusable()
-        // The ring, drawn in .selection, already shows whether the grid has focus.
-        .focusEffectDisabled()
-        .focused($gridFocused)
-        // An explicit assignment moves focus where .defaultFocus does not. On the next turn of the run loop: when Customize
-        // ends, its canvas has the keyboard and leaves the window after this view appears, and AppKit then gives the
-        // keyboard to the window.
-        .onAppear { DispatchQueue.main.async { gridFocused = true } }
-        .onMoveCommand { direction in
-            guard let next = Self.neighbor(of: model.activeTheme, in: themes, columns: Self.columns(width: gridWidth),
-                                           direction: direction, rightToLeft: layoutDirection == .rightToLeft) else { return }
-            model.use(next)
-            // While settings.json has an error the theme stays, and so does the page.
-            guard model.activeTheme == next else { return }
-            proxy.scrollTo(next)
-        }
-        .onKeyPress(.return) {
-            guard loads(model.activeTheme) else { return .ignored }
-            model.customize(model.activeTheme)
-            return .handled
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
-    }
-
-    /// The grid's columns at `width`: the adaptive item's own rule, with its 180-pt minimum and 16-pt spacing.
-    static func columns(width: CGFloat) -> Int {
-        max(1, Int((width + 16) / (180 + 16)))
-    }
-
-    /// The theme an arrow key moves to from `id`: the next one that loads in that direction, a row away for up and
-    /// down. nil past either end. Left and right swap for a right-to-left layout, which starts on the right. When no
-    /// tile is `id`, such as a theme whose file was deleted, a step forward finds the first theme that loads and a step
-    /// back the last, as a list with no selection does.
-    static func neighbor(of id: String, in themes: [Inspection.ThemeInfo], columns: Int, direction: MoveCommandDirection,
-                         rightToLeft: Bool) -> String? {
-        let step = switch direction {
-        case .left: rightToLeft ? 1 : -1
-        case .right: rightToLeft ? -1 : 1
-        case .up: -columns
-        case .down: columns
-        @unknown default: 0
-        }
-        guard step != 0 else { return nil }
-        guard var index = themes.firstIndex(where: { $0.id == id }) else {
-            return step > 0 ? themes.first { $0.error == nil }?.id : themes.last { $0.error == nil }?.id
-        }
-        repeat {
-            index += step
-            guard themes.indices.contains(index) else { return nil }
-        } while themes[index].error != nil
-        return themes[index].id
-    }
-
     // MARK: Actions
 
     /// Whether Customize can open for `id`: a theme the config's read lists, and one that loads.
     private func loads(_ id: String) -> Bool {
         model.inspection.theme(id).map { $0.error == nil } == true
-    }
-
-    /// A click on a tile: the grid takes focus too, as a click on the grid does.
-    private func use(_ id: String) {
-        gridFocused = true
-        model.use(id)
     }
 
     /// No alert first: the Trash is the undo.
@@ -287,107 +264,41 @@ struct ThemeGallery: View {
     }
 }
 
-/// One theme in the grid: its picture and its name. The ring around the picture marks the theme in use.
-private struct ThemeTile: View {
+/// One theme in the sidebar, as Scene's rows show a theme: its picture, its name, and its colors.
+private struct ThemeRow: View {
     let info: Inspection.ThemeInfo
-    /// Why the theme does not load, in the words the header and Lua Config use.
+    /// Why the theme does not load, in the words the page and Lua Config use.
     let problem: ConfigProblem?
-    let inUse: Bool
-    let canTrash: Bool
-    let use: () -> Void
-    let customize: () -> Void
-    let preview: () -> Void
-    let trash: () -> Void
 
     var body: some View {
-        // A theme that does not load has only Move to Trash, and only when it is the person's own.
-        if info.error == nil || canTrash {
-            button.contextMenu {
-                if info.error == nil {
-                    Button("Customize…", action: customize)
-                    Button("Preview", action: preview)
+        HStack(spacing: 10) {
+            Color.clear
+                .frame(width: 52, height: 34)
+                .overlay { ThemePicture(info: info) }
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .hairline(cornerRadius: 6, lineWidth: 0.5)
+                .overlay {
+                    if problem != nil {
+                        // A shadow edges the triangle: in Light Mode a dimmed picture can be as light as orange.
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .shadow(color: .black.opacity(0.3), radius: 1.5, y: 0.5)
+                    }
                 }
-                if canTrash {
-                    if info.error == nil { Divider() }
-                    Button("Move to Trash", action: trash)
-                }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(info.name).lineLimit(1)
+                PaletteDots(colors: ThemeLook(palette: info.palette).swatches, size: 7)
             }
-        } else {
-            button
+            Spacer(minLength: 0)
         }
-    }
-
-    private var button: some View {
-        Button(action: use) {
-            VStack(alignment: .leading, spacing: 12) {
-                thumbnail
-                Text(info.name)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-            }
-        }
-        .buttonStyle(PressHighlightStyle())
-        // The grid is the one stop in the key loop, not each of its tiles.
-        .focusable(false)
-        .disabled(problem != nil)
+        .padding(.vertical, 3)
+        .opacity(problem == nil ? 1 : 0.4)
         .help(problem?.described ?? info.description ?? "")
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(problem == nil ? info.name : "\(info.name), does not load")
         // After .help, which would make its text the hint.
         .accessibilityHint(problem?.message ?? "Uses this theme when the Mac locks.")
         .accessibilityCustomContent(AccessibilityCustomContentKey("Description"), info.description.map { Text($0) })
-        .accessibilityAddTraits(inUse ? .isSelected : [])
-    }
-
-    private var thumbnail: some View {
-        let shape = RoundedRectangle(cornerRadius: Design.Radius.thumbnail, style: .continuous)
-        return Color.clear
-            .aspectRatio(1.6, contentMode: .fit)
-            .overlay { picture }
-            .clipShape(shape)
-            .hairline(cornerRadius: Design.Radius.thumbnail)
-            .pressOverlay(light: Design.isLight(info.palette["bg"]), in: shape)
-            .opacity(info.error == nil ? 1 : 0.4)
-            .overlay {
-                if info.error != nil {
-                    // A shadow edges the triangle: in Light Mode a dimmed picture can be as light as orange.
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.orange)
-                        .shadow(color: .black.opacity(0.3), radius: 1.5, y: 0.5)
-                }
-            }
-            // A 3-pt ring outside a 4-pt gap, concentric with the picture's corners: 8 + 4 + 3 = 15.
-            .overlay {
-                if inUse {
-                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .strokeBorder(.selection, lineWidth: 3)
-                        .padding(-7)
-                }
-            }
-    }
-
-    /// The theme's picture, else its own colors with a clock. A theme that does not load shows no clock: its warning
-    /// symbol takes the middle.
-    @ViewBuilder private var picture: some View {
-        if let image = ThemeThumbnails.image(for: info) {
-            Image(nsImage: image).resizable().scaledToFill()
-        } else {
-            let color = { (role: String, fallback: String) in Color(hex: info.palette[role] ?? fallback) ?? .black }
-            LinearGradient(colors: [color("bg", "#000000"), color("surface", "#1c1c1e")], startPoint: .top, endPoint: .bottom)
-                .overlay {
-                    if info.error == nil {
-                        VStack(spacing: 6) {
-                            Text("12:00")
-                                .font(.system(.title2, design: .rounded).weight(.semibold))
-                                .foregroundStyle(color("fg", "#ffffff"))
-                            Circle()
-                                .fill(color("accent", "#0a84ff"))
-                                .frame(width: 6, height: 6)
-                        }
-                    }
-                }
-        }
     }
 }
 

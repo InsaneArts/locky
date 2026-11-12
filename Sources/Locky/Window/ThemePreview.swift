@@ -444,17 +444,24 @@ final class CanvasOverlay: NSView {
     }
 
     /// Gives the canvas the keyboard while no control has it, so Escape, the arrows, and Delete work without a click
-    /// first. The window itself, or a view around the canvas (the page, after the gallery's grid had the keys), holds it
-    /// for nobody; a text field keeps it. On the next turn of the run loop, once the views that this change adds or
-    /// removes are in place.
+    /// first. The window itself, or a view around the canvas, holds it for nobody; a text field keeps it. So does a view
+    /// that no longer shows: SwiftUI keeps a page it replaced in the window, invisible, for half a second. The gallery's
+    /// list still has the keyboard then, after Customize replaced it; and the canvas, after the gallery came back, must
+    /// not take it. On the next turn of the run loop, once the views that this change adds are in place.
     func takeKeyboardIfFree() {
         DispatchQueue.main.async { [weak self] in
-            guard let self, canvas != nil, !isHiddenOrHasHiddenAncestor, let window else { return }
+            guard let self, canvas != nil, !Self.isInvisible(self), let window else { return }
             let responder = window.firstResponder
-            if responder == nil || responder === window || (responder as? NSView).map({ isDescendant(of: $0) }) == true {
+            if responder == nil || responder === window
+                || (responder as? NSView).map({ self.isDescendant(of: $0) || Self.isInvisible($0) }) == true {
                 window.makeFirstResponder(self)
             }
         }
+    }
+
+    /// Whether `view` or a view around it is hidden or fully transparent.
+    private static func isInvisible(_ view: NSView) -> Bool {
+        sequence(first: view, next: \.superview).contains { $0.isHidden || $0.alphaValue == 0 }
     }
 
     /// ⌘., which AppKit sends up the responder chain as cancelOperation, as it sends Escape that no view takes: during
