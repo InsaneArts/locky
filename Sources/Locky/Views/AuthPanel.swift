@@ -204,6 +204,7 @@ final class TouchID {
     private var running = false
     private var readyGeneration = -1
     private var restarts = 0
+    private var pendingRestart: Task<Void, Never>?
     private var onSuccess: (@Sendable @MainActor () -> Void)?
 
     var isAvailable: Bool { LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) }
@@ -256,9 +257,12 @@ final class TouchID {
     func restart(after delay: Double = 0) {
         context.invalidate()
         running = false
-        Task { [weak self] in
+        // A restart replaces one still waiting (a wake after the system cancelled Touch ID): a second swap would put a
+        // new context in under the evaluation the first one started.
+        pendingRestart?.cancel()
+        pendingRestart = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             context = LAContext()
             generation += 1
             gaveUp = false

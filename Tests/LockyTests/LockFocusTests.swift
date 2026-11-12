@@ -176,6 +176,19 @@ func waitUntil(_ condition: () -> Bool) async -> Bool {
         #expect(screen.fieldHasKeyboard)
     }
 
+    /// A wake while a cancelled Touch ID waits to restart: the wake's restart replaces the waiting one. Two would swap
+    /// a second context in under the evaluation the first started, whose finger would then count for nothing, and
+    /// Touch ID would listen no more until the next wake.
+    @Test func aLaterTouchIDRestartReplacesOneStillWaiting() async {
+        let touchID = TouchID()
+        let generation = touchID.generation
+        touchID.restart(after: 0.3)
+        touchID.restart()
+        #expect(await waitUntil { touchID.generation == generation + 1 })
+        try? await Task.sleep(for: .milliseconds(600))
+        #expect(touchID.generation == generation + 1)
+    }
+
     /// Caps Lock and the other modifiers change nothing about who has the keyboard.
     @Test func aModifierKeepsTheFieldWithTheKeyboard() throws {
         let (window, screen) = shield()
