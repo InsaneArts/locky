@@ -629,7 +629,7 @@ import Testing
         #expect(store.problem != nil)
         store.update { $0["theme"] = .string("mocha") }
         #expect(try String(contentsOf: Settings.url(config: sandbox.config), encoding: .utf8) == "{ broken")
-        // Reset moves it aside and starts empty.
+        // Reset keeps a copy aside and starts empty.
         try store.resetBrokenFile()
         #expect(store.problem == nil)
         let aside = try FileManager.default.contentsOfDirectory(atPath: sandbox.config.path).filter { $0.hasPrefix("settings.json.broken-") }
@@ -659,10 +659,34 @@ import Testing
         let relaunched = SettingsStore(config: sandbox.config, lastGood: lastGood)
         #expect(relaunched.problem != nil)
         #expect(relaunched.settings == good)
-        // Restoring writes those settings back, the broken file moved aside.
+        // Restoring writes those settings back, a copy of the broken file kept aside.
         try relaunched.resetBrokenFile()
         #expect(Settings.load(config: sandbox.config).settings == good)
         #expect(relaunched.problem == nil)
+    }
+
+    /// A restore that cannot write the last good settings changes nothing. A missing settings.json reads as empty
+    /// settings, so moving the broken file away first would have let the folder watcher's reload adopt the defaults
+    /// and write them over the last good ones.
+    @Test func aRestoreThatCannotSaveChangesNothing() throws {
+        let sandbox = try Sandbox()
+        let lastGood = sandbox.root.appending(path: "support/last-good.json")
+        try FileManager.default.createDirectory(at: lastGood.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Under 1 MB as it is, past it pretty-printed (each 0 on a line of its own): the save refuses it.
+        let big = #"{"big":["# + Array(repeating: "0", count: 160_000).joined(separator: ",") + "]}"
+        try big.write(to: lastGood, atomically: true, encoding: .utf8)
+        try sandbox.write("settings.json", "{ broken")
+        let store = SettingsStore(config: sandbox.config, lastGood: lastGood)
+        #expect(store.problem != nil)
+        #expect(throws: (any Error).self) { try store.resetBrokenFile() }
+        #expect(try String(contentsOf: Settings.url(config: sandbox.config), encoding: .utf8) == "{ broken")
+        // What the folder watcher runs after a file event.
+        store.reload()
+        #expect(store.problem != nil)
+        #expect(store.settings["big"].array?.count == 160_000)
+        #expect(try String(contentsOf: lastGood, encoding: .utf8) == big)
+        let aside = try FileManager.default.contentsOfDirectory(atPath: sandbox.config.path).filter { $0.hasPrefix("settings.json.broken-") }
+        #expect(aside.isEmpty)
     }
 
     @Test func aSaveThroughASymlinkKeepsAnEditNoEventReported() throws {

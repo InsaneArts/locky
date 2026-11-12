@@ -11,6 +11,8 @@ struct SettingsPage: View {
     /// read. The window opens after the lock that took them, so they are on its first frame; a photo still saving when
     /// the lock ended comes with the next config read.
     @State private var photos: [(url: URL, date: Date)]
+    /// Why the last Restore Last Good Settings failed, until one works.
+    @State private var restoreError: String?
 
     init(model: AppModel) {
         self.model = model
@@ -27,7 +29,15 @@ struct SettingsPage: View {
                 Section {
                     WarningLabel(problem)
                         .textSelection(.enabled)
-                    Button("Restore Last Good Settings") { try? store.resetBrokenFile() }
+                    Button("Restore Last Good Settings") {
+                        do {
+                            try store.resetBrokenFile()
+                            restoreError = nil
+                        } catch {
+                            restoreError = "Could not restore: " + ((error as? LuaError)?.message ?? error.localizedDescription)
+                        }
+                    }
+                    if let restoreError { WarningLabel(restoreError) }
                 } footer: {
                     Text("Locky keeps using the last settings that worked. Restoring moves the broken file aside.")
                 }
