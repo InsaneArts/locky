@@ -911,7 +911,7 @@ final class ChildProcess: @unchecked Sendable {
         process.terminationHandler = { [weak self, group] _ in
             // A program that started a background child may leave its pipes open after it exits: the result
             // comes half a second later at most, instead of when that child ends.
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.stopReading(0)
                 self?.stopReading(1)
             }

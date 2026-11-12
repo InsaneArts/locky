@@ -414,7 +414,7 @@ final class PictureView: NSView, BackgroundLoading {
     }
 
     /// Thread-safe, like every CIContext; it keeps no intermediate images, which are big for a wallpaper.
-    private static let context = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
+    nonisolated private static let context = CIContext(options: [.useSoftwareRenderer: false, .cacheIntermediates: false])
 
     /// The picture, reduced to at most `longest` pixels across when that is given, and the scale it was reduced by.
     nonisolated private static func read(_ url: URL, longest: CGFloat?) -> (image: CGImage, scale: Double)? {
