@@ -96,6 +96,15 @@ struct Settings: Equatable, Sendable {
 }
 
 extension Settings {
+    /// emergency_exit, on unless false: ⌃⌥⌘Q switches a lock to the macOS lock screen.
+    var emergencyExit: Bool { self["emergency_exit"].bool != false }
+
+    /// touch_id, on unless false: a lock listens for Touch ID.
+    var touchID: Bool { self["touch_id"].bool != false }
+
+    /// update_check, on unless false: the plugins are checked for updates once a day.
+    var updateCheck: Bool { self["update_check"].bool != false }
+
     /// themes.<theme>.<key>: the window's change to a theme's "background" or "widgets".
     func themeEdit(_ theme: String, _ key: String) -> LuaValue {
         self["themes"][theme][key]

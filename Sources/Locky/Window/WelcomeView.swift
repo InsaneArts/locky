@@ -105,7 +105,7 @@ struct WelcomeView: View {
                 .controlSize(.large)
                 .padding(.top, 16)
             // The lock screen's own rule, so the line says what the next lock offers.
-            Text(Self.unlockLine(touchID: biometrics && model.store.settings["touch_id"].bool != false))
+            Text(Self.unlockLine(touchID: biometrics && model.store.settings.touchID))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.top, 8)
@@ -180,7 +180,7 @@ struct WelcomeView: View {
             VStack(alignment: .leading, spacing: 24) {
                 row("lock.trianglebadge.exclamationmark", Self.guardLine)
                 // The lock's own rule: settings.json can turn the way out off.
-                if model.store.settings["emergency_exit"].bool != false {
+                if model.store.settings.emergencyExit {
                     row("keyboard", Self.wayOutLine)
                 }
                 row("touchid", Self.unlockOnlyLine)

@@ -392,7 +392,7 @@ private struct UnlockSection: View {
         } header: {
             Text("Unlock")
         } footer: {
-            if store.settings["emergency_exit"].bool != false {
+            if store.settings.emergencyExit {
                 Text("If something goes wrong on the lock screen, press ⌃⌥⌘Q to switch to the macOS lock screen.")
             }
         }

@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             try? await Task.sleep(for: .seconds(60))
             while !Task.isCancelled {
                 guard let self else { return }
-                if store.settings["update_check"].bool != false, session?.mode != .lock { model.checkForUpdates() }
+                if store.settings.updateCheck, session?.mode != .lock { model.checkForUpdates() }
                 try? await Task.sleep(for: .seconds(24 * 3600))
             }
         }

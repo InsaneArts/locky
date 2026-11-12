@@ -194,9 +194,9 @@ final class LockSession: NSObject, NSWindowDelegate {
         // A preview kept behind other windows (for screenshots) never asks for Touch ID: its Touch ID view is
         // hidden, so macOS would show its own prompt on top of whatever the user is doing.
         let touchID = TouchID()
-        if touchID.isAvailable, mode != .embedded, !(mode == .preview && options.behind), options.settings["touch_id"].bool != false {
+        if touchID.isAvailable, mode != .embedded, !(mode == .preview && options.behind), options.settings.touchID {
             self.touchID = touchID
-        } else if touchID.isAvailable, mode != .lock, options.settings["touch_id"].bool != false {
+        } else if touchID.isAvailable, mode != .lock, options.settings.touchID {
             touchIDPicture = true
         }
 
@@ -1213,7 +1213,7 @@ final class LockSession: NSObject, NSWindowDelegate {
     }
 
     /// settings.json's emergency_exit, on unless false: ⌃⌥⌘Q switches to the macOS lock screen.
-    private var emergencyExit: Bool { options.settings["emergency_exit"].bool != false }
+    private var emergencyExit: Bool { options.settings.emergencyExit }
 
     private func installEmergencyExit() {
         guard emergencyExit else { return }
