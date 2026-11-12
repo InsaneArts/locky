@@ -217,14 +217,10 @@ struct Node: Sendable, Equatable {
         numeric = fields["numeric"]?.bool
         stretch = try string("stretch")
         blend = try string("blend")
-        do {
-            color = try Paint(lua: fields["color"] ?? .nil)
-            background = try Paint(lua: fields["background"] ?? .nil, allowGlass: true)
-            border = try Paint(lua: fields["border"] ?? .nil)
-            stroke = try Paint(lua: fields["stroke"] ?? .nil)
-        } catch let error as LuaError {
-            throw LuaError("\(error.message)")
-        }
+        color = try Paint(lua: fields["color"] ?? .nil)
+        background = try Paint(lua: fields["background"] ?? .nil, allowGlass: true)
+        border = try Paint(lua: fields["border"] ?? .nil)
+        stroke = try Paint(lua: fields["stroke"] ?? .nil)
         opacity = try number("opacity")
         spacing = try number("spacing")
         align = try string("align")
