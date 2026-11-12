@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Locky's design tokens. DESIGN.md has the values and the reasons for them.
+/// Locky's design tokens: the radii and spacing the windows share. Each says where it is used.
 enum Design {
     enum Radius {
         /// Theme tiles, plugin icons, photos.
@@ -17,7 +17,7 @@ enum Design {
     }
 }
 
-/// Motion. Keyboard actions never animate (DESIGN.md › Motion).
+/// Motion. Keyboard actions never animate.
 enum Motion {
     /// The strong ease-out, cubic-bezier(0.23, 1, 0.32, 1), for AppKit fades. A new object each time: the type is not Sendable.
     static var easeOut: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1) }
