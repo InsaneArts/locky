@@ -1,7 +1,7 @@
 # settings.json
 
 Locky's windows save every change to `~/.config/locky/settings.json` at once. Open at login is not in the file:
-macOS keeps it as a login item. init.lua stays yours: the windows never change it, and Settings › General › Config
+macOS keeps it as a login item. init.lua stays yours: the windows never change it, and Settings › Customization › Config
 folder creates it only when it is missing.
 
 Locky applies the layers in this order, and a later layer wins key by key:
@@ -30,21 +30,21 @@ says so in its windows and in `locky check`, and does not overwrite it.
 | `schedule` | `{ "mode": "time", "day": "glass", "night": "default", "day_starts": "07:00", "night_starts": "19:00" }`, or `{ "mode": "appearance", "light": "glass", "dark": "default" }` | Themes › Schedule (the toolbar's clock, or File › Schedule Themes…) |
 | `themes` | `{ "<id>": { "background": {…}, "palette": {…}, "font": {…}, "card": {…}, "widgets": […], "auth": {…} } }`: see below and [themes.md](themes.md#make-and-share-themes-in-the-window) | Themes › Customize… |
 | `packs` | Package specs, as `locky.pack.add` takes them: `"user/repo"`, an `https://`, `ssh://`, or `git@` address, or `{ "src": …, "version": …, "name": …, "allow": ["system", "files"] }` (`allow`: what the plugin may do; see [plugins.md](plugins.md#what-a-plugin-may-do)) | Settings › Plugins › Install Plugin… |
-| `message` | A line under the password field | Settings › General › Lock Screen |
+| `message` | A line under the password field | Settings › Lock Screen |
 | `hour24` | `true` or `false`: a 24- or 12-hour clock in every theme | — (the lock screen follows System Settings › General › Date & Time unless this key or init.lua sets it) |
-| `privacy` | `true` hides your name and picture, this Mac's name, its location (the clocks' city and the weather's place), network addresses, agent titles and workspaces (an agent's kind, such as Claude, still shows), and git repositories, branches, and commit messages. Plugin widgets decide for themselves | Settings › General › Lock Screen › Hide personal information |
-| `touch_id` | `false` turns Touch ID off (default `true`) | Settings › General › Unlock |
+| `privacy` | `true` hides your name and picture, this Mac's name, its location (the clocks' city and the weather's place), network addresses, agent titles and workspaces (an agent's kind, such as Claude, still shows), and git repositories, branches, and commit messages. Plugin widgets decide for themselves | Settings › Lock Screen › Hide personal information |
+| `touch_id` | `false` turns Touch ID off (default `true`) | Settings › Unlock |
 | `emergency_exit` | `false` stops ⌃⌥⌘Q from switching to the macOS lock screen (default `true`) | — (on unless this key is `false`) |
 | `lock_key` | `true`: the Touch ID button shows Locky's lock instead of the macOS lock screen (default `false`). Needs Accessibility access; see [security.md](security.md#what-locky-asks-macos-for) | Settings › General › Lock with the Touch ID button |
 | `shortcut` | `{ "key": 37, "modifiers": ["control", "option", "command"] }`: a virtual key code (37 is L) and modifiers | Settings › General › Lock Now shortcut |
 | `auto_lock` | `{ "idle_minutes": 5, "display_sleep": true, "system_sleep": true, "screen_saver": true }`; a missing key is off. Locky treats `display_sleep` and `screen_saver` as one: when either is `true`, it locks on both. The idle count pauses while a video, a call, or a presentation keeps the display on | Settings › General › Lock Automatically (one switch, "When the screen saver starts or the display turns off", for both keys) |
 | `battery_saver` | `true`: nothing moves on battery either. In Low Power Mode or with Reduce Motion on, nothing moves anyway | — |
-| `lock_animation` | How a lock comes in and goes out: `"fade"`, `"focus"` (the default), `"iris"`, `"lift"`, `"sweep"`, `"dissolve"`, `"tiles"`, or `"none"`. Fade: the lock fades in and out. Focus: the lock grows sharp from a little larger, and grows as it goes. Iris: it opens from the middle of the screen, and out from the password field. Lift: it comes down from above the screen, and lifts up off it. Sweep: a wide soft edge crosses the screen in the reading direction. Dissolve: it forms out of large soft clouds, and clears outward from the password field. Tiles: hexagons appear from the middle, and go from the password field. `true` from an older Locky is Focus, `false` is none, and a name Locky does not know is Focus. The lock comes in animated after Lock Now and after inactivity. A lock when the display turns off, the screen saver starts, or the Mac sleeps covers the screen at once. The lock goes out animated only after your password or Touch ID. With Reduce Motion on, every style is Fade | Settings › General › Lock Screen › Lock animation |
-| `display_off` | Seconds on the lock screen without input before the displays turn off. It acts only during a lock, and also when the system's display sleep is Never or another app keeps the display on. Without this key ("Like the system"), the lock uses the system's display sleep time (System Settings › Lock Screen › Turn display off when inactive) for the power source in use, counted from the lock's start or its last input. If that time is Never, the displays stay on, as they would without Locky. During a lock, Locky holds back the system's own display sleep and the screen saver ([security.md](security.md#what-locky-guarantees)) | Settings › General › Lock Screen › Turn the display off |
+| `lock_animation` | How a lock comes in and goes out: `"fade"`, `"focus"` (the default), `"iris"`, `"lift"`, `"sweep"`, `"dissolve"`, `"tiles"`, or `"none"`. Fade: the lock fades in and out. Focus: the lock grows sharp from a little larger, and grows as it goes. Iris: it opens from the middle of the screen, and out from the password field. Lift: it comes down from above the screen, and lifts up off it. Sweep: a wide soft edge crosses the screen in the reading direction. Dissolve: it forms out of large soft clouds, and clears outward from the password field. Tiles: hexagons appear from the middle, and go from the password field. `true` from an older Locky is Focus, `false` is none, and a name Locky does not know is Focus. The lock comes in animated after Lock Now and after inactivity. A lock when the display turns off, the screen saver starts, or the Mac sleeps covers the screen at once. The lock goes out animated only after your password or Touch ID. With Reduce Motion on, every style is Fade | Settings › Lock Screen › Lock animation |
+| `display_off` | Seconds on the lock screen without input before the displays turn off. It acts only during a lock, and also when the system's display sleep is Never or another app keeps the display on. Without this key ("Like the system"), the lock uses the system's display sleep time (System Settings › Lock Screen › Turn display off when inactive) for the power source in use, counted from the lock's start or its last input. If that time is Never, the displays stay on, as they would without Locky. During a lock, Locky holds back the system's own display sleep and the screen saver ([security.md](security.md#what-locky-guarantees)) | Settings › Lock Screen › Turn the display off |
 | `ambient_after` | Seconds on the lock screen without input before only the theme's background shows (default `20`; `0` turns it off). The widgets, the password field, and its lines fade out in 0.6 seconds (0.2 seconds with Reduce Motion), and the background goes on moving. A key, a mouse move, a click, or a scroll brings them back in 0.3 seconds, and a key that does it is the first character of the password. ⌃⌥⌘Q works while only the background shows | — |
-| `intruder_photo` | Take a camera photo at this many wrong passwords in one lock. Locky keeps the newest 20 photos and deletes those older than 30 days | Settings › General › Unlock › Take a photo |
+| `intruder_photo` | Take a camera photo at this many wrong passwords in one lock. Locky keeps the newest 20 photos and deletes those older than 30 days | Settings › Unlock › Take a photo |
 | `update_check` | `false` stops the daily plugin update check, which fetches and compares commits and runs no plugin code (default `true`) | Settings › Plugins › Check for updates daily |
-| `editor`, `terminal` | What "Open in" uses: an app's bundle id, a command (`"nvim"`), or `"default"`; a terminal's bundle id | Settings › General › Customization › Config folder › Open in |
+| `editor`, `terminal` | What "Open in" uses: an app's bundle id, a command (`"nvim"`), or `"default"`; a terminal's bundle id | Settings › Customization › Config folder › Open in |
 
 ## Theme changes
 
@@ -105,15 +105,18 @@ Dock, and its menus have Lock Now in the Locky menu.
   made, Move to Trash (see [themes.md](themes.md#make-and-share-themes-in-the-window)). Edit › Undo (⌘Z) takes
   back each change, and Redo (⇧⌘Z) makes it again. Done returns to the themes. For a theme that does not load,
   Customize shows why, with Open at the file and line.
-- **Settings › General:** Open at login, the Lock Now shortcut, Accessibility, Lock with the Touch ID button, Lock
-  Automatically, the lock screen message, Hide personal information, Lock animation, Turn the display off, Touch ID,
-  and Take a photo, with Camera under it while it is on; photos taken after wrong passwords show at the top.
-  Accessibility, Camera, and an Open at login that waits for approval in Login Items each have a Grant button that
-  shows the state live (see [security.md](security.md#what-locky-asks-macos-for)). Lock with the Touch ID button waits
-  for Accessibility. Under Lock animation, a small preview plays the chosen style on the theme in use, over
-  your desktop picture, while the Settings window is in front. With Reduce Motion on, it shows a still picture and
-  says that Locky uses Fade. The Lock Automatically footer says that you may unlock twice when
-  macOS also asks for your password after the display turns off. The last section, Customization, has:
+- **Settings › General:** Open at login, the Lock Now shortcut, Accessibility, Lock with the Touch ID button, and
+  Lock Automatically. Accessibility and an Open at login that waits for approval in Login Items each have a Grant
+  button that shows the state live (see [security.md](security.md#what-locky-asks-macos-for)). Lock with the Touch ID
+  button waits for Accessibility. The Lock Automatically footer says that you may unlock twice when macOS also asks
+  for your password after the display turns off.
+- **Settings › Lock Screen:** the lock screen message, Hide personal information, Lock animation, and Turn the
+  display off. Under Lock animation, a small preview plays the chosen style on the theme in use, over your desktop
+  picture, while the Settings window is in front. With Reduce Motion on, it shows a still picture and says that
+  Locky uses Fade.
+- **Settings › Unlock:** Touch ID, and Take a photo, with Camera and its Grant button under it while it is on;
+  photos taken after wrong passwords show at the top.
+- **Settings › Customization:**
   - **Config folder:** its path, and Open in your editor for init.lua. The button's menu chooses the editor (and
     the terminal for a terminal editor) and has Show in Finder. Without init.lua, Create init.lua makes one with
     examples.

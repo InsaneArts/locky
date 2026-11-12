@@ -133,7 +133,7 @@ import Testing
         #expect(Settings.load(config: sandbox.config).problem == nil)
     }
 
-    /// The parser's words say where the file breaks, so General's error row does too.
+    /// The parser's words say where the file breaks, so the Settings window's error row does too.
     @Test func aBrokenFileSaysWhereItBreaks() throws {
         let sandbox = try Sandbox()
         try sandbox.write("settings.json", #"{ "privacy": true, "#)
@@ -912,7 +912,7 @@ import Testing
     }
 }
 
-/// The Settings window's own rules: General's pop-ups and switches, and its Open in button.
+/// The Settings window's own rules: its pop-ups and switches, and its Open in button.
 @Suite struct WindowSettingsTests {
     @Test func whenInactiveListsNeverAndTheUsualTimes() {
         let choices = SettingsPage.idleChoices(stored: nil)

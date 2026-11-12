@@ -88,16 +88,16 @@ background, the colors, the font, and where the password field sits). Schedule (
 clock in the toolbar, or File › Schedule Themes…) changes the theme by time of day or with Light and Dark mode, and
 Move to Trash removes a theme you made.
 
-Settings… (⌘,) opens the **Settings** window. General holds the Lock Now shortcut, Lock with the Touch ID button, auto-lock, Open at login, a lock
-screen message, Hide personal information, Lock animation (seven styles, with a preview), Turn the display off,
-Touch ID, and a photo after wrong passwords.
-Plugins installs, updates, and removes plugins. General's last section opens the config folder and init.lua, shows
-init.lua's problems, and makes new themes and widgets. Everything but Open at login saves to `~/.config/locky/settings.json`, which wins over init.lua
-key by key: see [settings.md](docs/settings.md).
+Settings… (⌘,) opens the **Settings** window, with five panes. General has Open at login, the Lock Now shortcut, Lock
+with the Touch ID button, and auto-lock. Lock Screen has the lock screen message, Hide personal information, Lock
+animation (seven styles, with a preview), and Turn the display off. Unlock has Touch ID and a photo after wrong
+passwords. Customization opens the config folder and init.lua, shows init.lua's problems, and makes new themes and
+widgets. Plugins installs, updates, and removes plugins. Everything but Open at login saves to
+`~/.config/locky/settings.json`, which wins over init.lua key by key: see [settings.md](docs/settings.md).
 
 ## Configure
 
-`~/.config/locky/init.lua` (Settings › General › Config folder creates it with examples):
+`~/.config/locky/init.lua` (Settings › Customization › Config folder creates it with examples):
 
 ```lua
 locky.setup({ theme = "default", palette = { accent = "#ff79c6" } })
@@ -145,7 +145,7 @@ locky window [SECTION]                       the Themes window, a Settings pane,
 Sources/CLua/                 Lua 5.5.1 (unmodified) and locky_bridge.c: time budgets, memory limit, safe calls
 Sources/Locky/Lua/            the runtime: LuaVM, LuaRuntime, the runtime path, system information
 Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the password field
-Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window (General, Plugins),
+Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window and its panes,
                               the Welcome
 Sources/Locky/Settings/       settings.json, its store, and the theme schedule
 Sources/Locky/System/         the shortcut, auto-lock, login item, permissions, location, power, camera, editors, and

@@ -25,7 +25,7 @@ The Welcome's last page says the same. The sections below give the details.
   the two.
 - **⌃⌥⌘Q switches to the macOS lock screen.** It is the way out when something goes wrong, and it never
   lets anyone in. The lock screen names it after the third wrong password, or when one password check takes
-  more than 5 seconds, and Settings › General names it under Unlock. `"emergency_exit": false` in settings.json
+  more than 5 seconds, and Settings › Unlock names it. `"emergency_exit": false` in settings.json
   turns it off.
 - **No lock without the keyboard.** If Locky is not the active app with its lock window key within 1.5
   seconds of a lock, or loses the keyboard during a lock and does not get it back within 1 second, it does
@@ -77,7 +77,7 @@ with a green check.
   waits for it. Grant opens System Settings › Privacy & Security › Accessibility (Device Control and Data Access
   from macOS 27), with a small panel under the System Settings window: drag Locky from the panel into the list.
   When Locky has the permission, the panel closes and Locky comes to the front.
-- **Camera.** Only for Settings › General › Unlock › Take a photo. When you choose a number of wrong passwords,
+- **Camera.** Only for Settings › Unlock › Take a photo. When you choose a number of wrong passwords,
   macOS asks once. If you said no, Grant opens System Settings › Privacy & Security › Camera. The lock never asks:
   without the permission, it takes no photo.
 - **Login item.** Open at login adds Locky to System Settings › General › Login Items. If you switch it off there,

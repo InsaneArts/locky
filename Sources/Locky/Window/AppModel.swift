@@ -8,19 +8,20 @@ final class AppModel {
     enum Section: String, CaseIterable, Identifiable {
         /// The Themes window.
         case themes
-        /// The Settings window's panes: General, Plugins.
-        case settings, plugins
+        /// The Settings window's panes: General, Lock Screen, Unlock, Customization, Plugins. Each fits its rows without
+        /// scrolling: as one pane, General was taller than a MacBook's screen.
+        case settings, lockScreen = "lock-screen", unlock, customization, plugins
         /// The Welcome window.
         case welcome
 
-        static let panes: [Section] = [.settings, .plugins]
+        static let panes: [Section] = [.settings, .lockScreen, .unlock, .customization, .plugins]
 
-        /// A `Locky window` argument. The old names keep working: config, the old Lua Config pane, is General, which has
-        /// its rows now.
+        /// A `Locky window` argument. The old names keep working: config, the old Lua Config pane, is Customization,
+        /// which has its rows now, and new-widget is that pane with its New Widget sheet.
         init?(argument: String) {
             switch argument {
             case "dashboard", "widgets": self = .themes
-            case "config", "new-widget": self = .settings
+            case "config", "new-widget": self = .customization
             default: self.init(rawValue: argument)
             }
         }
@@ -31,6 +32,9 @@ final class AppModel {
             switch self {
             case .themes: "Themes"
             case .settings: "General"
+            case .lockScreen: "Lock Screen"
+            case .unlock: "Unlock"
+            case .customization: "Customization"
             case .plugins: "Plugins"
             case .welcome: "Welcome to Locky"
             }
@@ -40,6 +44,9 @@ final class AppModel {
             switch self {
             case .themes: "paintpalette"
             case .settings: "gearshape"
+            case .lockScreen: "lock.display"
+            case .unlock: "lock.open"
+            case .customization: "wrench.and.screwdriver"
             case .plugins: "puzzlepiece.extension"
             case .welcome: "hand.wave"
             }
@@ -62,7 +69,7 @@ final class AppModel {
     private var askedForAddWidget = false
     /// File › Import Theme… asks the gallery to show the file importer.
     var importing = false
-    /// General's New Widget sheet: its button and `Locky window new-widget` open it.
+    /// Customization's New Widget sheet: its button and `Locky window new-widget` open it.
     var newWidget = false
     /// The Schedule popover: the gallery's toolbar item and File › Schedule Themes… open it.
     var scheduling = false
@@ -94,7 +101,7 @@ final class AppModel {
     /// Packages with a newer commit upstream than the one pinned.
     var available: [PackUpdate] { updates.filter { $0.error == nil && $0.current != nil && $0.latest != nil && $0.current != $0.latest } }
 
-    /// The editors and terminals on this Mac, found once when General's Customization section or an Open first needs them.
+    /// The editors and terminals on this Mac, found once when Settings › Customization or an Open first needs them.
     private(set) var editors: (editors: [Editor], terminals: [Terminal])?
 
     /// Why the Lock Now shortcut could not be registered, such as another app holding it.
@@ -252,7 +259,7 @@ final class AppModel {
         guard canTrash(id) else { throw TrashError(errorDescription: "Only your own themes can move to the Trash.") }
         // Nothing can save settings.json while it has an error, so it would still name a theme that is gone.
         guard Settings.load(config: store.config).problem == nil else {
-            throw TrashError(errorDescription: "settings.json has an error. Fix it in Settings › General first.")
+            throw TrashError(errorDescription: "settings.json has an error. Fix it in Settings first.")
         }
         try remove(ThemeFile.file(id, config: store.config))
         store.update { settings in

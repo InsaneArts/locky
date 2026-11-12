@@ -3,7 +3,7 @@ import PermissionFlow
 import PermissionFlowCameraStatus
 import SystemSettingsKit
 
-/// What Locky asks macOS for, one model for the Welcome and Settings › General: Accessibility (the Touch ID button,
+/// What Locky asks macOS for, one model for the Welcome and the Settings window: Accessibility (the Touch ID button,
 /// and the keyboard at the lock screen), the camera (a photo after wrong passwords), and the login item's approval.
 /// Showing a state only reads it: nothing here prompts until the person clicks Grant. PermissionFlow does the asking: it
 /// opens System Settings at the page, with its panel to drag Locky into the list where the page takes a drag.

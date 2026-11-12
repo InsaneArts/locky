@@ -53,7 +53,7 @@ import Testing
         #expect(throws: AgentSkill.Failure.self) { try AgentSkill(home: home, source: source).install() }
     }
 
-    /// General's Agent skill row names the agents that have the skill, and what it needs while none could.
+    /// Customization's Agent skill row names the agents that have the skill, and what it needs while none could.
     @Test func theRowSaysWhereTheSkillIs() {
         #expect(AgentSkillRow.subtitle(agents: [], installed: []) == "Needs Claude Code, Codex, or a ~/.agents folder.")
         #expect(AgentSkillRow.subtitle(agents: [.claude], installed: []) == "Lets coding agents make widgets and themes.")

@@ -1,5 +1,5 @@
 -- Locky's config. Lua, like Neovim's init.lua. Locky runs it each time the screen locks.
--- Check it with `locky check`; open the log from Settings › General.
+-- Check it with `locky check`; open the log from Settings › Customization.
 
 locky.setup({
   -- A theme from `locky themes`, or one of your own in themes/<name>.lua next to this file.

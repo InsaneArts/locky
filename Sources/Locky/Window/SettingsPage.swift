@@ -2,28 +2,20 @@ import AppKit
 import LocalAuthentication
 import SwiftUI
 
-/// Settings › General: when the Mac locks, how it unlocks, what the lock screen says, and the config folder with new
-/// themes and widgets. Each change saves to settings.json at once. A row Lua also reads stores no key while it shows
-/// init.lua's value, so the row is its own reset; Hide personal information is the exception, and stores on all the same.
-struct SettingsPage: View {
+/// One pane of the Settings window: a grouped form. Each change saves to settings.json at once. While the file has an
+/// error, every pane starts with it and the way out of it, and the pane's own rows wait.
+struct SettingsPane<Content: View>: View {
     let model: AppModel
-    /// The intruder photos, newest first. They are read when the pane is built, when a lock ends, and after each config
-    /// read. The window opens after the lock that took them, so they are on its first frame; a photo still saving when
-    /// the lock ended comes with the next config read.
-    @State private var photos: [(url: URL, date: Date)]
+    /// Stays usable with a broken settings.json: Customization, whose folder is where the file is fixed.
+    var live = false
+    @ViewBuilder var content: Content
     /// Why the last Restore Last Good Settings failed, until one works.
     @State private var restoreError: String?
 
-    init(model: AppModel) {
-        self.model = model
-        _photos = State(initialValue: Self.photos(for: model))
-    }
-
-    private var store: SettingsStore { model.store }
-
     var body: some View {
-        // The settings.json error and Photos groups come and go at once: the grouped Form cannot slide the rows below a
-        // whole group, and cross-fades the whole pane instead.
+        let store = model.store
+        // The settings.json error comes and goes at once: the grouped Form cannot slide the rows below a whole group, and
+        // cross-fades the whole pane instead.
         Form {
             if let problem = store.problem {
                 Section {
@@ -43,41 +35,22 @@ struct SettingsPage: View {
                 }
             }
             // While the file has an error, everything but the way out of it waits.
-            Group {
-                if !photos.isEmpty {
-                    PhotosSection(model: model, photos: photos, delete: delete, deleteAll: deleteAll)
-                }
-                StartSection(model: model)
-                AutoLockSection(model: model)
-                LockScreenSection(model: model)
-                UnlockSection(model: model)
-            }
-            .disabled(store.problem != nil)
-            // Stays live with a broken settings.json: its folder is where the file is fixed.
-            CustomizationSection(model: model)
+            content.disabled(!live && store.problem != nil)
         }
         .formStyle(.grouped)
-        .task(id: model.revision) { loadPhotos() }
-        .modifier(WhenLockEnds(model: model, action: loadPhotos))
     }
+}
 
-    private func loadPhotos() {
-        photos = Self.photos(for: model)
-    }
+/// Settings › General: what lets Locky lock at all, and when it locks by itself. A row Lua also reads stores no key
+/// while it shows init.lua's value, so the row is its own reset.
+struct SettingsPage: View {
+    let model: AppModel
 
-    /// The photos to show. A screenshot run shows none.
-    private static func photos(for model: AppModel) -> [(url: URL, date: Date)] {
-        model.screenshots ? [] : IntruderLog().photos()
-    }
-
-    private func delete(_ photo: URL) {
-        try? IntruderLog().delete(photo)
-        loadPhotos()
-    }
-
-    private func deleteAll() {
-        try? IntruderLog().deleteAll()
-        loadPhotos()
+    var body: some View {
+        SettingsPane(model: model) {
+            StartSection(model: model)
+            AutoLockSection(model: model)
+        }
     }
 
     // MARK: Rules the tests reach
@@ -143,6 +116,70 @@ struct SettingsPage: View {
     /// "1 minute", "7 minutes".
     fileprivate nonisolated static func plural(_ number: Int, _ unit: String) -> String {
         number == 1 ? "1 \(unit)" : "\(number) \(unit)s"
+    }
+}
+
+/// Settings › Lock Screen: what the lock screen says and hides, how it comes and goes, and when its display turns off.
+struct LockScreenPage: View {
+    let model: AppModel
+
+    var body: some View {
+        SettingsPane(model: model) { LockScreenSections(model: model) }
+    }
+}
+
+/// Settings › Unlock: how the lock screen lets people in, and what it does about the ones it should not. The photos it
+/// took come first, while there are any.
+struct UnlockPage: View {
+    let model: AppModel
+    /// The intruder photos, newest first. They are read when the pane is built, when a lock ends, and after each config
+    /// read. The window opens after the lock that took them, so they are on its first frame; a photo still saving when
+    /// the lock ended comes with the next config read.
+    @State private var photos: [(url: URL, date: Date)]
+
+    init(model: AppModel) {
+        self.model = model
+        _photos = State(initialValue: Self.photos(for: model))
+    }
+
+    var body: some View {
+        // The Photos group comes and goes at once, as the settings.json error does.
+        SettingsPane(model: model) {
+            if !photos.isEmpty {
+                PhotosSection(model: model, photos: photos, delete: delete, deleteAll: deleteAll)
+            }
+            UnlockSection(model: model)
+        }
+        .task(id: model.revision) { loadPhotos() }
+        .modifier(WhenLockEnds(model: model, action: loadPhotos))
+    }
+
+    private func loadPhotos() {
+        photos = Self.photos(for: model)
+    }
+
+    /// The photos to show. A screenshot run shows none.
+    private static func photos(for model: AppModel) -> [(url: URL, date: Date)] {
+        model.screenshots ? [] : IntruderLog().photos()
+    }
+
+    private func delete(_ photo: URL) {
+        try? IntruderLog().delete(photo)
+        loadPhotos()
+    }
+
+    private func deleteAll() {
+        try? IntruderLog().deleteAll()
+        loadPhotos()
+    }
+}
+
+/// Settings › Customization: the config folder, new themes and widgets, the agent skill, and the log.
+struct CustomizationPage: View {
+    let model: AppModel
+
+    var body: some View {
+        SettingsPane(model: model, live: true) { CustomizationSection(model: model) }
     }
 }
 
@@ -259,8 +296,9 @@ private struct AutoLockSection: View {
     }
 }
 
-/// What the lock screen says and hides, how it comes and goes, and when its display turns off.
-private struct LockScreenSection: View {
+/// The lock screen's rows, in two groups: what it says and hides, then how it comes and goes and when its display turns
+/// off.
+private struct LockScreenSections: View {
     let model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -268,7 +306,7 @@ private struct LockScreenSection: View {
 
     var body: some View {
         let displayOff = SettingsPage.whole(store.settings.displayOff)
-        Section("Lock Screen") {
+        Section {
             MessageField(model: model)
             Toggle(isOn: Binding(get: { model.privacy }, set: { on in
                 store.update { SettingsPage.setPrivacy(on, base: model.inspection.base["privacy"], in: &$0) }
@@ -276,6 +314,8 @@ private struct LockScreenSection: View {
                 Text("Hide personal information")
                 Text("Your name and picture, this Mac's name and location, network addresses, and project and task names.")
             }
+        }
+        Section {
             Picker("Lock animation", selection: Binding(get: { store.settings.lockAnimation }, set: { style in
                 withAnimation(Motion.rows(reduceMotion)) { store.update { $0.lockAnimation = style } }
             })) {
@@ -389,8 +429,6 @@ private struct UnlockSection: View {
                     model.permissions.grantCamera()
                 }
             }
-        } header: {
-            Text("Unlock")
         } footer: {
             if store.settings.emergencyExit {
                 Text("If something goes wrong on the lock screen, press ⌃⌥⌘Q to switch to the macOS lock screen.")

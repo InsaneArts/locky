@@ -205,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     /// `Locky window`: a window or a Settings pane. For the Themes window, Customize for `theme`, or for the theme in use
-    /// with Add Widget open (`widgets`); else the gallery. For General, the New Widget sheet with `newWidget`.
+    /// with Add Widget open (`widgets`); else the gallery. For Customization, the New Widget sheet with `newWidget`.
     private func open(_ section: AppModel.Section, theme: String?, widgets: Bool, newWidget: Bool, behind: Bool, size: CGSize?) {
         showWindow(section, behind: behind, size: size)
         if newWidget { model.newWidget = true }
@@ -258,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 guard let self, session?.mode != .lock else { return }
                 controller.show(behind: behind)
             }
-        case .settings?, .plugins?:
+        case let pane? where AppModel.Section.panes.contains(pane):
             model.startWatching()
             model.refresh()
             let controller = settingsWindow ?? SettingsWindowController(model: model) { [weak self] in self?.closed(self?.settingsWindow?.window) }
@@ -428,7 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             // Someone typed wrong passwords and the camera caught them: show the photos.
             if mode == .lock, let session {
                 Task { [weak self] in
-                    if await !session.photosTaken().isEmpty { self?.showWindow(.settings) }
+                    if await !session.photosTaken().isEmpty { self?.showWindow(.unlock) }
                 }
             }
         }

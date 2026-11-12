@@ -6,7 +6,7 @@ right.
 
 ## Install the skill
 
-In Settings › General › Customization, click Install in the Agent skill row. Or run:
+In Settings › Customization, click Install in the Agent skill row. Or run:
 
 ```sh
 /Applications/Locky.app/Contents/MacOS/Locky skill install

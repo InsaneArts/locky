@@ -2,7 +2,7 @@ import AppKit
 import ImageIO
 import SwiftUI
 
-/// Settings › General's picture of the lock animation: the chosen style plays in miniature on the theme in use, over a
+/// Settings › Lock Screen's picture of the lock animation: the chosen style plays in miniature on the theme in use, over a
 /// stand-in desktop, again and again. The way in, a moment locked, the way out, a moment of the desktop. One embedded
 /// screen plays every loop. It plays only while the Settings window is in front and shows; otherwise, and with Reduce
 /// Motion, the theme's picture stands still in its place.

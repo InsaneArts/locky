@@ -2,12 +2,12 @@
 # Renders a Locky window to a PNG, without disturbing the screen: a second Locky opens the window behind every
 # other window, and quits after the capture.
 #
-#   Scripts/window-shot.sh SECTION OUT.png [THEME]      # themes, settings, plugins, welcome, or new-widget
+#   Scripts/window-shot.sh SECTION OUT.png [THEME]      # themes, a Settings pane, welcome, or new-widget
 #
-# themes is the Themes window (with THEME: Customize for it); settings and plugins are the Settings
-# window's panes; welcome is the Welcome window. The old names still work: dashboard is the Themes window, and
+# themes is the Themes window (with THEME: Customize for it); settings (General), lock-screen, unlock, customization,
+# and plugins are the Settings window's panes; welcome is the Welcome window. The old names still work: dashboard is the Themes window, and
 # widgets captures the Add Widget sheet alone, opened over Customize for the theme in use (or THEME). new-widget
-# captures General's New Widget sheet alone.
+# captures Customization's New Widget sheet alone.
 #
 # SIZE (default 1240x780) is the Themes window's content size; the Settings and Welcome windows have their own
 # sizes. APPEARANCE=light or APPEARANCE=dark draws the window in that appearance (Locky reads it as

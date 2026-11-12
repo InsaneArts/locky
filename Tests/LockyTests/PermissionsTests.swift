@@ -98,8 +98,8 @@ import Testing
 
     // MARK: Showing never asks
 
-    /// The Welcome's page 2 and Settings › General read the states and ask for nothing: no prompt, no panel, no System
-    /// Settings, also with every permission missing and the login item waiting.
+    /// The Welcome's page 2 and Settings' General and Unlock panes read the states and ask for nothing: no prompt, no
+    /// panel, no System Settings, also with every permission missing and the login item waiting.
     @Test func showingTheStatesAsksForNothing() throws {
         _ = NSApplication.shared
         let mac = Mac()
@@ -109,7 +109,8 @@ import Testing
         model.store.update { $0["intruder_photo"] = .int(3) }
         let visit = WelcomeVisit()
         visit.page = .lockScreen
-        for root in [AnyView(WelcomeView(model: model, visit: visit, close: {})), AnyView(SettingsPage(model: model).frame(width: 600, height: 900))] {
+        for root in [AnyView(WelcomeView(model: model, visit: visit, close: {})), AnyView(SettingsPage(model: model).frame(width: 600, height: 900)),
+                     AnyView(UnlockPage(model: model).frame(width: 600, height: 900))] {
             let view = NSHostingView(rootView: root)
             view.layoutSubtreeIfNeeded()
             #expect(view.fittingSize.height > 0)

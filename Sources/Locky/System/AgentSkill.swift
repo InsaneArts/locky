@@ -1,7 +1,7 @@
 import Foundation
 
 /// The Locky skill for coding agents: SKILL.md and the Lua API docs, in Locky.app's Resources/skill/locky. `locky skill
-/// install` and Settings › General copy it into each agent's skills folder, so an agent can write widgets and themes.
+/// install` and Settings › Customization copy it into each agent's skills folder, so an agent can write widgets and themes.
 /// Only agents whose folder is there get it: Locky never creates ~/.claude, ~/.codex, or ~/.agents.
 struct AgentSkill {
     /// The skill as Locky ships it.

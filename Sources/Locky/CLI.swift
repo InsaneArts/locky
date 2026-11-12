@@ -31,7 +31,7 @@ enum CLI {
         }
         /// `window widgets`: Customize with Add Widget open.
         var opensWidgetGallery: Bool { arguments.first == "window" && arguments.dropFirst().first == "widgets" }
-        /// `window new-widget`: General with the New Widget sheet open.
+        /// `window new-widget`: Customization with the New Widget sheet open.
         var opensNewWidget: Bool { arguments.first == "window" && arguments.dropFirst().first == "new-widget" }
         var theme: String?
         /// `window themes --theme T --select W`: Customize with the theme's first W widget selected, for screenshots.
@@ -168,7 +168,8 @@ enum CLI {
               login [on|off]         open Locky at login, or not
               preview [--theme NAME] [--size 1440x900] [--transition [STYLE]]
               lock [--theme NAME]
-              window [themes|settings|plugins|welcome|new-widget] [--theme NAME] [--size 1240x780]
+              window [themes|settings|lock-screen|unlock|customization|plugins|welcome|new-widget]
+                     [--theme NAME] [--size 1240x780]
             Config: \(LuaError.shortenPaths(RuntimePath.defaultConfig.path))/init.lua
             """)
             return arguments.first == nil || ["help", "--help", "-h"].contains(arguments.first!) ? 0 : 2
@@ -302,7 +303,7 @@ enum CLI {
         let path = RuntimePath.standard()
         let initFile = path.config.appending(path: "init.lua")
         if FileManager.default.fileExists(atPath: initFile.path) { ok("config: \(LuaError.shortenPaths(initFile.path))") }
-        else { warn("no init.lua", "Settings › General › Config folder creates one with examples") }
+        else { warn("no init.lua", "Settings › Customization › Config folder creates one with examples") }
 
         let runtime = LuaRuntime(path: path, delegate: .silent)
         var pluginSections: LuaValue = .nil

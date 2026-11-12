@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Settings › General › Customization, the last section: the config folder with init.lua in an editor, init.lua's
-/// problems at their line, a new theme, a new widget, the agent skill that writes them, and the log. It follows the
+/// Settings › Customization's rows, in three groups: the config folder with init.lua in an editor and init.lua's
+/// problems at their line; a new theme, a new widget, and the agent skill that writes them; and the log. It follows the
 /// config as it changes on disk.
 struct CustomizationSection: View {
     let model: AppModel
@@ -19,7 +19,7 @@ struct CustomizationSection: View {
     var body: some View {
         // The config's own problems. A theme that does not load says so in the Themes window.
         let problems = Self.rows(model.inspection.problems, config: model.store.config)
-        Section("Customization") {
+        Section {
             LabeledContent {
                 if exists {
                     OpenInButton(model: model, file: file, error: $openError)
@@ -57,6 +57,12 @@ struct CustomizationSection: View {
                     WarningLabel(problemError.text)
                 }
             }
+        }
+        .animation(Motion.rows(reduceMotion), value: problems)
+        .task(id: model.revision) { exists = FileManager.default.fileExists(atPath: file.path) }
+        // A problem's Open needs the editors before the Open in button has shown.
+        .task { await model.findEditors() }
+        Section {
             LabeledContent("Themes") {
                 // File › New Theme…'s action, wherever it is in the responder chain.
                 Button("New Theme…") { NSApp.sendAction(#selector(AppDelegate.newTheme(_:)), to: nil, from: nil) }
@@ -65,6 +71,8 @@ struct CustomizationSection: View {
                 Button("New Widget…") { model.newWidget = true }
             }
             AgentSkillRow(model: model)
+        }
+        Section {
             LabeledContent("Log") {
                 Button("Open") {
                     LogFile.shared.write(level: "info", message: "log opened", source: "locky")
@@ -72,10 +80,6 @@ struct CustomizationSection: View {
                 }
             }
         }
-        .animation(Motion.rows(reduceMotion), value: problems)
-        .task(id: model.revision) { exists = FileManager.default.fileExists(atPath: file.path) }
-        // A problem's Open needs the editors before the Open in button has shown.
-        .task { await model.findEditors() }
         // A lock closes it (AppModel.locked): Return at the lock must not reach it.
         .sheet(isPresented: Binding(get: { model.newWidget }, set: { model.newWidget = $0 })) { NewWidgetSheet(model: model) }
     }
