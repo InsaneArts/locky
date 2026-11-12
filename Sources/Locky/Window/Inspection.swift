@@ -249,8 +249,3 @@ struct ThemeLayout: Sendable, Equatable {
     /// The card's fill: a palette role or a color; nil for the style's own.
     var cardFill: String?
 }
-
-extension LuaRuntime.Delegate {
-    /// For runtimes that only answer questions.
-    static let silent = LuaRuntime.Delegate(present: { _, _ in }, failed: { _, _, _ in })
-}

@@ -223,7 +223,7 @@ enum CLI {
     }
 
     private static func booted() -> LuaRuntime {
-        let runtime = LuaRuntime(delegate: .init(present: { _, _ in }, failed: { _, _, _ in }))
+        let runtime = LuaRuntime(delegate: .silent)
         runtime.sync { try? runtime.boot() }
         return runtime
     }
@@ -304,7 +304,7 @@ enum CLI {
         if FileManager.default.fileExists(atPath: initFile.path) { ok("config: \(LuaError.shortenPaths(initFile.path))") }
         else { warn("no init.lua", "Settings › General › Config folder creates one with examples") }
 
-        let runtime = LuaRuntime(path: path, delegate: .init(present: { _, _ in }, failed: { _, _, _ in }))
+        let runtime = LuaRuntime(path: path, delegate: .silent)
         var pluginSections: LuaValue = .nil
         runtime.sync {
             do {

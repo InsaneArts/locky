@@ -69,7 +69,7 @@ struct PackManager {
 
     /// The packages init.lua adds, and any errors in running it.
     func specs() -> (specs: [Spec], problems: [String]) {
-        let runtime = LuaRuntime(path: path, delegate: .init(present: { _, _ in }, failed: { _, _, _ in }))
+        let runtime = LuaRuntime(path: path, delegate: .silent)
         return runtime.sync {
             do {
                 try runtime.boot()

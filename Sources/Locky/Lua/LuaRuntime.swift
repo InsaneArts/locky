@@ -13,6 +13,9 @@ final class LuaRuntime: @unchecked Sendable {
         var present: @Sendable (_ instance: Int, _ view: Node?) -> Void
         /// A widget failed. `disabled` is true when the runtime stopped it.
         var failed: @Sendable (_ instance: Int, _ message: String, _ disabled: Bool) -> Void
+
+        /// For runtimes that only answer questions.
+        static let silent = Delegate(present: { _, _ in }, failed: { _, _, _ in })
     }
 
     /// Values the host reads on the main thread and the runtime reports, such as the keyboard layout.
