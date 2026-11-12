@@ -289,7 +289,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     /// Lock Now, the windows, and Quit.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        if let failure = ThemeFailure.current(.standard, inspection: model.inspection, config: store.config) {
+        // After the first config read, as the Themes window's banner: before it, the record's theme has no name yet, and
+        // a plugin theme fixed since looks unchanged.
+        if model.inspection.loaded, let failure = ThemeFailure.current(.standard, inspection: model.inspection, config: store.config) {
             // The Themes window's banner has the whole message, and Open.
             let note = item(failure.menuTitle(model.inspection), #selector(openThemes(_:)))
             note.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
