@@ -84,10 +84,6 @@ struct PackManager {
         }
     }
 
-    static func lockedNames(path: RuntimePath) -> [String] {
-        (try? readLockfile(path.lockfile))?.plugins.keys.sorted() ?? []
-    }
-
     /// The lockfile, an empty one when there is none, or an error when it exists but cannot be read (for
     /// example with merge-conflict markers): then nothing may overwrite it.
     static func readLockfile(_ url: URL) throws -> Lockfile {
@@ -203,12 +199,6 @@ struct PackManager {
             Self.isPackageName(name) && !wanted.contains(name.lowercased())
                 && !local.contains(path.packs.appending(path: name).resolvingSymlinksInPath().path)
         }
-    }
-
-    /// `check`'s result for each package, for the window. A busy run and an unreadable lockfile appear only in
-    /// run(.check)'s lines.
-    func checkUpdates() -> [PackUpdate] {
-        run(.check).updates
     }
 
     /// Moves each package to the commit `check` found for it, and no other: what the user reviewed is what

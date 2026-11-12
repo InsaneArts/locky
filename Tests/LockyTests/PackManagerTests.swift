@@ -228,7 +228,7 @@ import Testing
 
     /// What check found, without the commits and diffstat.
     private func found(_ manager: PackManager) -> [PackUpdate] {
-        manager.checkUpdates().map { update in
+        manager.run(.check).updates.map { update in
             var update = update
             update.changes = []
             return update
@@ -381,7 +381,7 @@ import Testing
         let repo = try makePlugin(in: sandbox, greeting: "hello")
         let manager = try synced(repo, in: sandbox)
         let reviewed = try commit("hi", in: repo)
-        let updates = manager.checkUpdates()
+        let updates = manager.run(.check).updates
         _ = try commit("later", in: repo)
         _ = manager.run(.check)
         let report = manager.apply(updates)
