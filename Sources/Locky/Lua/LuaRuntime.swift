@@ -1012,13 +1012,19 @@ final class ChildProcess: @unchecked Sendable {
 
 /// ~/Library/Logs/Locky/locky.log: what plugins print and every error, kept under 2 MB.
 final class LogFile: @unchecked Sendable {
-    static let shared = LogFile()
-    private let lock = NSLock()
     /// Locky.app logs to ~/Library/Logs; tests and other hosts log to a temporary folder.
-    let url: URL = Bundle.main.bundleIdentifier == "com.tornikegomareli.Locky"
+    static let shared = LogFile(url: Bundle.main.bundleIdentifier == "com.tornikegomareli.Locky"
         ? FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/Locky/locky.log")
-        : FileManager.default.temporaryDirectory.appending(path: "locky-test-logs/locky.log")
+        : FileManager.default.temporaryDirectory.appending(path: "locky-test-logs/locky.log"))
+    private let lock = NSLock()
+    let url: URL
     private var handle: FileHandle?
+    /// The file's size so far. Past 2 MB the next write moves it aside: Locky runs for days.
+    private var size = 0
+
+    init(url: URL) {
+        self.url = url
+    }
     /// The last messages, for the preview and `locky health`.
     private(set) var recent: [String] = []
 
@@ -1029,7 +1035,13 @@ final class LogFile: @unchecked Sendable {
             recent.append(line)
             if recent.count > 200 { recent.removeFirst(recent.count - 200) }
             if handle == nil { open() }
-            try? handle?.write(contentsOf: Data(line.utf8))
+            let data = Data(line.utf8)
+            try? handle?.write(contentsOf: data)
+            size += data.count
+            if size > 2 << 20 {
+                try? handle?.close()
+                handle = nil
+            }
         }
     }
 
@@ -1042,6 +1054,6 @@ final class LogFile: @unchecked Sendable {
         }
         if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }
         handle = try? FileHandle(forWritingTo: url)
-        _ = try? handle?.seekToEnd()
+        size = Int((try? handle?.seekToEnd()) ?? 0)
     }
 }

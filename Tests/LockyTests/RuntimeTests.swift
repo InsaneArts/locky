@@ -222,3 +222,17 @@ import Testing
         try await Task.sleep(for: .milliseconds(100))
     }
 }
+
+@Suite struct LogFileTests {
+    /// locky.log stays near 2 MB however long Locky runs: past that, it moves to locky.old.log and starts anew.
+    @Test func aLongRunMovesTheLogAside() throws {
+        let sandbox = try Sandbox()
+        let url = sandbox.root.appending(path: "logs/locky.log")
+        let log = LogFile(url: url)
+        let message = String(repeating: "x", count: 1000)
+        for _ in 0..<2200 { log.write(level: "info", message: message, source: "test") }
+        let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+        #expect(size < 2 << 20, "\(size) bytes")
+        #expect(FileManager.default.fileExists(atPath: sandbox.root.appending(path: "logs/locky.old.log").path))
+    }
+}
