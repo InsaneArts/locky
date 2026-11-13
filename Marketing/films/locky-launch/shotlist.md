@@ -4,15 +4,17 @@
 frame before its beat. The sections follow the score: quiet 0–8, groove 8–24, breakdown 24–36, build 36–40,
 groove 40–60, last chord 60–64.
 
-State chain: LOCKED (four looks) → 43 OF THEM → THE APP → LOCK → LIVE → TIME → PLUGINS → CUSTOMIZE → BUILD → LOCK → THE NAME.
+State chain: LOCKED (six looks, each named) → 43 OF THEM → THE APP → LOCK → LIVE → TIME → PLUGINS → CUSTOMIZE → BUILD → LOCK → THE NAME.
 
 | Time | Beat | Entry state | Exit state | Words | Purpose |
 |---|---|---|---|---|---|
-| 0–2 | A1 Hook | Event Horizon, live, full frame (frame 0 is the poster): the theme that looks least like a lock screen | pushed in | This is a lock screen. | Stop the scroll with a claim to doubt |
-| 2–4 | A2 | cut: Poster | pushed in | So is this. | The claim grows: from a black hole to Swiss type |
-| 4–6 | A3 | cut: Notebook | pushed in | And this. | Range: a ruled page, a sticky note, a coffee ring |
-| 6–8 | A4 Problem | cut: Aurora, the theme that looks most like the Mac's own | pushed in | Your Mac came with one. | The problem, said in the score's quiet |
-| 8–11.5 | B1 Run | the drop: 7 cuts, one a beat, dark to light: Synthwave, Neon City, Matrix, Phosphor, Tokyo Night, Liquid, Pocket | Pocket | Locky has 43. (with the icon) | The answer, and the name, on the drop |
+| 0–2 | A1 Hook | Sakura, live, full frame, with its name (frame 0 is the poster) | pushed in | This is a lock screen. (label: Sakura) | Stop the scroll with the best looking theme and a claim to doubt |
+| 2–4 | A2 | cut: Synthwave | pushed in | So is this. (label: Synthwave) | The claim grows |
+| 4–5 | A3 | cut: Tokyo Night; from here a cut a second | pushed in | And this. (label: Tokyo Night) | Range, and the cuts quicken toward the drop |
+| 5–6 | A4 | cut: Gruvbox | pushed in | (label: Gruvbox) | A rest: its quote sits where a line would |
+| 6–7 | A5 Problem | cut: Neon City | pushed in | Your Mac came with one. (label: Neon City) | The problem, said in the score's quiet |
+| 7–8 | A6 | cut: Mocha; the line holds | pushed in | (label: Mocha) | The plainest of the six, before the drop |
+| 8–11.5 | B1 Run | the drop: 7 cuts, one a beat, dark to light, each with its name: Event Horizon, Matrix, Liquid, Vaporwave, Poster, Notebook, Pocket | Pocket | Locky has 43. (with the icon; label: the theme's name) | The answer, and the name, on the drop |
 | 11.5–12 | B2 | the eighth cut is Bauhaus: the Themes window's own preview, filling the frame | same | | Sets up the step back |
 | 12–18 | B3 The app | the camera steps back: the preview is inside the real Themes window | the selection has gone down the list, one theme a beat from 13.0 to 17.0, each live, the page in each theme's colors; it stops on Galaxy Sea and holds a second | Pick one. (and a count: 03 / 43 …) | The product, by real use |
 | 18–24 | S Lock | on each bar the lock's own animation comes in over the app: Tiles over the walk's last theme (Galaxy Sea), then Sweep (Deep Blue) and Dissolve (Braun), each after a cut to its page an eighth note before | locked | Lock it your way. (label: Tiles · one of 7 lock animations) / The Touch ID button locks with Locky. (label: Settings · Lock with the Touch ID button) / (label: Dissolve · one of 7 lock animations) | The product's one action, and that the Mac's own lock button can do it |
@@ -34,6 +36,8 @@ State chain: LOCKED (four looks) → 43 OF THEM → THE APP → LOCK → LIVE �
 ## Continuity
 
 - The password field is in every lock screen. It is the film's fixed point.
+- The six themes of A are the owner's choice of Locky's best looking. Every full-frame theme of A and B1 shows its
+  name, in the same place, above the line.
 - B2 and B3 are one take: the full-frame Bauhaus is the window's preview, seen close.
 - F1, F3, G, and H are one run of the app: the clock goes on by a minute or two. The lock comes in over the agent
   session's last frame, in the same minute, and the end card is the same take, still running.
@@ -55,8 +59,8 @@ The film's sounds come from one table in `src/film.js` (`window.CUES`), written 
 
 | Time | Cue | Sound |
 |---|---|---|
-| 0.0 | Aurora | the score's first chord |
-| 2, 4, 6 | cuts | a soft knock |
+| 0.0 | Sakura | the score's first chord |
+| 2, 4, 5, 6, 7 | cuts | a soft knock |
 | 8.0 | the run | the score's drop; a click on each of 8 beats |
 | 12.0 | step back | air |
 | 13.0 … 17.0 | the list moves, 9 beats | ticks |

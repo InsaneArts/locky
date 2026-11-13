@@ -21,7 +21,7 @@ Optional angle, your call:
 
 > hyprlock, for macOS.
 
-- X has no custom thumbnail: frame 0 is the poster. It shows Aurora with "This is a lock screen."
+- X has no custom thumbnail: frame 0 is the poster. It shows Sakura, its name, and "This is a lock screen."
 - X plays muted in the feed: every line of the film is burned in.
 - Post a still the same day (the end card, or the Themes window). On X, stills out-reached films for Zed 1.0 and
   Omarchy 4.5 (`Scene/Marketing/films/one-theme/research/virality.md`).
@@ -42,7 +42,7 @@ Optional angle, your call:
   and New Theme shows one white frame as its editor opens.
 - **Agents.** The film says "Lock your MacBook. Your agents keep working." at the last lock, with the label "macOS
   keeps running behind Locky's lock". It shows no agents on a lock screen: herdr does not run in the helper, so
-  Departures (in the list, at 15.5 s) and Phosphor (in the run, at 9.5 s) show their "herdr offline" state.
+  Departures (in the list, at 15.5 s) shows its "herdr offline" state.
 - **The Rex theme** is a separate post: `out/locky-rex-1080p.mp4` and the two `out/locky-rex-*-4k.png` stills. It
   shows Rex's app icon; Superlogical publishes no rules for its use.
 - **Plugins.** The film installs someone/locky-harbor, a made-up name for the docs' example theme. No public package

@@ -29,6 +29,7 @@ Lessons carried over from Scene's three cuts:
 | Line | SF Pro Display Semibold | 68 px | 100% |
 | Second line | SF Pro Display Semibold | 68 px | 60% |
 | Label (small caps) | SF Mono Medium | 27 to 34 px, tracking 0.08 em | 78% |
+| Theme name (small caps) | SF Mono Medium | 30 px, tracking 0.08 em, 88 px above the line's baseline | 100%, over a soft dark patch on a dark theme |
 | Code, the agent's prompt | SF Mono Medium | 22 px, 25 px | syntax in the theme's own colors |
 | End card | SF Pro Display Semibold | 52 px ("Locky for macOS"), 36 px ("by InsaneArts") | 100%, 62% |
 

@@ -67,14 +67,28 @@ function lines(t, first, second, { start, end, ink = "light", x = 116, y = 906, 
 }
 
 /** A small label in mono capitals: the film's quiet second voice. */
-function label(t, text, { start, end, x = 119, y = 742, ink = "light", align = "left", size = 27, tone = 1 }) {
+function label(t, text, { start, end, x = 119, y = 742, ink = "light", align = "left", size = 27, tone = 1, full = false }) {
   if (t < start || t > end + 0.16) return;
   const a = ease.outCubic(span(t, start, 0.3)) * (1 - span(t, end, 0.16)) * tone;
   setFont(size, { family: "SF Mono", weight: 500, tracking: 0.08 });
   ctx.save();
   ctx.textAlign = align;
-  ctx.fillStyle = `rgba(${INK[ink]},${0.78 * a})`;
-  if (ink === "light") { ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 14; }
+  if (full && ink === "light") {
+    // A theme's name has to read over a neon grid: a soft dark patch under it, as under a line.
+    const width = ctx.measureText(text.toUpperCase()).width;
+    ctx.save();
+    ctx.translate(x + width / 2, y - size * 0.36);
+    ctx.scale(1, (size * 1.5) / (width * 0.8));
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, width * 0.8);
+    g.addColorStop(0, `rgba(0,0,0,${0.42 * a})`);
+    g.addColorStop(0.6, `rgba(0,0,0,${0.24 * a})`);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(-width, -width, width * 2, width * 2);
+    ctx.restore();
+  }
+  ctx.fillStyle = `rgba(${INK[ink]},${(full ? 1 : 0.78) * a})`;
+  if (ink === "light") { ctx.shadowColor = `rgba(0,0,0,${full ? 0.8 : 0.6})`; ctx.shadowBlur = 14; }
   ctx.fillText(text.toUpperCase(), x, y);
   ctx.restore();
 }
@@ -219,41 +233,45 @@ function pointer(clip, tc, cam, alpha = 1) {
   ctx.restore();
 }
 
-// MARK: A. The hook (0 to 8): four held lock screens, in the score's quiet opening
+// MARK: A. The hook (0 to 8): six held lock screens, each with its name, in the score's quiet opening
 
 // Frames sit at whole sixtieths, and a sum such as 8.4833 + 0.0167 can fall a hair under 8.5: the hair is added back.
 const EPS = 1e-6;
 /** Which of a run of equal shots a time is in: each starts one frame before its beat. */
 const shot = (t, start, each, count) => clamp(Math.floor((t - start + EARLY + EPS) / each), 0, count - 1);
 
-// The first is the one that looks least like a lock screen; the last, the one that looks most like the Mac's own.
-const HOOK = [
-  ["eventhorizon", "This is a lock screen.", "light"],
-  ["poster", "So is this.", "dark"],
-  ["notebook", "And this.", "dark"],
-  ["aurora", "Your Mac came with one.", "light"],
-];
+// The six best looking of the 43, first. Two hold a bar, then four hold half a bar: the cuts quicken into the drop.
+const HOOK = [["sakura", "Sakura", 0], ["synthwave", "Synthwave", 2], ["tokyonight", "Tokyo Night", 4], ["gruvbox", "Gruvbox", 5],
+              ["neoncity", "Neon City", 6], ["mocha", "Mocha", 7]];
+// A line holds over a cut. Gruvbox has a quote where the line sits, so no line shows over it, and Tokyo Night has
+// its password field beside the line, so its line is the short one.
+const HOOK_LINES = [["This is a lock screen.", null, 1.8], ["So is this.", 2.04, 3.8], ["And this.", 4.04, 4.82],
+                    ["Your Mac came with one.", 6.04, 7.8]];
+const NAME = { y: 818, size: 30, full: true };
 
 function hook(t) {
-  const k = shot(t, 0, 2, 4);
-  const local = t + EARLY - k * 2;
-  const [clip, words, ink] = HOOK[k];
-  held(clip, local, 2, { from: 1.02, to: 1.055 });
-  // The Notebook's line sits right of the page's red margin.
-  line(t, words, { start: k === 0 ? null : k * 2 + 0.04, end: k * 2 + 1.8, ink, x: clip === "notebook" ? 262 : 116 });
+  const k = HOOK.findLastIndex(([, , at]) => t >= at - EARLY - EPS);
+  const [clip, name, at] = HOOK[k];
+  const dur = (HOOK[k + 1]?.[2] ?? 8) - at;
+  held(clip, t + EARLY - at, dur, { from: 1.02, to: 1.02 + 0.0175 * dur });
+  // The name is part of the shot: it is there from the cut's first frame.
+  label(t, name, { start: at - 1, end: 8, ...NAME });
+  for (const [words, start, end] of HOOK_LINES) line(t, words, { start, end });
 }
 
 // MARK: B. The run (8 to 11.5): the score's drop, one lock screen a beat, dark to light
 
-const RUN = ["synthwave", "neoncity", "matrix", "phosphor", "tokyonight", "vaporwave", "pocket"];
-const RUN_INK = ["light", "light", "light", "light", "light", "light", "dark"];
+const RUN = [["eventhorizon", "Event Horizon", "light"], ["matrix", "Matrix", "light"], ["liquid", "Liquid", "light"],
+             ["vaporwave", "Vaporwave", "light"], ["poster", "Poster", "dark"], ["notebook", "Notebook", "dark"], ["pocket", "Pocket", "dark"]];
 
 function run(t) {
   const k = shot(t, 8, BEAT, RUN.length);
   const local = t - (8 - EARLY) - k * BEAT;
+  const [clip, name, ink] = RUN[k];
   // Each cut lands a little large and settles: the run has a pulse.
-  lock(RUN[k], 0.5 + local, { zoom: 1.02 + 0.035 * (1 - ease.outExpo(clamp(local / 0.42))) });
-  named(t, "Locky has 43.", { start: 8.0, end: 11.3, ink: RUN_INK[k] });
+  lock(clip, 0.5 + local, { zoom: 1.02 + 0.035 * (1 - ease.outExpo(clamp(local / 0.42))) });
+  label(t, name, { start: 7, end: 12, ink, ...NAME });
+  named(t, "Locky has 43.", { start: 8.0, end: 11.3, ink });
 }
 
 // MARK: B2. The app (11.5 to 18): the run's last picture is the Themes window's own preview; the camera steps back
@@ -597,7 +615,7 @@ function film(t) {
 // Every sound's time, for tools/score.py: the film and its sound share this table.
 window.CUES = {
   length: DURATION,
-  cuts: [2, 4, 6],
+  cuts: [2, 4, 5, 6, 7],
   run: [8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5],
   stepBack: 12,
   list: WALK.map((_, j) => 13 + j * BEAT),
