@@ -106,8 +106,8 @@ Drafts. Approve or change them before anything is posted. One reply a feature, i
   package for Locky exists yet.
 - **Agents.** macOS's own lock screen does not stop your agents either. The post says what a Locky lock is, not
   that others stop them.
-- **The link.** The repository has no LICENSE file, so no post says "open source". Check that the repository is
-  public and has something to download before post 15 goes out.
+- **The link.** InsaneArts/locky is public under the MIT license since Nov 13, with release 0.1.0. Its README has
+  the install lines: `curl … | sh`, Homebrew, or a build from a clone.
 - **Settings.** The takes show "Version 0.0.1" in the sidebar, and "Device Control and Data Access", which is
   macOS 27's name for Accessibility.
 - **Sound.** Each clip has a part of the film's score at the film's level. Nobody has heard them: listen once.
