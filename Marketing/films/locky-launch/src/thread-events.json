@@ -1,0 +1,167 @@
+{
+ "set-touchid": [
+  {
+   "kind": "click",
+   "x": 982.0,
+   "y": 323.0,
+   "note": "touch id",
+   "t": 1.707,
+   "seen": 1.933
+  }
+ ],
+ "set-autolock": [
+  {
+   "kind": "click",
+   "x": 958.25,
+   "y": 446.5,
+   "note": "menu",
+   "t": 2.347,
+   "seen": 2.617
+  },
+  {
+   "kind": "click",
+   "x": 970.25,
+   "y": 519.1,
+   "note": "For 5 minutes",
+   "t": 3.946,
+   "seen": 4.267
+  },
+  {
+   "kind": "click",
+   "x": 982.0,
+   "y": 485.0,
+   "note": "display",
+   "t": 5.568,
+   "seen": null
+  },
+  {
+   "kind": "click",
+   "x": 982.0,
+   "y": 522.5,
+   "note": "sleep",
+   "t": 6.812,
+   "seen": null
+  }
+ ],
+ "set-anim": [
+  {
+   "kind": "click",
+   "x": 958.0,
+   "y": 295.5,
+   "note": "menu",
+   "t": 2.116,
+   "seen": 2.117
+  },
+  {
+   "kind": "click",
+   "x": 950.0,
+   "y": 415.5,
+   "note": "Tiles",
+   "t": 3.946,
+   "seen": 3.983
+  },
+  {
+   "kind": "click",
+   "x": 958.0,
+   "y": 295.5,
+   "note": "menu",
+   "t": 7.468,
+   "seen": 7.667
+  },
+  {
+   "kind": "click",
+   "x": 950.0,
+   "y": 199.5,
+   "note": "Iris",
+   "t": 9.276,
+   "seen": 9.617
+  },
+  {
+   "kind": "click",
+   "x": 958.0,
+   "y": 295.5,
+   "note": "menu",
+   "t": 12.804,
+   "seen": 12.983
+  },
+  {
+   "kind": "click",
+   "x": 950.0,
+   "y": 343.5,
+   "note": "Sweep",
+   "t": 14.615,
+   "seen": 14.733
+  }
+ ],
+ "set-photo": [
+  {
+   "kind": "click",
+   "x": 958.25,
+   "y": 229.0,
+   "note": "menu",
+   "t": 2.382,
+   "seen": 2.583
+  },
+  {
+   "kind": "drag",
+   "x": 958.25,
+   "y": 229.0,
+   "x1": 992.25,
+   "y1": 277.0,
+   "note": "After 3 wrong passwords",
+   "t": 3.873,
+   "seen": 4.15
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "escape"
+   ],
+   "note": "",
+   "t": 8.249,
+   "seen": 8.433
+  }
+ ],
+ "set-tour": [
+  {
+   "kind": "click",
+   "x": 350,
+   "y": 195,
+   "note": "Lock Screen",
+   "t": 2.432,
+   "seen": 2.75
+  },
+  {
+   "kind": "click",
+   "x": 350,
+   "y": 233,
+   "note": "Unlock",
+   "t": 4.227,
+   "seen": 4.4
+  },
+  {
+   "kind": "click",
+   "x": 350,
+   "y": 271,
+   "note": "Customization",
+   "t": 6.024,
+   "seen": 6.183
+  },
+  {
+   "kind": "click",
+   "x": 350,
+   "y": 309,
+   "note": "Plugins",
+   "t": 7.809,
+   "seen": 8.067
+  },
+  {
+   "kind": "click",
+   "x": 350,
+   "y": 157,
+   "note": "General",
+   "t": 9.697,
+   "seen": 9.9
+  }
+ ]
+}

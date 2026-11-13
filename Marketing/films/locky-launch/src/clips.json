@@ -168,5 +168,298 @@
   "file": "lock-mocha.mkv",
   "in": 0.5,
   "out": 5.6
+ },
+ "t-sakura": {
+  "file": "lock-sakura.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-synthwave": {
+  "file": "lock-synthwave.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-neoncity": {
+  "file": "lock-neoncity.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-tokyonight": {
+  "file": "lock-tokyonight.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-gruvbox": {
+  "file": "lock-gruvbox.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-mocha": {
+  "file": "lock-mocha.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-dotmatrix": {
+  "file": "lock-dotmatrix.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-mission": {
+  "file": "lock-mission.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-matrix": {
+  "file": "lock-matrix.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-quantified": {
+  "file": "lock-quantified.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-phosphor": {
+  "file": "lock-phosphor.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-cassette": {
+  "file": "lock-cassette.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-wordclock": {
+  "file": "lock-wordclock.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-cyberdeck": {
+  "file": "lock-cyberdeck.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-observatory": {
+  "file": "lock-observatory.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-eventhorizon": {
+  "file": "lock-eventhorizon.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-default": {
+  "file": "lock-default.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-departures": {
+  "file": "lock-departures.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-cockpit": {
+  "file": "lock-cockpit.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-memento": {
+  "file": "lock-memento.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-bento": {
+  "file": "lock-bento.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-tui": {
+  "file": "lock-tui.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-rainy": {
+  "file": "lock-rainy.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-rosepine": {
+  "file": "lock-rosepine.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-galaxysea": {
+  "file": "lock-galaxysea.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-material": {
+  "file": "lock-material.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-deepblue": {
+  "file": "lock-deepblue.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-everforest": {
+  "file": "lock-everforest.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-kanagawa": {
+  "file": "lock-kanagawa.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-nord": {
+  "file": "lock-nord.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-snowfall": {
+  "file": "lock-snowfall.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-liquid": {
+  "file": "lock-liquid.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-vaporwave": {
+  "file": "lock-vaporwave.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-lookout": {
+  "file": "lock-lookout.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-pocket": {
+  "file": "lock-pocket.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-glass": {
+  "file": "lock-glass.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-poster": {
+  "file": "lock-poster.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-bauhaus": {
+  "file": "lock-bauhaus.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-brutal": {
+  "file": "lock-brutal.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-braun": {
+  "file": "lock-braun.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-station": {
+  "file": "lock-station.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-op1": {
+  "file": "lock-op1.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "t-notebook": {
+  "file": "lock-notebook.mkv",
+  "in": 1.0,
+  "out": 1.6,
+  "width": 2112
+ },
+ "wayfocus": {
+  "file": "way-focus.mkv",
+  "in": 0.0,
+  "out": 5.2
+ },
+ "wayfade": {
+  "file": "way-fade.mkv",
+  "in": 0.0,
+  "out": 5.2
+ },
+ "waylift": {
+  "file": "way-lift.mkv",
+  "in": 0.0,
+  "out": 5.2
+ },
+ "wayiris": {
+  "file": "way-iris.mkv",
+  "in": 0.0,
+  "out": 5.2
+ },
+ "set-touchid": {
+  "file": "ui-set-touchid.mkv"
+ },
+ "set-autolock": {
+  "file": "ui-set-autolock.mkv"
+ },
+ "set-anim": {
+  "file": "ui-set-anim.mkv"
+ },
+ "set-photo": {
+  "file": "ui-set-photo.mkv"
+ },
+ "set-tour": {
+  "file": "ui-set-tour.mkv"
  }
 }

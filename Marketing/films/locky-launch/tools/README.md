@@ -80,6 +80,28 @@ node tools/render.mjs film --page rex --out out/locky-rex-1080p.mp4 --audio out/
 - The Rex icon in the take is the helper's installed Rex app's own, as the pack shows it.
 - The helper's Rex has ten sessions of earlier work, which the script leaves alone: they are the "+ 10 more".
 
+## The thread's clips
+
+A third composition: `src/thread.html` and `src/thread.js`, one short clip a feature, for the replies under the film
+(`THREAD.md` has the posts). Four clips are parts of the film itself. The others are their own, from the film's
+takes and from these:
+
+```sh
+python3 tools/thread_sessions.py touchid autolock animation photo tour welcome   # the Settings window, the Welcome
+python3 tools/thread_sessions.py ways        # four more lock animations: needs the film build (above)
+python3 tools/thread_themes.py               # src/thread-themes.json: the 43 themes, named, from dark to light
+python3 tools/prepare.py                     # the new takes' frames
+python3 tools/thread_timing.py               # src/thread-events.json, src/thread-transitions.json
+python3 tools/thread_build.py                # out/thread/: every clip with its sound, and the stills (about 12 min)
+node tools/render.mjs sheet 1,3,5 --page thread --clip photo --name look             # stills of one clip
+```
+
+- A Settings take records the window with 250 points of the helper's desktop at each side: its pop-up menus reach
+  past the window's edge. The clip's words sit in the window's sidebar, which is empty below its five rows.
+- A screenshot run (`--behind`) starts no auto-lock and no Touch ID tap: the switches a take turns on change only
+  the film's own settings.json.
+- The photo take chooses nothing in the menu, and no take types a password: see `THREAD.md`.
+
 ## Music
 
 `tools/music/make_candidates.py` makes candidates with ElevenLabs Music composition plans (the key comes from the

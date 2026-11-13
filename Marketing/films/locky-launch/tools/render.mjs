@@ -2,6 +2,7 @@
 // Renders the film (src/film.html) frame by frame in headless Chrome. Every frame is seek(t): any frame renders alone.
 //   node tools/render.mjs sheet 0.5,2,4.1 [--name hook] [--scale 1]   stills + a contact sheet in reviews/
 //   --page rex draws another composition of the same studio: src/rex.html (default: film)
+//   --page thread --clip themes draws one clip of the thread: src/thread.js lists them
 //   node tools/render.mjs film [--from 0 --to 64] [--scale 1] [--workers 6] [--out out/draft.mp4] [--audio out/score.wav]
 // The page posts each frame to this script as a JPEG; ffmpeg encodes the numbered frames.
 import { spawn, spawnSync } from "node:child_process";
@@ -69,7 +70,7 @@ async function page() {
   };
   await send("Runtime.enable");
   await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
-  await send("Page.navigate", { url: `http://127.0.0.1:${port}/?scale=${scale}${args.includes("--guides") ? "&guides=1" : ""}` });
+  await send("Page.navigate", { url: `http://127.0.0.1:${port}/?scale=${scale}${args.includes("--guides") ? "&guides=1" : ""}&clip=${opt("clip", "")}` });
   for (let i = 0; i < 400; i++) {
     const state = await evaluate("window.READY ? JSON.stringify(window.FILM) : null").catch(() => null);
     if (state) return { evaluate, meta: JSON.parse(state), close: () => ws.close() };

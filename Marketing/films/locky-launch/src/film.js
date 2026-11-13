@@ -24,6 +24,8 @@ const INK = { light: "255,255,255", dark: "20,20,20" };
 
 /** One line, bottom left. It rises in word by word and fades out. `start: null` means it is there from frame 0. */
 function line(t, text, { start, end, x = 116, y = 906, size = 68, ink = "light", tone = 1, scrim = 0.3, weight = 600 }) {
+  // A thread clip is a part of the film on its own: it may say a line another way (src/thread.js).
+  text = window.SAY?.[text] ?? text;
   const from = start ?? -10;
   if (t < from || t > end + 0.16) return;
   const out = 1 - ease.inCubic(span(t, end, 0.16));
@@ -68,6 +70,7 @@ function lines(t, first, second, { start, end, ink = "light", x = 116, y = 906, 
 
 /** A small label in mono capitals: the film's quiet second voice. */
 function label(t, text, { start, end, x = 119, y = 742, ink = "light", align = "left", size = 27, tone = 1, full = false }) {
+  text = window.SAY?.[text] ?? text;
   if (t < start || t > end + 0.16) return;
   const a = ease.outCubic(span(t, start, 0.3)) * (1 - span(t, end, 0.16)) * tone;
   setFont(size, { family: "SF Mono", weight: 500, tracking: 0.08 });
@@ -640,6 +643,10 @@ window.CUES = {
   icon: 60.7,
 };
 
-setDraw(film);
-window.FILM = { duration: DURATION, fps: FPS };
-window.READY = true;
+// The thread's page (src/thread.js) borrows the film's words, windows, and pointer, and draws its own clips.
+export { BEAT, EARLY, EPS, EVENTS, TRANSITIONS, NAME, SECTIONS, line, lines, label, named, lock, held, win, toScreen, remap, pointer, shot };
+if (!window.THREAD) {
+  setDraw(film);
+  window.FILM = { duration: DURATION, fps: FPS };
+  window.READY = true;
+}

@@ -1,0 +1,260 @@
+[
+ {
+  "id": "sakura",
+  "name": "Sakura",
+  "ink": "light",
+  "light": 44.5
+ },
+ {
+  "id": "synthwave",
+  "name": "Synthwave",
+  "ink": "light",
+  "light": 40.0
+ },
+ {
+  "id": "neoncity",
+  "name": "Neon City",
+  "ink": "light",
+  "light": 24.4
+ },
+ {
+  "id": "tokyonight",
+  "name": "Tokyo Night",
+  "ink": "light",
+  "light": 45.6
+ },
+ {
+  "id": "gruvbox",
+  "name": "Gruvbox",
+  "ink": "light",
+  "light": 39.4
+ },
+ {
+  "id": "mocha",
+  "name": "Mocha",
+  "ink": "light",
+  "light": 26.9
+ },
+ {
+  "id": "dotmatrix",
+  "name": "Dot Matrix",
+  "ink": "light",
+  "light": 3.4
+ },
+ {
+  "id": "mission",
+  "name": "Mission",
+  "ink": "light",
+  "light": 9.9
+ },
+ {
+  "id": "matrix",
+  "name": "Matrix",
+  "ink": "light",
+  "light": 11.6
+ },
+ {
+  "id": "quantified",
+  "name": "Quantified Self",
+  "ink": "light",
+  "light": 12.0
+ },
+ {
+  "id": "phosphor",
+  "name": "Phosphor",
+  "ink": "light",
+  "light": 12.8
+ },
+ {
+  "id": "cassette",
+  "name": "Cassette Futurism",
+  "ink": "light",
+  "light": 13.1
+ },
+ {
+  "id": "wordclock",
+  "name": "Word Clock",
+  "ink": "light",
+  "light": 15.9
+ },
+ {
+  "id": "cyberdeck",
+  "name": "Cyberdeck HUD",
+  "ink": "light",
+  "light": 16.4
+ },
+ {
+  "id": "observatory",
+  "name": "Observatory",
+  "ink": "light",
+  "light": 17.7
+ },
+ {
+  "id": "eventhorizon",
+  "name": "Event Horizon",
+  "ink": "light",
+  "light": 18.0
+ },
+ {
+  "id": "default",
+  "name": "Aurora",
+  "ink": "light",
+  "light": 20.5
+ },
+ {
+  "id": "departures",
+  "name": "Departures",
+  "ink": "light",
+  "light": 22.2
+ },
+ {
+  "id": "cockpit",
+  "name": "Glass Cockpit",
+  "ink": "light",
+  "light": 22.9
+ },
+ {
+  "id": "memento",
+  "name": "Memento",
+  "ink": "light",
+  "light": 22.9
+ },
+ {
+  "id": "bento",
+  "name": "Bento Cockpit",
+  "ink": "light",
+  "light": 23.4
+ },
+ {
+  "id": "tui",
+  "name": "TUI Grid",
+  "ink": "light",
+  "light": 25.3
+ },
+ {
+  "id": "rainy",
+  "name": "Rainy",
+  "ink": "light",
+  "light": 27.1
+ },
+ {
+  "id": "rosepine",
+  "name": "Ros\u00e9 Pine",
+  "ink": "light",
+  "light": 29.0
+ },
+ {
+  "id": "galaxysea",
+  "name": "Galaxy Sea",
+  "ink": "light",
+  "light": 34.7
+ },
+ {
+  "id": "material",
+  "name": "Material You",
+  "ink": "light",
+  "light": 40.9
+ },
+ {
+  "id": "deepblue",
+  "name": "Deep Blue",
+  "ink": "light",
+  "light": 44.0
+ },
+ {
+  "id": "everforest",
+  "name": "Everforest",
+  "ink": "light",
+  "light": 46.2
+ },
+ {
+  "id": "kanagawa",
+  "name": "Kanagawa",
+  "ink": "light",
+  "light": 47.5
+ },
+ {
+  "id": "nord",
+  "name": "Nord",
+  "ink": "light",
+  "light": 52.1
+ },
+ {
+  "id": "snowfall",
+  "name": "Snowfall",
+  "ink": "light",
+  "light": 70.5
+ },
+ {
+  "id": "liquid",
+  "name": "Liquid",
+  "ink": "light",
+  "light": 78.6
+ },
+ {
+  "id": "vaporwave",
+  "name": "Vaporwave",
+  "ink": "light",
+  "light": 85.0
+ },
+ {
+  "id": "lookout",
+  "name": "Lookout",
+  "ink": "light",
+  "light": 118.5
+ },
+ {
+  "id": "pocket",
+  "name": "Pocket",
+  "ink": "light",
+  "light": 130.7
+ },
+ {
+  "id": "glass",
+  "name": "Liquid Glass",
+  "ink": "dark",
+  "light": 163.6
+ },
+ {
+  "id": "poster",
+  "name": "Poster",
+  "ink": "dark",
+  "light": 163.8
+ },
+ {
+  "id": "bauhaus",
+  "name": "Bauhaus",
+  "ink": "light",
+  "light": 188.8
+ },
+ {
+  "id": "brutal",
+  "name": "Neo-Brutalism",
+  "ink": "dark",
+  "light": 206.8
+ },
+ {
+  "id": "braun",
+  "name": "Braun",
+  "ink": "dark",
+  "light": 209.6
+ },
+ {
+  "id": "station",
+  "name": "Station",
+  "ink": "dark",
+  "light": 223.3
+ },
+ {
+  "id": "op1",
+  "name": "OP-1",
+  "ink": "dark",
+  "light": 225.4
+ },
+ {
+  "id": "notebook",
+  "name": "Notebook",
+  "ink": "dark",
+  "light": 228.8
+ }
+]

@@ -1,0 +1,30 @@
+{
+ "wayfocus": {
+  "n": 303,
+  "out_start": 105,
+  "desk_from": 135,
+  "desk_to": 170,
+  "in_end": 191
+ },
+ "wayfade": {
+  "n": 298,
+  "out_start": 104,
+  "desk_from": 131,
+  "desk_to": 168,
+  "in_end": 195
+ },
+ "waylift": {
+  "n": 291,
+  "out_start": 97,
+  "desk_from": 125,
+  "desk_to": 161,
+  "in_end": 198
+ },
+ "wayiris": {
+  "n": 305,
+  "out_start": 110,
+  "desk_from": 137,
+  "desk_to": 181,
+  "in_end": 206
+ }
+}
