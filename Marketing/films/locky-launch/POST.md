@@ -43,6 +43,6 @@ Optional angle, your call:
 - **The agents beat (26 to 30 s).** It is the locky-rex plugin over made-up Rex sessions whose programs make real
   status reports. Its line is "Lock your Mac. Your agents keep working.", not "Now you can": a Mac's programs keep
   running under the macOS lock screen too, and Locky does not keep the Mac awake. Rex's app icon shows in this
-  shot (it is the Rex clip's take): Superlogical publishes no rules for it, so send them the film first, or shoot the
-  take again without the icon (`tools/rex_shoot.py film`, then `tools/rex_timing.py film`). Departures (in the list, at 15.5 s) and Phosphor (in the run, at 9.5 s) still
+  shot, and the owner decided that it stays. Superlogical publishes no rules for its use (their site has a press kit
+  with the company's logo only). `tools/rex_shoot.py film`, then `tools/rex_timing.py film`, makes the shot without it. Departures (in the list, at 15.5 s) and Phosphor (in the run, at 9.5 s) still
   show their "herdr offline" state: herdr does not run in the helper.

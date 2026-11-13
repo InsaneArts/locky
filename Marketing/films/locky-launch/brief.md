@@ -103,8 +103,8 @@ method). It fits because the film is real footage plus type and camera moves, an
 - The agents' lock screen (26 to 30 s) is the locky-rex plugin, which is not one of Locky's 43 themes; the film's label
   says it is a plugin. Its Rex sessions and their names are made up. Their statuses are real reports through Rex's
   Program Status Protocol, with made-up words. The take in the film is the Rex clip's (`footage/rex-clip.mkv`), so
-  Rex's app icon shows in the top pane. `tools/rex_shoot.py film` shoots a take without the icon; the helper was in
-  use by other work when this cut was made. The wallpaper's clock runs three times as fast, and the widgets look at
+  Rex's app icon shows in the top pane. The owner decided that it stays (13 November 2026). `tools/rex_shoot.py film`
+  shoots a take without the icon, if that changes. The wallpaper's clock runs three times as fast, and the widgets look at
   Rex every second, not every five.
 - The film does not say "now you can": a Mac's programs keep running under the macOS lock screen too. Locky adds the view.
 
