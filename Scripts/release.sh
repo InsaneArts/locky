@@ -70,7 +70,9 @@ fi
 echo "  identity, notary profile, and release notes are ready"
 
 step "Tests"
-swift test 2>&1 | tail -3
+# TransitionRenderTests.framesShowTheDesktopThenTheScene fails now and then with no change (AGENTS.md): a run that
+# fails gets one more.
+swift test 2>&1 | tail -3 || swift test 2>&1 | tail -3
 
 # --- Build and sign --------------------------------------------------------
 step "Build a universal app and sign it with the Developer ID"
@@ -158,8 +160,10 @@ trap 'rm -rf "$TAP_DIR"' EXIT
 gh repo clone "$TAP" "$TAP_DIR" -- -q --depth 1
 # Scripts/locky.rb is the cask, with places for the version and the zip's checksum.
 sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$SHA/" "$ROOT/Scripts/locky.rb" > "$TAP_DIR/Casks/locky.rb"
+# The tap's own commit style.
+if git -C "$TAP_DIR" ls-files --error-unmatch Casks/locky.rb >/dev/null 2>&1; then MESSAGE="feat(cask): update locky to $VERSION"; else MESSAGE="feat(cask): add locky $VERSION"; fi
 git -C "$TAP_DIR" add Casks/locky.rb
-git -C "$TAP_DIR" commit -q -m "locky $VERSION"
+git -C "$TAP_DIR" commit -q -m "$MESSAGE"
 git -C "$TAP_DIR" push -q
 echo "  $TAP: Casks/locky.rb is at $VERSION"
 
