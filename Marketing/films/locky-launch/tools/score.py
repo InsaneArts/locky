@@ -143,12 +143,13 @@ for at in cues["list"]:
 for at in cues["ways"] + [cues["lock"]]:
     place(sfx, swish(0.6, 500, 5200), at, gain=-15)
     place(sfx, thump(), at + 0.38, gain=-11 if at == cues["lock"] else -14)
-# The live wallpaper and the agents' lock screen: only air on the cuts, and two soft notes, a fourth apart, when a
-# program starts to need the user.
+# The quiet section's cuts: only air.
 for at in cues["live"]:
     place(sfx, swish(0.5, 700, 2600), at - 0.1, gain=-24)
-place(sfx, bell(587.33, 2.2), cues["needs"], gain=-19)
-place(sfx, bell(783.99, 2.2), cues["needs"] + 0.14, gain=-21)
+# The plugin: the sheet opens, the repository is typed, the plugin is in the list.
+place(sfx, pop(698.5), cues["plugin"][0], gain=-16)
+place(sfx, tick(3000, 0.007), cues["plugin"][1], gain=-15)
+place(sfx, pop(1046.5), cues["plugin"][2], gain=-15)
 # The day runs: a long rise, and a bell at night.
 rise = swish(2.5, 300, 4200) * np.linspace(0.25, 1, int(2.5 * SR)) ** 1.5
 place(sfx, rise, cues["lapse"][0], gain=-17)

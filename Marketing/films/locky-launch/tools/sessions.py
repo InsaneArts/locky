@@ -16,11 +16,15 @@ X, Y, W, H = 992, 72, 1760, 990
 
 
 class Take:
-    def __init__(self, name):
+    """One recording of a window. `frame` is the window's content on the helper's screen (x, y, width, height):
+    the Themes window's unless given. Clicks and drags are in the window's own points."""
+    def __init__(self, name, frame=None):
         self.name, self.log = name, shoot.Log(name)
+        self.frame = frame or (X, Y, W, H)
+        self.x, self.y = self.frame[0], self.frame[1]
 
     def start(self):
-        shoot.record(self.name, (X, Y, W, H))
+        shoot.record(self.name, self.frame)
         self.log.add("start")
 
     def end(self):
@@ -35,18 +39,18 @@ class Take:
 
     def click(self, x, y, wait=0.8, note=""):
         self.log.add("click", x=x, y=y, note=note)
-        atlas("click", str(X + x), str(Y + y))
+        atlas("click", str(self.x + x), str(self.y + y))
         time.sleep(wait)
 
     def named(self, name, wait=1.0):
         d = atlas("click", "--app", "Locky", "--name", name)
         f = (d.get("element") or {}).get("frame") or {}
-        self.log.add("click", x=f.get("x", 0) + f.get("width", 0) / 2 - X, y=f.get("y", 0) + f.get("height", 0) / 2 - Y, note=name)
+        self.log.add("click", x=f.get("x", 0) + f.get("width", 0) / 2 - self.x, y=f.get("y", 0) + f.get("height", 0) / 2 - self.y, note=name)
         time.sleep(wait)
 
     def drag(self, x0, y0, x1, y1, wait=0.9, note=""):
         self.log.add("drag", x=x0, y=y0, x1=x1, y1=y1, note=note)
-        atlas("drag", str(X + x0), str(Y + y0), str(X + x1), str(Y + y1))
+        atlas("drag", str(self.x + x0), str(self.y + y0), str(self.x + x1), str(self.y + y1))
         self.log.add("dragend", x=x1, y=y1)
         time.sleep(wait)
 
@@ -70,7 +74,7 @@ class Take:
             n = min(left, 15)
             actions = []
             for _ in range(n):
-                actions += [{"type": "scroll", "x": X + x, "y": Y + y, "dy": step}, {"type": "wait", "ms": 28}]
+                actions += [{"type": "scroll", "x": self.x + x, "y": self.y + y, "dy": step}, {"type": "wait", "ms": 28}]
             atlas("input", json.dumps(actions))
             left -= n
         time.sleep(wait)
@@ -276,6 +280,52 @@ def agent():
     t.key("return", wait=1.0)
     t.click(300, 780, wait=2.2, note="deselect")
     t.end()
+
+
+def plugins():
+    """A plugin from someone else: Settings › Plugins installs a package, and its theme locks the screen.
+
+    The package is the example theme of Locky's own docs (Harbor, docs/create-theme.md) in a git repository in the
+    helper. Locky installs only from https, ssh, and git@ addresses, so git is told to fetch
+    https://github.com/someone/ from that folder (url.<folder>.insteadOf), as Locky's own tests do: the clone, the
+    lockfile, and the window are the real ones, and no network is used."""
+    work = shoot.WORK
+    shoot.close()
+    doc = open(os.path.join(shoot.FILM, "..", "..", "..", "docs", "create-theme.md")).read()
+    start = doc.index("-- ~/.config/locky/themes/harbor.lua")
+    theme = doc[start:doc.index("```", start)].replace("-- ~/.config/locky/themes/harbor.lua", "-- Harbor: a calm blue evening. The example theme of Locky's docs, as a package.")
+    sh(f"rm -rf '{work}/remote' '{work}/data' '{work}/pack' '{work}/config/init.lua' '{work}/config/locky-pack-lock.json' '{work}/config/themes' '{work}/config/plugin'; "
+       f"mkdir -p '{work}/remote/locky-harbor/themes' '{work}/data' '{work}/config' '{work}/rec'")
+    sh(f"cat > '{work}/remote/locky-harbor/themes/harbor.lua' <<'LOCKYEOF'\n{theme}\nLOCKYEOF")
+    sh(f"cd '{work}/remote/locky-harbor' && git init -q && git add -A && git -c user.name=someone -c user.email=someone@example.com commit -q -m Harbor; "
+       f"ln -sfn locky-harbor '{work}/remote/locky-harbor.git'")
+    shoot.settings()
+    env = (f"XDG_DATA_HOME='{work}/data' GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='url.{work}/remote/.insteadOf' "
+           f"GIT_CONFIG_VALUE_0='https://github.com/someone/' LOCKY_APPEARANCE=dark")
+    sh(f"LOCKY_CONFIG_DIR='{work}/config' LOCKY_WALLPAPER=none {env} nohup '{shoot.LOCKY}' window plugins --behind > '{work}/locky.log' 2>&1 &")
+    time.sleep(4.0)
+    b = [w for w in shoot.windows() if w[0] == "Plugins"][0][1]
+    t = Take("ui-plugins", frame=(b["x"], b["y"], b["width"], b["height"]))
+    atlas("click", str(int(b["x"] + 500)), str(int(b["y"] + 520)))      # the window takes the keyboard
+    time.sleep(1.2)
+    t.start()
+    t.wait(1.2)
+    t.named("Install Plugin…", wait=1.4)
+    t.type("someone/locky-harbor", wait=0.9)
+    t.click(560, 365, wait=3.5, note="install")
+    t.end()
+    shoot.close()
+    # The installed theme, as a lock.
+    sh(f"LOCKY_CONFIG_DIR='{work}/config' LOCKY_WALLPAPER=none XDG_DATA_HOME='{work}/data' nohup '{shoot.LOCKY}' preview --theme harbor "
+       f"--size {shoot.SIZE[0]}x{shoot.SIZE[1]} --behind > '{work}/locky.log' 2>&1 &")
+    time.sleep(5.0)
+    b = [w for w in shoot.windows() if "Preview" in (w[0] or "")][0][1]
+    shoot.record("lock-harbor", (b["x"], b["y"] + b["height"] - shoot.SIZE[1], shoot.SIZE[0], shoot.SIZE[1]))
+    time.sleep(5.0)
+    shoot.stop("lock-harbor")
+    shoot.fetch("lock-harbor")
+    shoot.close()
+    print("lock-harbor saved", flush=True)
 
 
 FILM_BUILD = "/Users/Shared/locky-film/Locky.app/Contents/MacOS/Locky"

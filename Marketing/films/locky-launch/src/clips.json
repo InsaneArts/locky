@@ -149,9 +149,14 @@
   "in": 1.0,
   "out": 15.4
  },
- "rexfilm": {
-  "file": "rex-clip.mkv",
-  "in": 4.75,
-  "out": 9.05
+ "plugins": {
+  "file": "ui-plugins.mkv",
+  "in": 0.9,
+  "out": 9.3
+ },
+ "harbor": {
+  "file": "lock-harbor.mkv",
+  "in": 0.8,
+  "out": 4.6
  }
 }

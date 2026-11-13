@@ -9,9 +9,7 @@ are made over three minutes, so the reports have different ages. The lock screen
 widgets' `every`), and its wallpaper's clock runs three times as fast, so the lights' motion shows in a short clip.
 Afterwards the script removes its sessions, and stops Rex's server if the server was off before.
 
-  python3 tools/rex_shoot.py && python3 tools/prepare.py rexclip      # the Rex clip's take: footage/rex-clip.mkv
-  python3 tools/rex_shoot.py film                                     # the launch film's take: footage/rex-film.mkv,
-                                                                      # without Rex's icon
+  python3 tools/rex_shoot.py && python3 tools/prepare.py rexclip
 """
 import base64, json, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,9 +19,7 @@ PACK = os.path.expanduser(os.environ.get("PACK", "~/Development/locky-rex"))
 REX = '"$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex"'
 SPEED = 3
 GO = f"{shoot.WORK}/go"
-# The launch film's take leaves Rex's icon out: the film names Rex in words only.
-FILM = "film" in sys.argv[1:]
-NAME = "rex-film" if FILM else "rex-clip"
+NAME = "rex-clip"
 
 
 def report(app, state, line=None, kind=None, progress=None):
@@ -58,7 +54,7 @@ locky.theme.extend("rex", function(theme) theme.background.speed = {SPEED} end)
 -- The clip shows reports as they arrive: the widgets look at Rex every second, not every five.
 locky.theme.extend("rex", function(theme)
   for _, placement in ipairs(theme.widgets) do
-    if placement[1]:match("^rex%.") then placement.opts = {{ every = 1, icon = {"false" if FILM else "true"} }} end
+    if placement[1]:match("^rex%.") then placement.opts = {{ every = 1 }} end
   end
 end)
 LOCKYEOF""")
@@ -107,10 +103,8 @@ finally:
     if not was_running:
         print(shoot.sh(f"{REX} --autostart=false server stop 2>&1 | tail -1", timeout=40))
 
-# The Rex clip is the take from its first second. The launch film's four seconds are cut by tools/rex_timing.py film.
-if not FILM:
-    path = os.path.join(shoot.FILM, "src", "clips.json")
-    clips = json.load(open(path))
-    clips["rexclip"] = {"file": "rex-clip.mkv", "in": 1.0, "out": 15.4}
-    json.dump(clips, open(path, "w"), indent=1)
+path = os.path.join(shoot.FILM, "src", "clips.json")
+clips = json.load(open(path))
+clips["rexclip"] = {"file": "rex-clip.mkv", "in": 1.0, "out": 15.4}
+json.dump(clips, open(path, "w"), indent=1)
 print(take)

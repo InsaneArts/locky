@@ -10,7 +10,6 @@ Run every command from this folder's parent, `Marketing/films/locky-launch`.
 python3 tools/prepare.py          # footage/ → build/frames/<clip>/, the parts src/clips.json names
 python3 tools/lapse.py            # Lookout through the day: 360 frames with `locky render` (about 2 min)
 python3 tools/timing.py           # src/events.json and src/transitions.json, measured from the takes
-python3 tools/rex_timing.py film  # the agents beat: four seconds of footage/rex-film.mkv, as the clip rexfilm
 node tools/render.mjs cues        # out/cues.json: every sound's time, from the page
 python3 tools/score.py            # out/score.wav: the track and the UI sounds, at -14 LUFS
 node tools/render.mjs film --out out/locky-launch-1080p.mp4 --audio out/score.wav      # about 5 min
@@ -33,7 +32,7 @@ screenshot mode (`--behind`): previews draw although the helper's windows are hi
 python3 tools/shoot.py default eventhorizon …                     # footage/lock-<theme>.mkv: a live lock screen, 6 s
 python3 tools/sessions.py browse schedule customize               # the Themes window: real clicks, drags, and keys
 python3 tools/sessions.py new agent lock                          # one run: build the theme, add the widget, lock
-python3 tools/rex_shoot.py film                                   # the agents beat: the locky-rex plugin's lock screen
+python3 tools/sessions.py plugins                                 # Settings installs a package; its theme locks
 ```
 
 - ffmpeg records the helper's screen at its real pixels (2 per point) and crops to the window: 3520 × 1980.

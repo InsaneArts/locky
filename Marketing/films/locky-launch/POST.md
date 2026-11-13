@@ -40,9 +40,12 @@ Optional angle, your call:
   the Themes window keeps Dot Matrix on its still picture for more than a second after it is selected (the other
   themes go live in a tenth of one); `locky render` now and then returns a black background when eight run at once;
   and New Theme shows one white frame as its editor opens.
-- **The agents beat (26 to 30 s).** It is the locky-rex plugin over made-up Rex sessions whose programs make real
-  status reports. Its line is "Lock your Mac. Your agents keep working.", not "Now you can": a Mac's programs keep
-  running under the macOS lock screen too, and Locky does not keep the Mac awake. Rex's app icon shows in this
-  shot, and the owner decided that it stays. Superlogical publishes no rules for its use (their site has a press kit
-  with the company's logo only). `tools/rex_shoot.py film`, then `tools/rex_timing.py film`, makes the shot without it. Departures (in the list, at 15.5 s) and Phosphor (in the run, at 9.5 s) still
-  show their "herdr offline" state: herdr does not run in the helper.
+- **Agents.** The film says "Lock your MacBook. Your agents keep working." at the last lock, with the label "macOS
+  keeps running behind Locky's lock". It shows no agents on a lock screen: herdr does not run in the helper, so
+  Departures (in the list, at 15.5 s) and Phosphor (in the run, at 9.5 s) show their "herdr offline" state.
+- **The Rex theme** is a separate post: `out/locky-rex-1080p.mp4` and the two `out/locky-rex-*-4k.png` stills. It
+  shows Rex's app icon; Superlogical publishes no rules for its use.
+- **Plugins.** The film installs someone/locky-harbor, a made-up name for the docs' example theme. No public package
+  for Locky exists yet: the first one to publish is locky-rex.
+- **The Touch ID button.** The film says it "locks with Locky". That is a switch in Settings › General, off by
+  default, and it needs Accessibility access. The film's label names the switch.

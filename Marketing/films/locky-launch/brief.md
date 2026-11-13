@@ -22,7 +22,11 @@ SwiftUI and Metal.
 | Drag widgets, add widgets, change the background, colors, font | `docs/create-theme.md` |
 | A theme is a Lua file | `docs/create-theme.md`, Export Theme |
 | A coding agent can write a widget | `docs/agents.md` |
-| A locked Mac's agents keep working, and the lock screen shows which one needs you | macOS does not stop programs when it locks. Locky's `agents` widget (`docs/widgets.md`) and the locky-rex plugin show them. Locky does not keep the Mac awake: `Sources/Locky/System/Power.swift` |
+| A locked MacBook's agents keep working; macOS keeps running behind Locky's lock | `docs/security.md`: "the session behind Locky's windows stays unlocked". Locky does not keep the Mac awake: a closed lid or system sleep still sleeps it (`Sources/Locky/System/Power.swift`) |
+| The Touch ID button locks with Locky | `docs/security.md`, "The Touch ID button locks the Mac": with Settings › General › Lock with the Touch ID button on (off by default, needs Accessibility) |
+| Other people's themes and widgets install from a git repository | `docs/plugins.md`, "A package". Tested: `locky pack sync` cloned a package from a git address, pinned it in the lockfile, and its theme and three widgets loaded |
+| Widgets are Lua files, as many as you want | `docs/create-widget.md`: one file in `plugin/` per widget; no limit on their number is stated |
+| Locky ships its own skill for coding agents | `docs/agents.md`, `locky skill install` |
 | Unlocks with Touch ID or your password | README, `docs/security.md` |
 
 Copy (proposed by the studio, the owner's call):
@@ -34,21 +38,24 @@ Copy (proposed by the studio, the owner's call):
 5. Locky has 43.
 6. Pick one.
 7. Lock it your way.
-8. Live wallpapers, drawn in Metal.
-8a. Lock your Mac. Your agents keep working. / See which one needs you.
-9. It follows the real time of day.
-10. One theme by day. One by night.
-11. Make it yours. / Drag anything. / Add widgets. / Change the sky.
-12. Or start from nothing.
-13. Every theme is a Lua file.
-14. Or ask your coding agent.
-15. Then lock.
-16. A real lock. Touch ID or your password.
+8. The Touch ID button locks with Locky.
+9. Live wallpapers, drawn in Metal.
+10. It follows the real time of day.
+11. One theme by day. One by night.
+12. Install themes and widgets other people share.
+13. Make it yours. / Drag anything. / Add widgets. / Change the sky.
+14. Or start from nothing.
+15. Themes and widgets are Lua files.
+16. Or ask your coding agent.
+16a. Lock your MacBook. Your agents keep working.
+16b. A real lock. Touch ID or your password.
 17. Locky for macOS, by InsaneArts.
 
 Labels (small mono capitals): the count in the list (03 / 43), the lock animation's name and "one of 7 lock
 animations" (`docs/settings.md`, `lock_animation`), "27 widgets · 6 sizes" (`docs/widgets.md`), the lapse's hour,
-and "You watched this lock screen being built."
+"Settings · Lock with the Touch ID button", "From any git repository", "A theme from a plugin", "Write as many as you
+want", "Locky ships its own agent skill", "macOS keeps running behind Locky's lock", and "You watched this lock screen
+being built."
 
 ## Assets
 
@@ -60,7 +67,7 @@ and "You watched this lock screen being built."
 | The lock's animation: Tiles, Sweep, Dissolve, Iris | `footage/way-*.mkv`, `footage/lock-in.mkv` | `locky preview --transition`, the film build | real, see Notes |
 | The theme built in the film | `config/settings-final.json`, `config/themes/` | written by Locky's editor during `ui-new` and `ui-agent` | real |
 | The theme as Lua | `config/themes/launch.lua` | written by hand; `locky render` draws the same screen (mean difference 0.3 of 255) | real |
-| The agents' lock screen, 4 s | `footage/rex-clip.mkv`, cut by `tools/rex_timing.py film rex-clip.mkv` | the locky-rex plugin (its own repository), live in the Atlas helper | real, see Notes |
+| A plugin's install, and its theme as a lock | `footage/ui-plugins.mkv`, `footage/lock-harbor.mkv` | Locky's Settings › Plugins in the Atlas helper (`tools/sessions.py plugins`) | real, see Notes |
 | The agent's widget | `config/plugin/vacation.lua` | written by a coding agent with Locky's skill, from the docs' own prompt; `locky check` passes | real |
 | App icon | `assets/icon.png` | `Sources/Locky/Resources/AppIcon.icns` | real |
 | Score | `assets/music/b-organic.mp3` | ElevenLabs Music, composition plan (`tools/music/`) | generated for this film |
@@ -100,13 +107,13 @@ method). It fits because the film is real footage plus type and camera moves, an
 - The pointer is the film's: the helper's clicks are recorded with their place and time, and the film draws an
   arrow there. Every reaction of the app is recorded.
 - Waits are cut out of the recorded sessions, and some parts play at 1.2 to 3.2 times their speed.
-- The agents' lock screen (26 to 30 s) is the locky-rex plugin, which is not one of Locky's 43 themes; the film's label
-  says it is a plugin. Its Rex sessions and their names are made up. Their statuses are real reports through Rex's
-  Program Status Protocol, with made-up words. The take in the film is the Rex clip's (`footage/rex-clip.mkv`), so
-  Rex's app icon shows in the top pane. The owner decided that it stays (13 November 2026). `tools/rex_shoot.py film`
-  shoots a take without the icon, if that changes. The wallpaper's clock runs three times as fast, and the widgets look at
-  Rex every second, not every five.
-- The film does not say "now you can": a Mac's programs keep running under the macOS lock screen too. Locky adds the view.
+- The plugin (32 to 36 s) is the example theme of Locky's own docs (Harbor, `docs/create-theme.md`) in a git
+  repository in the helper, under the made-up name someone/locky-harbor. Locky installs only from https, ssh, and
+  git@ addresses, so git fetched that GitHub address from the helper's folder (`url.<folder>.insteadOf`, as Locky's
+  tests do). The window, the clone, and the lockfile are real. No public package for Locky exists yet.
+- The Rex theme is not in the film: its owner posts it separately (`out/locky-rex-1080p.mp4`).
+- "Your agents keep working" is true of any Mac that stays awake, under the macOS lock screen too. The film says what
+  a Locky lock is (macOS keeps running behind it), not that only Locky allows it.
 
 ## Deliverables
 

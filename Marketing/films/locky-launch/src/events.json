@@ -616,6 +616,29 @@
    "seen": 11.483
   }
  ],
+ "plugins": [
+  {
+   "kind": "click",
+   "x": 497.75,
+   "y": 379.0,
+   "note": "Install Plugin\u2026",
+   "t": 1.432,
+   "seen": 1.533
+  },
+  {
+   "kind": "type",
+   "text": "someone/locky-harbor",
+   "t": 2.833
+  },
+  {
+   "kind": "click",
+   "x": 560,
+   "y": 365,
+   "note": "install",
+   "t": 4.019,
+   "seen": 4.2
+  }
+ ],
  "agentDesk": 13.4,
  "lockinKeys": [
   4.349,
@@ -658,5 +681,6 @@
   12.45,
   13.4,
   14.417
- ]
+ ],
+ "pluginInstalled": 4.883
 }

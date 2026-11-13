@@ -14,7 +14,8 @@ import numpy as np
 FILM = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLIPS = json.load(open(os.path.join(FILM, "src", "clips.json")))
 FOOTAGE = os.path.join(FILM, "footage")
-SESSIONS = {"browse": "ui-browse", "schedule": "ui-schedule", "customize": "ui-customize", "new": "ui-new", "agent": "ui-agent"}
+SESSIONS = {"browse": "ui-browse", "schedule": "ui-schedule", "customize": "ui-customize", "new": "ui-new", "agent": "ui-agent",
+            "plugins": "ui-plugins"}
 TAKES = {"lockin": ("lock-in", "desk-launch"), "waytiles": ("way-tiles", "desk-galaxysea"), "waysweep": ("way-sweep", "desk-deepblue"),
          "waydissolve": ("way-dissolve", "desk-braun")}
 W, H = 160, 90
@@ -60,7 +61,7 @@ def seen(d, t, within=1.2, after=0.0):
 
 
 # When the app answered each click, drag, and Return: the frame where its picture changes.
-for clip in ("customize", "new", "agent", "schedule"):
+for clip in ("customize", "new", "agent", "schedule", "plugins"):
     d = changes(clip)
     for e in events[clip]:
         if e["kind"] == "click" or (e["kind"] == "key" and e["keys"][0] == "return"):
@@ -80,6 +81,9 @@ moves = [e["t"] for e in events["browse"] if e["kind"] == "key"]
 # The list answers a key 0.16 s later (measured on the first take: 0.14 to 0.18 s).
 events["browseSelected"] = [round(t + 0.16, 3) for t in moves]
 events["browseLive"] = [seen(preview, t, within=0.8, after=0.07) or round(t + 0.3, 3) for t in events["browseSelected"]]
+# The plugin's install: when its row shows in the pane, after the sheet has gone.
+installed = next(e for e in events["plugins"] if e.get("note") == "install")
+events["pluginInstalled"] = seen(changes("plugins", (0.3, 0.08, 1.0, 0.5)), installed["seen"], within=5, after=0.5)
 json.dump(events, open(os.path.join(FILM, "src", "events.json"), "w"), indent=1)
 
 
@@ -88,8 +92,14 @@ def gray(args):
     return np.frombuffer(raw, np.uint8).reshape(-1, H, W).astype(np.float32)
 
 
-transitions = {}
+# A take is measured against the screenshot it played over. Without that picture (the film build's folder is removed
+# after a shoot), the take's numbers from the last run stay.
+target = os.path.join(FILM, "src", "transitions.json")
+transitions = json.load(open(target)) if os.path.exists(target) else {}
 for clip, (name, picture) in TAKES.items():
+    if not os.path.exists(f"/Users/Shared/locky-film/{picture}.png"):
+        print(f"{clip}: kept (no {picture}.png to measure against)")
+        continue
     f = gray(["-i", os.path.join(FOOTAGE, f"{name}.mkv"), "-vf", f"setpts=PTS-STARTPTS,fps=60,scale={W}:{H}"])
     under = gray(["-i", f"/Users/Shared/locky-film/{picture}.png", "-vf", f"scale={W}:{H}", "-frames:v", "1"])[0]
     to_under = np.abs(f - under).mean(axis=(1, 2))
@@ -103,10 +113,10 @@ for clip, (name, picture) in TAKES.items():
     out_start = max(i for i in range(20, a) if to_lock[i] <= before * 1.15 + 0.3) + 1
     transitions[clip] = {"n": len(f), "out_start": out_start, "desk_from": a, "desk_to": b, "in_end": in_end}
     print(f"{clip}: out {out_start} to {a}, the screen alone {a} to {b}, in {b} to {in_end}, of {len(f)} frames")
-json.dump(transitions, open(os.path.join(FILM, "src", "transitions.json"), "w"), indent=1)
+json.dump(transitions, open(target, "w"), indent=1)
 for clip in SESSIONS:
     print(clip, [(e.get("note") or e["kind"], e["t"], e.get("seen")) for e in events[clip] if e["kind"] in ("click", "drag") or "seen" in e][:40])
 print("editor live", events["editorLive"])
 print("list moves", events["browseSelected"])
 print("list live ", events["browseLive"])
-print("agent desk", events["agentDesk"], "lock keys", events["lockinKeys"])
+print("agent desk", events["agentDesk"], "lock keys", events["lockinKeys"], "plugin installed", events["pluginInstalled"])

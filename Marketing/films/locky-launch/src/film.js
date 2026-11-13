@@ -126,14 +126,14 @@ function held(clip, local, dur, { from = 1.02, to = 1.06, ox = 0.5, oy = 0.5, of
 
 const WIN = { w: 1760, h: 990 };
 
-/** A recorded window, 1760 x 990 points. The camera looks at (fx, fy), in window points; zoom 1 fits the window's
-    width. Returns the camera, for what is drawn in the window's own points. */
-function win(clip, tClip, { zoom = 1, fx = 880, fy = 495, alpha = 1 } = {}) {
-  const k = (W / WIN.w) * zoom;
+/** A recorded window: the Themes window (1760 x 990 points) unless `size` says another. The camera looks at (fx, fy),
+    in window points; zoom 1 fits the window's width. Returns the camera, for what is drawn in the window's own points. */
+function win(clip, tClip, { zoom = 1, fx, fy, alpha = 1, size = WIN } = {}) {
+  const k = (W / size.w) * zoom;
   // The camera never looks past the window's edge.
   const halfW = W / 2 / k, halfH = H / 2 / k;
-  fx = clamp(fx, halfW, WIN.w - halfW);
-  fy = clamp(fy, halfH, WIN.h - halfH);
+  fx = clamp(fx ?? size.w / 2, halfW, size.w - halfW);
+  fy = clamp(fy ?? size.h / 2, halfH, size.h - halfH);
   const img = frame(clip, tClip);
   if (img) {
     ctx.save();
@@ -141,9 +141,9 @@ function win(clip, tClip, { zoom = 1, fx = 880, fy = 495, alpha = 1 } = {}) {
     ctx.imageSmoothingQuality = "high";
     // The whole window shows with its own round corners: what is outside them in the footage (the desktop) is cut.
     ctx.beginPath();
-    ctx.roundRect(W / 2 - fx * k, H / 2 - fy * k, WIN.w * k, WIN.h * k, 28 * k);
+    ctx.roundRect(W / 2 - fx * k, H / 2 - fy * k, size.w * k, size.h * k, 28 * k);
     ctx.clip();
-    ctx.drawImage(img, W / 2 - fx * k, H / 2 - fy * k, WIN.w * k, WIN.h * k);
+    ctx.drawImage(img, W / 2 - fx * k, H / 2 - fy * k, size.w * k, size.h * k);
     ctx.restore();
   }
   return { k, fx, fy };
@@ -303,55 +303,76 @@ function ways(t) {
   const bar = 18 + k * 2;
   // The way in starts on the bar: the recorded take plays from there at its own speed.
   lock(clip, TRANSITIONS[clip].desk_to / FPS + (t - bar), { zoom: 1.02 });
-  // On Braun the label sits lower, clear of the clock.
-  label(t, `${name}  ·  one of 7 lock animations`, { start: bar + 0.6, end: bar + (k === 2 ? 1.85 : 1.6), ink, y: k === 2 ? 800 : 742 });
-  // Braun has its own things where the line sits: the third take keeps only its label.
-  if (k < 2) line(t, "Lock it your way.", { start: bar + 0.6, end: bar + 1.6, ink });
+  // The second take says what the Mac's own lock button does with Settings › General's switch on. On Braun the label
+  // sits lower, clear of the clock, and has no line: Braun has its own things where a line sits.
+  const about = k === 1 ? "Settings  ·  Lock with the Touch ID button" : `${name}  ·  one of 7 lock animations`;
+  label(t, about, { start: bar + 0.6, end: bar + (k === 2 ? 1.85 : 1.7), ink, y: k === 2 ? 800 : 742 });
+  if (k === 0) line(t, "Lock it your way.", { start: bar + 0.6, end: bar + 1.6, ink });
+  if (k === 1) line(t, "The Touch ID button locks with Locky.", { start: bar + 0.6, end: bar + 1.7, ink, scrim: 0.4 });
 }
 
-// MARK: C. A live wallpaper (24 to 26) and agents (26 to 30): the score's breakdown
+// MARK: C. A live wallpaper (24 to 26): the score's breakdown
 
 function live(t) {
   held("snowfall", t - (24 - EARLY), 2, { from: 1.02, to: 1.07, ox: 0.5, oy: 0.55 });
   lines(t, "Live wallpapers,", "drawn in Metal.", { start: 24.3, end: 25.8, scrim: 0.42 });
 }
 
-// One take of the locky-rex plugin's lock screen, cut so that a program starts to need the user two seconds in
-// (tools/rex_timing.py film): on the bar, a frame early, as a cut is.
-function stillWorking(t) {
-  const local = t - (26 - EARLY);
-  lock("rexfilm", local, { zoom: lerp(1.02, 1.04, local / 4) });
-  label(t, "Plugin  ·  agents, live from Rex", { start: 26.4, end: 29.8, y: 690 });
-  lines(t, "Lock your Mac.", "Your agents keep working.", { start: 26.25, end: 27.8, y: 850, scrim: 0.42 });
-  line(t, "See which one needs you.", { start: 28.05, end: 29.8, y: 850, scrim: 0.42 });
-}
-
-// MARK: D. Time (30 to 36): Lookout through the day, and the schedule
+// MARK: D. Time (26 to 32): Lookout through the day, and the schedule
 
 const LAPSE = { from: 10.5, to: 22.75, n: 360 };
 
+const DAY = 26, PLAN = 30;      // when the day starts to run, and when the schedule shows
+
 function lapse(t) {
-  const hour = lerp(10.6, 22.6, ease.inOutCubic(span(t, 31.3, 2.45)));
-  const zoom = lerp(1.02, 1.075, span(t, 30, 4));
-  const fade = span(t, 31.0, 0.5);
-  if (fade < 1) lock("lookout", 0.4 + (t - 30), { zoom });
+  const hour = lerp(10.6, 22.6, ease.inOutCubic(span(t, DAY + 1.3, 2.45)));
+  const zoom = lerp(1.02, 1.075, span(t, DAY, 4));
+  const fade = span(t, DAY + 1.0, 0.5);
+  if (fade < 1) lock("lookout", 0.4 + (t - DAY), { zoom });
   if (fade > 0) {
     // The widgets go, as they do after 20 s without input, and the scene's hour runs.
     const i = Math.round(((hour - LAPSE.from) / (LAPSE.to - LAPSE.from)) * (LAPSE.n - 1));
     cover(frame("lapse", i / FPS), { zoom, alpha: ease.inOutCubic(fade) });
   }
   const hh = Math.floor(hour), mm = Math.floor((hour - hh) * 6) * 10;
-  label(t, `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`, { start: 31.3, end: 33.75, size: 34 });
-  lines(t, "It follows", "the real time of day.", { start: 30.25, end: 33.75 });
+  label(t, `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`, { start: DAY + 1.3, end: DAY + 3.75, size: 34 });
+  lines(t, "It follows", "the real time of day.", { start: DAY + 0.25, end: DAY + 3.75 });
 }
 
 function schedule(t) {
   // The popover opens on the half bar, a frame early.
-  const tc = at("schedule", "schedule", 0, true) + (t - 34.5 + EARLY);
-  const push = ease.inOutCubic(span(t, 34.35, 0.9));
+  const tc = at("schedule", "schedule", 0, true) + (t - (PLAN + 0.5) + EARLY);
+  const push = ease.inOutCubic(span(t, PLAN + 0.35, 0.9));
   const cam = win("schedule", tc, { zoom: lerp(1.3, 1.95, push), fx: lerp(1380, 1500, push), fy: lerp(330, 200, push) });
-  pointer("schedule", tc, cam, 1 - span(t, 35.0, 0.3));
-  lines(t, "One theme by day.", "One by night.", { start: 34.2, end: 35.82 });
+  pointer("schedule", tc, cam, 1 - span(t, PLAN + 1.0, 0.3));
+  lines(t, "One theme by day.", "One by night.", { start: PLAN + 0.2, end: PLAN + 1.82 });
+}
+
+// MARK: P. Plugins (32 to 36): Settings installs a package from a git repository, and its theme locks the screen
+
+const SETTINGS = { w: 780, h: 580 };
+// [film, clip]: the sheet opens on the beat, the repository is typed, Install is clicked on the next, and the film
+// cuts to the plugin in the list: the clone and the sheet's way out (0.7 s) are left out.
+const SHEET = at("plugins", "Install Plugin…", 0, true), TYPED = EVENTS.plugins.find((e) => e.kind === "type").t, INSTALL = at("plugins", "install");
+const PLUGINS = [
+  [32.0, SHEET - 0.5], [32.5 - EARLY, SHEET - 0.02], [32.9, SHEET + 0.4],
+  [32.9, TYPED - 0.08], [33.25, TYPED + 0.27],
+  [33.25, INSTALL - 0.22], [33.5 - EARLY, INSTALL + 0.02],
+  [33.5 - EARLY, EVENTS.pluginInstalled + 0.03], [34.0, EVENTS.pluginInstalled + 0.55],
+];
+
+function plugins(t) {
+  const tc = remap(t, PLUGINS);
+  // The window's width fills the frame: the camera looks at its upper part, where the sheet and the list are.
+  const cam = win("plugins", tc, { size: SETTINGS, fy: 262 });
+  pointer("plugins", tc, cam, t < 33.5 - EARLY ? 1 : 0);
+  label(t, "From any git repository", { start: 32.25, end: 33.85, y: 1010 });
+}
+
+function installed(t) {
+  held("harbor", t - (34 - EARLY), 2, { from: 1.02, to: 1.05 });
+  label(t, "A theme from a plugin", { start: 34.2, end: 35.82 });
+  lines(t, "Install themes and widgets", "other people share.", { start: 34.15, end: 35.82, scrim: 0.36 });
 }
 
 // MARK: E. Make it yours (36 to 46): Customize, in the real editor
@@ -481,7 +502,8 @@ function lua(t) {
     code(text, 118 - (1 - p) * 18, 98 + i * 28.6, p);
   });
   ctx.restore();
-  lines(t, "Every theme", "is a Lua file.", { start: 50.25, end: 51.82 });
+  label(t, "Write as many as you want", { start: 50.3, end: 51.82, y: 58 });
+  lines(t, "Themes and widgets", "are Lua files.", { start: 50.25, end: 51.82 });
 }
 
 // The agent's session, cause before effect: the words go to the agent over the editor; then Add Widget has the
@@ -513,6 +535,8 @@ function agent(t) {
     shown.forEach((text, i) => ctx.fillText(text + (i === shown.length - 1 && t < 52.5 ? "▍" : ""), 146, 714 + i * 34));
     ctx.restore();
   }
+  // Top left, under the window's title bar: the lock screen's own words are in the middle.
+  label(t, "Locky ships its own agent skill", { start: 52.2, end: 53.78, y: 104 });
   lines(t, "Or ask", "your coding agent.", { start: 52.12, end: 53.78 });
 }
 
@@ -526,8 +550,10 @@ const PUSH = { zoom: 1.085, oy: 0.63 };
 function locked(t) {
   const push = ease.inOutCubic(span(t, 56.0, 3.6));
   lock("lockin", lockTime(t), { zoom: lerp(1.02, PUSH.zoom, push), ox: 0.5, oy: lerp(0.5, PUSH.oy, push) });
-  line(t, "Then lock.", { start: 54.6, end: 55.6 });
-  lines(t, "A real lock.", "Touch ID or your password.", { start: 56.05, end: 59.55 });
+  // What a Locky lock is: its own windows over a session that stays unlocked behind them (docs/security.md).
+  label(t, "macOS keeps running behind Locky's lock", { start: 55.1, end: 56.9 });
+  lines(t, "Lock your MacBook.", "Your agents keep working.", { start: 54.6, end: 56.9 });
+  lines(t, "A real lock.", "Touch ID or your password.", { start: 57.2, end: 59.55 });
 }
 
 function endCard(t) {
@@ -544,7 +570,7 @@ function endCard(t) {
 // MARK: The film
 
 const SECTIONS = [
-  [0, hook], [8, run], [11.5, app], [18, ways], [24, live], [26, stillWorking], [30, lapse], [34, schedule], [36, customize], [46, build],
+  [0, hook], [8, run], [11.5, app], [18, ways], [24, live], [DAY, lapse], [PLAN, schedule], [32, plugins], [34, installed], [36, customize], [46, build],
   [50, lua], [52, agent], [54, locked], [60, endCard],
 ];
 
@@ -576,10 +602,10 @@ window.CUES = {
   stepBack: 12,
   list: WALK.map((_, j) => 13 + j * BEAT),
   ways: [18, 20, 22],
-  live: [24, 26],
-  needs: 28,
-  lapse: [31.3, 33.75],
-  popover: 34.5,
+  live: [24, 26, 30, 32, 34],
+  lapse: [DAY + 1.3, DAY + 3.75],
+  popover: PLAN + 0.5,
+  plugin: [32.5, 33.0, 33.5],
   editor: 36.5,
   drags: [37.3, 38.3, 43.17],
   sheet: 40,
