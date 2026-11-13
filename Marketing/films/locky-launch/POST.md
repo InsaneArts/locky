@@ -35,7 +35,6 @@ Optional angle, your call:
   Starter, Creator, and Pro are "for individual use only", and company use needs Scale or Business.
 - **Fonts.** The words use SF Pro and SF Mono, which Apple licenses for mock-ups of its platforms' interfaces.
 - **Nobody heard the mix.** It was balanced by measurement (-14 LUFS, beats within a frame of the cuts). Listen once.
-- **README.** It says "Twenty-eight themes"; `locky themes` lists 43, and the film says 43.
 - **Found in the app while shooting.** Three things in Locky itself, none of them in the film:
   the Themes window keeps Dot Matrix on its still picture for more than a second after it is selected (the other
   themes go live in a tenth of one); `locky render` now and then returns a black background when eight run at once;

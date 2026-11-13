@@ -1,110 +1,211 @@
-# Locky
+<h1 align="center">Locky</h1>
 
-A lock screen for macOS that you build like a Neovim config: themes and widgets are Lua plugins, drawn
-natively with SwiftUI and Metal.
+<h3 align="center">A lock screen for your Mac that you build yourself.</h3>
 
-> Locky unlocks only with Touch ID or your login password. While it shows, the macOS lock screen is off; if
-> Locky crashes, hangs, or is killed, a guard process turns the macOS lock screen on, and ⌃⌥⌘Q switches to it.
-> [security.md](docs/security.md) says what Locky guarantees and what it does not.
+<p align="center">
+  <img src=".github/assets/hero.jpg" width="100%" alt="A Mac locked with Locky's Sakura theme: a cherry branch under the moon, the time, and a password field" />
+</p>
 
-## Build
+Locky is a lock screen for macOS. It comes with 43 themes, and every theme and widget is a Lua file that you can change in the app or in your editor. Locky draws with SwiftUI and Metal, and it unlocks with Touch ID or your login password.
 
-```sh
-Scripts/package_app.sh            # builds Locky.app and installs it in /Applications
-open Locky.app                    # the lock icon appears in the menu bar
-swift test                        # the test suite
-```
+While Locky's lock shows, the macOS lock screen is off: Locky draws its own windows over your session. If Locky crashes, hangs, or is killed during a lock, a second process turns the macOS lock screen on within 8 seconds, and ⌃⌥⌘Q switches to it at any time. [security.md](docs/security.md) says what Locky guarantees and what it does not.
 
-A build is signed ad hoc unless a `signing.env` next to `Package.swift` (ignored by git) names a certificate, for
-example `SIGNING_MODE=dev` and `APP_IDENTITY="Developer ID Application: Your Name (TEAMID)"`. macOS ties
-permissions such as Accessibility to the signature, so an ad-hoc build asks for them again after each build.
+## Pick a theme
 
-Locky has one package dependency, [PermissionFlow](https://github.com/jaywcjlove/PermissionFlow) 2.11.3, pinned
-exactly: it guides you through Accessibility, the camera, and Login Items in System Settings. `package_app.sh`
-copies its words into the app. [security.md](docs/security.md#what-locky-asks-macos-for) says what Locky asks
-macOS for, and why.
+Themes… in the menu bar icon's menu opens the Themes window. It lists every theme, and shows the one in use live. Click a theme to use it, or move through the list with the arrow keys.
 
-The first launch opens the Welcome, three short pages:
+<p align="center">
+  <img src=".github/assets/themes-window.png" width="100%" alt="The Themes window: the list of themes, and Galaxy Sea live on its own page" />
+</p>
 
-1. **Welcome to Locky:** your lock screen, live. Lock Now tries a real lock.
-2. **Make Locky Your Lock Screen:** turn on Lock automatically, Open at login, and a Lock Now shortcut, so that
-   Locky locks your Mac. Grant Accessibility, and Lock with the Touch ID button makes that button show Locky too.
-   The Apple menu's Lock Screen and ⌃⌘Q still show the macOS lock screen.
-3. **If Something Goes Wrong:** what happens if Locky stops during a lock, and the ⌃⌥⌘Q way out
-   ([security.md](docs/security.md#if-something-goes-wrong)).
+Nine of the 43:
 
-Help › Welcome to Locky opens it again. The menu bar icon has Lock Now, Themes…, and Settings….
+<p align="center">
+  <img src=".github/assets/themes.jpg" width="100%" alt="Nine of Locky's themes: Synthwave, Tokyo Night, Event Horizon, Neon City, Gruvbox, Poster, Liquid, Mocha, and Notebook" />
+</p>
 
-## Themes
-
-![The built-in themes](docs/gallery.png)
-
-Twenty-eight themes ship with Locky. Each is a package in `Sources/Locky/Resources/packages/<id>/` (Aurora, the
-default, lives in the core runtime) with its own widgets, shaders, and a README with its options. The last eight
-are live wallpapers, after the most popular scenes on Wallpaper Engine's Steam Workshop, drawn entirely in Metal.
+<details>
+<summary>All 43 themes</summary>
 
 | Theme | id | Look |
 |---|---|---|
-| Aurora | `default` | Northern lights over mountains and a still lake; a thin clock. |
-| Glass | `glass` | Your wallpaper, a huge clock, and glass gauges; the password field appears when you type. |
-| Station | `station` | A Swiss railway clock on warm gray, with a platform sign and your next "departure". |
-| Poster | `poster` | International Typographic Style: giant cropped hours, red minutes overprinting them. |
-| Departures | `departures` | A flip clock and a split-flap board of your herdr agents. |
-| Word Clock | `wordclock` | An 11×10 letter grid that spells the time (English). |
-| Phosphor | `phosphor` | An amber CRT terminal: shell session, block clock, system info, scanlines. |
-| Mocha | `mocha` | Catppuccin Mocha with an i3lock-style ring around the clock. |
-| Dot Matrix | `dotmatrix` | A 5×7 dot-matrix clock on a ghost grid, with one red accent. |
-| Synthwave | `synthwave` | A neon sunset over a perspective grid, with a chrome clock. |
-| Tokyo Night | `tokyonight` | The hyprlock look: hours over minutes in two colors, status in the corners. |
-| Gruvbox | `gruvbox` | A conky sidebar of system stats beside a big clock, in Gruvbox colors. |
-| Observatory | `observatory` | Stars and the Milky Way over a dome; tonight's moon and the sun's path. |
-| Mission | `mission` | Flight control: mission elapsed time, clocks, telemetry, and progress rings. |
-| Pocket | `pocket` | A handheld LCD game: a pixel clock, hearts, a score, and the Game of Life. |
-| Bauhaus | `bauhaus` | A 1923 poster in primary shapes; a notch in the red circle sweeps the seconds. |
-| Memento | `memento` | Day 286 of 365: a dot for every day of the year, and a stoic quote. |
-| Rainy | `rainy` | Rain sliding down a window over city lights; the time in words. |
-| Matrix | `matrix` | Digital rain, a glowing clock, and "Wake up, Neo…" typed in the corner. |
-| Notebook | `notebook` | A ruled notebook page: your todo.txt by hand, a sticky note, a coffee ring. |
-| Event Horizon | `eventhorizon` | A black hole's turning accretion disk, its light bent around the shadow. |
-| Galaxy Sea | `galaxysea` | The Milky Way mirrored in a calm sea, a small boat on the horizon, meteors. |
-| Liquid | `liquid` | Color folding into color like silk; a big clock and a row of glass widgets. |
-| Neon City | `neoncity` | A rainy city at 2 AM: towers drifting past, neon signs, a neon clock. |
-| Sakura | `sakura` | A cherry branch under the moon, falling petals, the month's old Japanese name. |
-| Deep Blue | `deepblue` | Underwater light rays and plankton, and a humpback gliding past. |
-| Lookout | `lookout` | Firewatch-style ridges and a fire lookout, lit by the real time of day. |
-| Snowfall | `snowfall` | Snow falling on a pine forest at night, a cabin with warm windows. |
+| Bauhaus | `bauhaus` | A Bauhaus poster: red circle, blue half disc, yellow triangle, and the time in Futura. |
+| Bento Cockpit | `bento` | A command-center bento grid: circular system gauges, a network chart, and a process list on graphite. |
+| Braun | `braun` | Dieter Rams functionalism: a Braun analog clock hero, one yellow accent, quiet labelled blocks on warm grey. |
+| Neo-Brutalism | `brutal` | Raw web blocks: thick borders, hard shadows, and clashing bright fills on cream, with a huge clock on lime. |
+| Cassette Futurism | `cassette` | A 1970s mission console: green-and-amber phosphor on a scanlined CRT, with a warning lamp. |
+| Glass Cockpit | `cockpit` | An aircraft PFD: artificial horizon, airspeed and altitude tapes, and magenta flight bugs. |
+| Cyberdeck HUD | `cyberdeck` | A duotone vector cockpit: corner brackets, a glowing amber clock, and bracketed telemetry rails. |
+| Deep Blue | `deepblue` | Underwater: rays of light, caustics, drifting plankton, and a whale gliding past. |
+| Aurora | `default` | Northern lights over a mountain lake at night. Locky's default. |
+| Departures | `departures` | A flip clock and a split-flap departures board of your herdr agents. |
+| Dot Matrix | `dotmatrix` | A dot-matrix clock on a ghost dot grid: black, white, and one pulsing red dot. |
+| Event Horizon | `eventhorizon` | A black hole with a turning accretion disk and light bent around its shadow. |
+| Everforest | `everforest` | A cosy low-contrast forest: sand text, a rounded clock, a greeting, weather, and the day quietly passing. |
+| Galaxy Sea | `galaxysea` | The Milky Way mirrored in a calm sea, a small boat on the horizon, and the odd meteor. |
+| Liquid Glass | `glass` | A huge clock and glass gauges on your own wallpaper, after iOS 26 and macOS Tahoe. |
+| Gruvbox | `gruvbox` | A conky sidebar in Gruvbox colors: system, disk, network, processes, and power beside a big clock. |
+| Kanagawa | `kanagawa` | A woodblock Great Wave under an ink sky: a thin clock, a red seal, and a lot of calm space. |
+| Liquid | `liquid` | Color folding into color like silk, a big clock, and a row of glass widgets. |
+| Lookout | `lookout` | Layered ridges and a fire lookout in the light of the real time of day, from dawn to a starry night. |
+| Material You | `material` | Material 3, colored by your wallpaper: soft rounded cards, a friendly clock, and pill chips. |
+| Matrix | `matrix` | Digital rain, a glowing green clock, "Wake up, Neo…" typed in the corner, and the top processes. |
+| Memento | `memento` | Memento mori: the day of the year, a dot for every day, and a stoic's word. |
+| Mission | `mission` | A flight controller's console: mission elapsed time since lock, telemetry, UTC, and the downlink. |
+| Mocha | `mocha` | Catppuccin Mocha with an i3lock-color ring. |
+| Neon City | `neoncity` | A rainy city at 2 AM: towers drifting past, neon signs, flying cars, and a neon clock. |
+| Nord | `nord` | Arctic frost: a cold flat gradient, a thin snow-white clock, and Scandinavian restraint. |
+| Notebook | `notebook` | A ruled notebook page: the time in marker, your todo.txt by hand, a sticky note, and a coffee ring. |
+| Observatory | `observatory` | A turning night sky over an observatory dome, with tonight's moon and the sun's path. |
+| OP-1 | `op1` | A Teenage Engineering synth faceplate: hairline module panels, a tabular clock, meters, and a green OLED. |
+| Phosphor | `phosphor` | An amber CRT terminal: a shell session with a block clock, neofetch, and herdr's agents. |
+| Pocket | `pocket` | A four-shade handheld LCD: battery as hearts, a pixel clock, and the Game of Life. |
+| Poster | `poster` | The time as a Swiss poster: huge numerals cropped by the edges, red overprinting black, small type on a grid. |
+| Quantified Self | `quantified` | A wearable dashboard: near-black tiles, big scores, and rings in green-amber-red zones. |
+| Rainy | `rainy` | A lo-fi rainy window: drops sliding down the glass, city lights out of focus, the time in words. |
+| Rosé Pine | `rosepine` | Dusky soho minimalism: a serif clock, heavy negative space, one rose weather card, an iris quote. |
+| Sakura | `sakura` | A cherry branch in bloom under the moon, falling petals, and the month's old Japanese name. |
+| Snowfall | `snowfall` | Snow falling on a pine forest at night, and a cabin with warm windows and chimney smoke. |
+| Station | `station` | A Swiss railway clock on a warm gray wall. The second hand sweeps, waits at 12, and the minute jumps. |
+| Synthwave | `synthwave` | A neon sunset over a scrolling perspective grid, with a chrome clock. |
+| Tokyo Night | `tokyonight` | The hyprlock look in Tokyo Night colors: split clock, weather, and status in the corners. |
+| TUI Grid | `tui` | A btop terminal dashboard: bordered boxes with title tabs, a CPU chart, a neofetch host, and a teal clock. |
+| Vaporwave | `vaporwave` | A pastel CRT dream: a banded sun, a cyan grid, VHS scanlines, and a chrome serif clock. |
+| Word Clock | `wordclock` | The time spelled out on a letter grid. English only. |
 
-Pick one in the Themes window (the menu bar icon's Themes…), or in `init.lua` with
-`locky.setup({ theme = "station" })`. `Scripts/snapshot.sh <id> out.png [1728x1117]` renders any theme to a PNG.
-To make your own, see [create-theme.md](docs/create-theme.md).
+</details>
 
-## The windows
+Some themes are live wallpapers, drawn in Metal. They stop in Low Power Mode and with Reduce Motion on. Lookout follows the real time of day, from dawn to a starry night.
 
-Themes… in the menu bar icon's menu opens the **Themes** window: every theme in the sidebar, with its picture and
-its colors, and the theme in use on a page of its own, live, over its own colors. Click a theme to use it, or use the
-arrow keys. File › New Theme… (⌘N) starts a theme of your own.
-Customize… edits it on its live lock screen (drag widgets, add them from a live gallery, change their options, the
-background, the colors, the font, and where the password field sits). Schedule (the
-clock in the toolbar, or File › Schedule Themes…) changes the theme by time of day or with Light and Dark mode, and
-Move to Trash removes a theme you made.
+<p align="center">
+  <img src=".github/assets/time-of-day.jpg" width="100%" alt="The Lookout theme at midday and at night" />
+</p>
 
-Settings… (⌘,) opens the **Settings** window, with five panes in its sidebar. General has Open at login, the Lock Now
-shortcut, Lock with the Touch ID button, and auto-lock. Lock Screen has the lock screen message, Hide personal
-information, Lock animation (seven styles, with a preview), and Turn the display off. Unlock has Touch ID and a photo
-after wrong passwords. Customization opens the config folder and init.lua, shows init.lua's problems, and makes new
-themes and widgets. Plugins installs, updates, and removes plugins. Everything but Open at login saves to
-`~/.config/locky/settings.json`, which wins over init.lua key by key: see [settings.md](docs/settings.md).
+Schedule (the clock in the Themes window's toolbar) changes the theme for you, by time of day or with Light and Dark mode.
 
-## Configure
+## Change a theme
 
-`~/.config/locky/init.lua` (Settings › Customization › Config folder creates it with examples):
+Customize… opens the editor on the theme's live lock screen. Click a widget or the password field to select it, and drag it to move it. Add Widget… shows a live gallery of the 27 widgets, in each of their sizes. The inspector changes what is selected, and the background, the colors, and the font.
+
+<p align="center">
+  <img src=".github/assets/customize.png" width="100%" alt="The editor on the Aurora theme, with a calendar widget selected and its options in the inspector" />
+</p>
+
+New Theme… (⌘N) starts a theme from a blank one. Every change is saved to `~/.config/locky/settings.json`, and Revert to Original takes a theme back.
+
+## Lock and unlock
+
+Lock Now is in the menu bar icon's menu. These are in Settings › General:
+
+- **Lock Now shortcut:** record a shortcut that locks the Mac from any app.
+- **Lock Automatically:** lock after a time without input, when the screen saver starts or the display turns off, and when the Mac sleeps.
+- **Lock with the Touch ID button:** a press of the Touch ID button shows Locky's lock instead of the macOS lock screen. It is off by default, and it needs Accessibility access.
+
+The Apple menu's Lock Screen and ⌃⌘Q still show the macOS lock screen. Locky does not change the macOS password setting.
+
+A lock comes in with one of seven animations (Settings › Lock Screen). It ends only with Touch ID or your login password. Settings › Unlock can take a photo with the camera after wrong passwords.
+
+## Make your own
+
+A theme is a Lua file that places widgets on a background. A widget is a Lua function that returns views. You can write both by hand, or have a coding agent write them: Locky has a skill for Claude Code, Codex, and other agents.
 
 ```lua
+-- ~/.config/locky/init.lua
 locky.setup({ theme = "default", palette = { accent = "#ff79c6" } })
 locky.pack.add({ "someone/locky-weather" })
 ```
 
-The same binary is a command line (`Locky.app/Contents/MacOS/Locky`):
+Plugins are git repositories with themes, widgets, and shaders. Settings › Plugins installs, updates, and removes them. A plugin is code that runs as you, so install only plugins you trust.
+
+- [create-theme.md](docs/create-theme.md): make a theme in the Themes window or in Lua, and share it
+- [create-widget.md](docs/create-widget.md): write a widget, check it, draw it, and put it on the lock screen
+- [agents.md](docs/agents.md): have a coding agent write widgets and themes for you
+
+## Install
+
+Install Locky in Terminal:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/InsaneArts/locky/main/install.sh | sh
+```
+
+It downloads the latest release, checks that Apple notarized it and that Locky's developer signed it, and puts Locky in Applications. To read the script before it runs, download it first:
+
+```sh
+curl -fsSL -o install-locky.sh https://raw.githubusercontent.com/InsaneArts/locky/main/install.sh
+less install-locky.sh
+sh install-locky.sh
+```
+
+Or with Homebrew:
+
+```sh
+brew trust insanearts/tap && brew install --cask insanearts/tap/locky
+```
+
+Homebrew loads casks from a tap outside its own only after you trust it. `brew install` then adds the tap by itself.
+
+Or build Locky from a clone:
+
+```sh
+git clone https://github.com/InsaneArts/locky.git
+cd locky
+Scripts/package_app.sh        # builds Locky.app and installs it in /Applications
+```
+
+Requirements:
+
+- macOS 15 or newer
+- Xcode 26 or newer, to build
+
+Open Locky from Applications. The first launch opens the Welcome, three short pages: a live preview with Lock Now, the switches that make Locky your lock screen, and what happens if something goes wrong.
+
+Locky checks for a new version once a day and asks before it installs one. Locky › Check for Updates… checks at once. An update is installed only if its signature matches the key in Locky.
+
+## Remove
+
+1. In Settings › General, turn off Open at login. Then quit Locky from the menu bar icon's menu, and delete Locky.app.
+2. Delete its files. `~/.config/locky` is your config, with the themes and widgets you made:
+
+```sh
+rm -rf ~/.config/locky ~/.local/share/locky
+rm -rf ~/Library/Application\ Support/Locky ~/Library/Caches/Locky ~/Library/Logs/Locky
+defaults delete com.tornikegomareli.Locky
+```
+
+3. If you gave Locky Accessibility access, remove it in System Settings › Privacy & Security › Accessibility with the − button.
+
+If you installed the agent skill, delete its copies: `~/.claude/skills/locky`, `~/.codex/skills/locky`, and `~/.agents/skills/locky`.
+
+## Using it
+
+- Click the lock icon in the menu bar for Lock Now, Themes…, and Settings….
+- On the lock screen, type your password, or use Touch ID.
+- After 20 seconds without input, only the theme's background shows. A key or a mouse move brings the rest back.
+- If something goes wrong on the lock screen, press ⌃⌥⌘Q to switch to the macOS lock screen.
+- Help › Welcome to Locky opens the Welcome again.
+
+## Settings
+
+<img src=".github/assets/settings.png" width="420" align="right" alt="The Settings window's General pane" />
+
+Settings… (⌘,) has five panes.
+
+- **General:** Open at login, the Lock Now shortcut, Lock with the Touch ID button, and Lock Automatically.
+- **Lock Screen:** a message under the password field, Hide personal information, the lock animation, and when the display turns off.
+- **Unlock:** Touch ID, and a photo after wrong passwords.
+- **Customization:** the config folder and init.lua, new themes and widgets, and the agent skill.
+- **Plugins:** install, update, and remove plugins.
+
+Everything but Open at login is saved to `~/.config/locky/settings.json`. It is plain JSON, so you can edit it by hand and keep it in your dotfiles. It wins over init.lua key by key: see [settings.md](docs/settings.md).
+
+Hide personal information takes your name, your picture, the Mac's name, and your location off the lock screen.
+
+<br clear="right" />
+
+## Command line
+
+The app's binary is also a command line (`/Applications/Locky.app/Contents/MacOS/Locky`):
 
 ```
 locky check [--theme NAME] [--widget NAME]   run your config, plugins, and a theme; list every error
@@ -123,23 +224,26 @@ locky preview --theme NAME                   the lock screen in a window; --tran
 locky window [SECTION]                       the Themes window, a Settings pane, or the Welcome
 ```
 
-## Make your own
-
-- [create-widget.md](docs/create-widget.md): write a widget, check it, draw it, and put it on the lock screen.
-- [agents.md](docs/agents.md): have a coding agent, such as Claude Code or Codex, write widgets and themes for you.
-
 ## Docs
 
+- [security.md](docs/security.md): what the lock guarantees, what it does not, and how to report a vulnerability
+- [settings.md](docs/settings.md): settings.json, which the windows write, and how it layers over init.lua
+- [themes.md](docs/themes.md): themes, backgrounds, and shaders
+- [widgets.md](docs/widgets.md): the core widgets and their options
 - [plugins.md](docs/plugins.md): the plugin system, widgets, packages, health, and the safety rules
 - [views.md](docs/views.md): every view and property widgets can draw
-- [widgets.md](docs/widgets.md): the core widgets and their options
-- [create-theme.md](docs/create-theme.md): make a theme in the Themes window or in Lua, and share it
-- [themes.md](docs/themes.md): themes, backgrounds, and shaders
 - [api.md](docs/api.md): the `locky` API
-- [settings.md](docs/settings.md): settings.json, which the windows write, and how it layers over init.lua
-- [security.md](docs/security.md): what the lock guarantees, what it does not, and how to report a vulnerability
 
-## Layout
+## Development
+
+```sh
+Scripts/package_app.sh            # builds Locky.app and installs it in /Applications (INSTALL=0 only builds)
+swift test                        # the test suite
+```
+
+A build is signed ad hoc unless a `signing.env` next to `Package.swift` (ignored by git) names a certificate, for example `SIGNING_MODE=dev` and `APP_IDENTITY="Developer ID Application: Your Name (TEAMID)"`. macOS ties permissions such as Accessibility to the signature, so an ad-hoc build asks for them again after each build.
+
+Locky has two package dependencies, both pinned exactly: [PermissionFlow](https://github.com/jaywcjlove/PermissionFlow) guides you through Accessibility, the camera, and Login Items in System Settings, and [Sparkle](https://sparkle-project.org) installs updates. [security.md](docs/security.md#the-two-dependencies) says what each one does. [release.md](docs/release.md) says how a release is made.
 
 ```
 Sources/CLua/                 Lua 5.5.1 (unmodified) and locky_bridge.c: time budgets, memory limit, safe calls
@@ -148,19 +252,20 @@ Sources/Locky/Views/          views, themes, backgrounds, widget hosts, the pass
 Sources/Locky/Window/         the Themes window (the gallery and Customize), the Settings window and its panes,
                               the Welcome
 Sources/Locky/Settings/       settings.json, its store, and the theme schedule
-Sources/Locky/System/         the shortcut, auto-lock, login item, permissions, location, power, camera, editors, and
-                              the guard's Locky side
+Sources/Locky/System/         the shortcut, auto-lock, login item, permissions, location, power, camera, editors,
+                              updates, and the guard's Locky side
 Sources/GuardCore/            the guard's watch and the macOS lock screen call, shared by Locky and locky-guard
 Sources/LockyGuard/           locky-guard, which locks the Mac if Locky dies or hangs during a lock
 Sources/Locky/Resources/
   runtime/                    lua/locky (core, ui), plugin/ (core widgets), themes/, shaders/, types/
   packages/                   the built-in theme packages, one folder each
-Scripts/                      packaging, snapshot.sh (a theme to PNG), window-shot.sh (a window to PNG),
+Scripts/                      packaging, release.sh, snapshot.sh (a theme to PNG), window-shot.sh (a window to PNG),
                               thumbnails.sh (the theme thumbnails), make_icon.swift (the app icon)
+releases/                     release notes, one Markdown file per version
 Tests/LockyTests/             the test suite, and Fixtures/ (saved replies of the services widgets call)
+Marketing/                    the launch film and its tools
 ```
 
 ## Credits
 
-Weather data by [Open-Meteo.com](https://open-meteo.com), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-The weather and sun widgets use it. Locky › About Locky shows this credit too.
+Weather data by [Open-Meteo.com](https://open-meteo.com), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The weather and sun widgets use it. Locky › About Locky shows this credit too.
