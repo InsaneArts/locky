@@ -21,6 +21,7 @@ enum MainMenu {
         lockNow = lock
         let locky = menu("Locky", [
             item("About Locky", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+            item("Check for Updates…", #selector(AppDelegate.checkForUpdates(_:))),
             .separator(),
             // AppKit draws its gear on a Settings item only for its own selectors (orderFrontPreferencesPanel:), so this one
             // names the same symbol.

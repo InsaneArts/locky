@@ -61,6 +61,11 @@ The Welcome's last page says the same. The sections below give the details.
   screen.
 - **No injected code.** Locky.app and the guard are signed with the hardened runtime, so
   `DYLD_INSERT_LIBRARIES` cannot load code into them.
+- **Updates are signed.** Once a day Locky reads the update feed on its latest GitHub release, and it asks before
+  it installs a new version. Sparkle installs an update only if its EdDSA signature matches the public key in
+  Locky.app, and macOS checks the Developer ID signature and Apple's notarization. No check starts during a lock.
+  `defaults write com.tornikegomareli.Locky SUEnableAutomaticChecks -bool false` turns the daily check off;
+  Locky › Check for Updates… still checks when you ask.
 - **Other launches are ignored.** While a lock is on, Locky ignores requests from another launch, such as
   `Locky window` or `Locky preview`.
 - **No menu commands during a lock.** Locky removes its menus, the Services menu included, while a lock is on,
@@ -98,10 +103,10 @@ macOS ties a permission to the app's signature. A build signed ad hoc is a new a
 Locky entry can stay on in the Accessibility list while the new build does not have the permission. Remove old
 Locky entries with the − button, then grant it again. See the README's Build section.
 
-### The one dependency
+### The two dependencies
 
 The rows, the panel, and the System Settings links come from
-[PermissionFlow](https://github.com/jaywcjlove/PermissionFlow) (MIT), Locky's only package dependency. Package.swift
+[PermissionFlow](https://github.com/jaywcjlove/PermissionFlow) (MIT). Package.swift
 pins it to version 2.11.3 exactly, and Package.resolved pins its commit (`cb96db4`). Locky links its
 `PermissionFlow`, `PermissionFlowCameraStatus`, and `SystemSettingsKit` products. Their source was read before it
 was added: they make no network calls, collect nothing, start no processes, and write no files. They use only
@@ -109,6 +114,15 @@ public APIs: Accessibility and window lists to follow the System Settings window
 URLs, and the drag pasteboard. PermissionFlow asks for Accessibility itself only when its
 `promptForAccessibilityTrust` option is on, and Locky leaves it off. Its translated button words ship in
 `Locky.app/Contents/Resources/PermissionFlow_PermissionFlow.bundle`; `locky health` says if they are missing.
+
+Updates come from [Sparkle](https://sparkle-project.org) (MIT), the updater most Mac apps outside the App Store
+use. Package.swift pins it to version 2.10.0 exactly. Unlike PermissionFlow, it is not built from source: the
+package downloads the framework that the Sparkle project built and signed, and its source was not read for Locky.
+Scripts/package_app.sh copies it to `Locky.app/Contents/Frameworks` and signs it with Locky's own signature.
+Sparkle reads the feed, downloads an update, checks its signature, and replaces Locky.app. A release build loads
+only libraries that Apple or Locky's developer signed. A build without a certificate has an ad-hoc signature,
+which names no developer, so it alone turns that check off (`com.apple.security.cs.disable-library-validation`)
+to load Sparkle.
 
 ## What Locky does not do
 

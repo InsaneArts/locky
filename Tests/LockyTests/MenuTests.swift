@@ -73,8 +73,8 @@ import Testing
 
     @Test func eachMenuHoldsTheLayoutTablesItems() throws {
         try installed { main throws in
-            #expect(try layout("Locky", in: main) == ["About Locky", "—", "Settings…", "—", "Lock Now", "—", "Services", "—", "Hide Locky",
-                                                      "Hide Others", "Show All", "—", "Quit Locky"])
+            #expect(try layout("Locky", in: main) == ["About Locky", "Check for Updates…", "—", "Settings…", "—", "Lock Now", "—", "Services", "—",
+                                                      "Hide Locky", "Hide Others", "Show All", "—", "Quit Locky"])
             #expect(try layout("File", in: main) == ["New Theme…", "Import Theme…", "—", "Customize Theme…", "Use Theme", "Preview Theme",
                                                      "Schedule Themes…", "—", "Duplicate Theme…", "Export Theme…", "Revert to Original",
                                                      "Move to Trash", "—", "Close"])

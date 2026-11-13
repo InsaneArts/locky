@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private lazy var lockKey = LockKey(isLocked: { [weak self] in self?.session?.mode == .lock },
                                        lockIsUp: { [weak self] in self?.session?.holdsLock == true },
                                        lock: { [weak self] in self?.lock(.user, touchIDQuiet: 1) })
+    /// Updates of Locky itself. No check starts during a lock.
+    private lazy var updater = Updater(isLocked: { [weak self] in self?.session?.mode == .lock })
     /// While Settings records a new shortcut, the old one stays free so the recorder sees the keys.
     private var recordingShortcut = false
     /// The menu that opened last: a pop-up or context menu in a window, the status menu, or the menu bar.
@@ -82,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             // A new fix for the weather's Current Location, if Location Services allows it: nothing asks here.
             model.location.refresh()
             scheduleUpdateChecks()
+            updater.start()
             DistributedNotificationCenter.default().addObserver(self, selector: #selector(handleRequest(_:)), name: Self.request, object: nil,
                                                                 suspensionBehavior: .deliverImmediately)
             // Accessibility may have changed in System Settings: the Touch ID button follows when Locky comes forward.
@@ -316,8 +319,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(openThemes(_:)), #selector(openSettings(_:)), #selector(openWelcome(_:)): session?.mode != .lock
         // A sheet over the Themes window, such as Add Widget, holds it: the new theme would open under it.
         case #selector(newTheme(_:)): session?.mode != .lock && themesWindow?.window?.attachedSheet == nil
+        case #selector(checkForUpdates(_:)): updater.canCheck
         default: true
         }
+    }
+
+    /// Locky › Check for Updates…
+    @objc func checkForUpdates(_ sender: Any?) {
+        updater.check()
     }
 
     /// File › New Theme… and the Settings window's New Theme…: a new theme from the blank one, open in Customize in the

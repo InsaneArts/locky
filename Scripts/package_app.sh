@@ -14,6 +14,11 @@ BUNDLE_ID=${BUNDLE_ID:-com.tornikegomareli.Locky}
 SIGNING_MODE=${SIGNING_MODE:-adhoc}
 APP_IDENTITY=${APP_IDENTITY:-}
 source "$ROOT/version.env"
+# Updates: Sparkle reads this feed, the appcast on the latest GitHub release, and installs a new Locky only if its
+# EdDSA signature matches this public key. The private key is in the login Keychain of the Mac that makes the
+# releases (docs/release.md).
+FEED_URL="https://github.com/InsaneArts/locky/releases/latest/download/appcast.xml"
+SPARKLE_PUBLIC_KEY="xRquHeubqKcUa++dWEyUOfpepj6X+4Jz6juNcf3tYfs="
 
 ARCH_FLAGS=()
 for ARCH in ${ARCHES:-$(uname -m)}; do ARCH_FLAGS+=(--arch "$ARCH"); done
@@ -38,6 +43,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSUIElement</key><true/>
+    <key>SUFeedURL</key><string>$FEED_URL</string>
+    <key>SUPublicEDKey</key><string>$SPARKLE_PUBLIC_KEY</string>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUScheduledCheckInterval</key><integer>86400</integer>
     <key>NSCameraUsageDescription</key><string>Locky takes a photo when someone enters too many wrong passwords, if you turn that on in Settings.</string>
     <key>NSLocationUsageDescription</key><string>Locky shows the weather where this Mac is, if you choose Current Location for a weather widget.</string>
     <key>NSLocationWhenInUseUsageDescription</key><string>Locky shows the weather where this Mac is, if you choose Current Location for a weather widget.</string>
@@ -49,6 +58,14 @@ cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 # The guard, which locks the Mac if Locky dies or hangs during a lock. Locky finds it beside its executable.
 cp "$BIN_DIR/locky-guard" "$APP/Contents/MacOS/locky-guard"
 cp -R "$ROOT/Sources/$APP_NAME/Resources/." "$APP/Contents/Resources/"
+# Sparkle, for updates, without the headers a build needs. Locky finds it by the run path added here: SwiftPM's own
+# points beside the executable.
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$BIN_DIR/Sparkle.framework" "$SPARKLE"
+rm -rf "$SPARKLE"/{Headers,PrivateHeaders,Modules} "$SPARKLE"/Versions/B/{Headers,PrivateHeaders,Modules}
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/$APP_NAME" \
+  2> >(grep -v "invalidate the code signature" >&2)
 # PermissionFlow's words (its .lproj tables). PermissionFlowResources looks in Bundle.main's Resources first. SwiftPM's
 # Bundle.module would look in the app's root, where codesign does not allow files, and then in this Mac's .build, and
 # stops the app if neither has it: PermissionFlow never calls it. A release build drops code that nothing calls, so the
@@ -70,18 +87,33 @@ MINOS=$(xcrun vtool -show-build "$BIN" | awk '/minos/ { print $2; exit }')
 xcrun vtool -set-build-version macos "$MINOS" "$(xcrun --show-sdk-version)" -replace -output "$BIN" "$BIN" \
   2> >(grep -v "code signature will be invalid" >&2)
 
-# The guard first, then the app that contains it. Every mode, ad-hoc too, signs with the hardened runtime, so
-# DYLD_INSERT_LIBRARIES and other injected code cannot hook Locky or its guard. The runtime blocks the camera
-# (intruder photos) and Location Services (the weather's Current Location) unless Locky.entitlements allows them.
+# Sparkle's helpers and the guard first, then the app that contains them. Every mode, ad-hoc too, signs with the
+# hardened runtime, so DYLD_INSERT_LIBRARIES and other injected code cannot hook Locky or its guard. The runtime blocks
+# the camera (intruder photos) and Location Services (the weather's Current Location) unless Locky.entitlements allows
+# them.
+ENTITLEMENTS="$ROOT/$APP_NAME.entitlements"
 if [[ "$SIGNING_MODE" == "adhoc" || -z "$APP_IDENTITY" ]]; then
   IDENTITY=- TIMESTAMP=--timestamp=none
+  # The hardened runtime loads a library only if Apple or the app's own team signed it, and an ad-hoc signature has no
+  # team: Locky would not start with Sparkle inside. An ad-hoc build alone turns that one check off.
+  ENTITLEMENTS="$ROOT/.build/adhoc.entitlements"
+  cp "$ROOT/$APP_NAME.entitlements" "$ENTITLEMENTS"
+  /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$ENTITLEMENTS"
 elif [[ "$SIGNING_MODE" == "release" ]]; then
   IDENTITY=$APP_IDENTITY TIMESTAMP=--timestamp
 else
   IDENTITY=$APP_IDENTITY TIMESTAMP=--timestamp=none
 fi
-codesign --force "$TIMESTAMP" --options runtime --sign "$IDENTITY" "$APP/Contents/MacOS/locky-guard"
-codesign --force "$TIMESTAMP" --options runtime --entitlements "$ROOT/$APP_NAME.entitlements" --sign "$IDENTITY" "$APP"
+SIGN=(codesign --force "$TIMESTAMP" --options runtime --sign "$IDENTITY")
+# Inside out, as Sparkle's documentation signs them. The downloader keeps its own entitlements.
+"${SIGN[@]}" "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+"${SIGN[@]}" --preserve-metadata=entitlements "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+"${SIGN[@]}" "$SPARKLE/Versions/B/Autoupdate"
+"${SIGN[@]}" "$SPARKLE/Versions/B/Updater.app"
+"${SIGN[@]}" "$SPARKLE"
+"${SIGN[@]}" "$APP/Contents/MacOS/locky-guard"
+"${SIGN[@]}" --entitlements "$ENTITLEMENTS" "$APP"
+codesign --verify --deep --strict "$APP"
 echo "Built $APP"
 
 # Install the build in /Applications, where Launch at Login expects a stable path. INSTALL=0 skips it.

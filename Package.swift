@@ -10,9 +10,12 @@ let package = Package(
         .executable(name: "locky-guard", targets: ["LockyGuard"]),
     ],
     dependencies: [
-        // Locky's one dependency: the permission flow (System Settings deep links, the floating drag panel, and status
-        // reads that never prompt). Pinned to a version whose source was read; MIT, see docs/security.md.
+        // The permission flow (System Settings deep links, the floating drag panel, and status reads that never prompt).
+        // Pinned to a version whose source was read; MIT, see docs/security.md.
         .package(url: "https://github.com/jaywcjlove/PermissionFlow.git", exact: "2.11.3"),
+        // Updates: Sparkle checks the release feed and installs a new Locky only if its EdDSA signature matches the key
+        // in the app. Pinned exactly; it ships as Sparkle's own signed binary framework. MIT, see docs/security.md.
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.0"),
     ],
     targets: [
         // Lua 5.5.1, unmodified (see Sources/CLua/LICENSE), plus Locky's C bridge: locky_bridge.c.
@@ -32,6 +35,7 @@ let package = Package(
             .product(name: "PermissionFlow", package: "PermissionFlow"),
             .product(name: "PermissionFlowCameraStatus", package: "PermissionFlow"),
             .product(name: "SystemSettingsKit", package: "PermissionFlow"),
+            .product(name: "Sparkle", package: "Sparkle"),
         ], path: "Sources/Locky", exclude: ["Resources"]),
         // Fixtures: replies saved from the services widgets call, read by path.
         .testTarget(name: "LockyTests", dependencies: ["Locky", "GuardCore"], path: "Tests/LockyTests", exclude: ["Fixtures"]),
