@@ -61,9 +61,9 @@ function line(t, text, { start, end, x = 116, y = 906, size = 68, ink = "light",
 }
 
 /** Two lines: the second quieter. */
-function lines(t, first, second, { start, end, ink = "light", x = 116, scrim = 0.3 }) {
-  line(t, first, { start, end, ink, x, y: 826, scrim });
-  line(t, second, { start: start + 0.22, end, ink, x, tone: 0.6, scrim });
+function lines(t, first, second, { start, end, ink = "light", x = 116, y = 906, scrim = 0.3 }) {
+  line(t, first, { start, end, ink, x, y: y - 80, scrim });
+  line(t, second, { start: start + 0.22, end, ink, x, y, tone: 0.6, scrim });
 }
 
 /** A small label in mono capitals: the film's quiet second voice. */
@@ -309,16 +309,21 @@ function ways(t) {
   if (k < 2) line(t, "Lock it your way.", { start: bar + 0.6, end: bar + 1.6, ink });
 }
 
-// MARK: C. Live wallpapers (24 to 30): the score's breakdown
-
-const LIVE = [["snowfall", 0.5, 0.55], ["sakura", 0.5, 0.45], ["liquid", 0.5, 0.5]];
+// MARK: C. A live wallpaper (24 to 26) and agents (26 to 30): the score's breakdown
 
 function live(t) {
-  const k = shot(t, 24, 2, 3);
-  const local = t - (24 - EARLY) - k * 2;
-  const [clip, ox, oy] = LIVE[k];
-  held(clip, local, 2, { from: 1.02, to: 1.07, ox, oy });
-  lines(t, "Live wallpapers,", "drawn in Metal.", { start: 24.3, end: 27.8, scrim: 0.42 });
+  held("snowfall", t - (24 - EARLY), 2, { from: 1.02, to: 1.07, ox: 0.5, oy: 0.55 });
+  lines(t, "Live wallpapers,", "drawn in Metal.", { start: 24.3, end: 25.8, scrim: 0.42 });
+}
+
+// One take of the locky-rex plugin's lock screen, cut so that a program starts to need the user two seconds in
+// (tools/rex_timing.py film): on the bar, a frame early, as a cut is.
+function stillWorking(t) {
+  const local = t - (26 - EARLY);
+  lock("rexfilm", local, { zoom: lerp(1.02, 1.04, local / 4) });
+  label(t, "Plugin  ·  agents, live from Rex", { start: 26.4, end: 29.8, y: 690 });
+  lines(t, "Lock your Mac.", "Your agents keep working.", { start: 26.25, end: 27.8, y: 850, scrim: 0.42 });
+  line(t, "See which one needs you.", { start: 28.05, end: 29.8, y: 850, scrim: 0.42 });
 }
 
 // MARK: D. Time (30 to 36): Lookout through the day, and the schedule
@@ -539,7 +544,7 @@ function endCard(t) {
 // MARK: The film
 
 const SECTIONS = [
-  [0, hook], [8, run], [11.5, app], [18, ways], [24, live], [30, lapse], [34, schedule], [36, customize], [46, build],
+  [0, hook], [8, run], [11.5, app], [18, ways], [24, live], [26, stillWorking], [30, lapse], [34, schedule], [36, customize], [46, build],
   [50, lua], [52, agent], [54, locked], [60, endCard],
 ];
 
@@ -571,7 +576,8 @@ window.CUES = {
   stepBack: 12,
   list: WALK.map((_, j) => 13 + j * BEAT),
   ways: [18, 20, 22],
-  live: [24, 26, 28],
+  live: [24, 26],
+  needs: 28,
   lapse: [31.3, 33.75],
   popover: 34.5,
   editor: 36.5,

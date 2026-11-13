@@ -40,6 +40,9 @@ Optional angle, your call:
   the Themes window keeps Dot Matrix on its still picture for more than a second after it is selected (the other
   themes go live in a tenth of one); `locky render` now and then returns a black background when eight run at once;
   and New Theme shows one white frame as its editor opens.
-- **The agents widget.** herdr does not run in the helper, so Departures (in the list, at 15.5 s) and Phosphor (in the
-  run, at 9.5 s) show their "herdr offline" state, and the film has no shot of agents on a lock screen. A shot from
-  your own Mac, with real agents, would add it.
+- **The agents beat (26 to 30 s).** It is the locky-rex plugin over made-up Rex sessions whose programs make real
+  status reports. Its line is "Lock your Mac. Your agents keep working.", not "Now you can": a Mac's programs keep
+  running under the macOS lock screen too, and Locky does not keep the Mac awake. Rex's app icon shows in this
+  shot (it is the Rex clip's take): Superlogical publishes no rules for it, so send them the film first, or shoot the
+  take again without the icon (`tools/rex_shoot.py film`, then `tools/rex_timing.py film`). Departures (in the list, at 15.5 s) and Phosphor (in the run, at 9.5 s) still
+  show their "herdr offline" state: herdr does not run in the helper.

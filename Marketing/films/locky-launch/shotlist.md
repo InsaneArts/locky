@@ -4,7 +4,7 @@
 frame before its beat. The sections follow the score: quiet 0–8, groove 8–24, breakdown 24–36, build 36–40,
 groove 40–60, last chord 60–64.
 
-State chain: LOCKED (four looks) → 43 OF THEM → THE APP → LOCK → LIVE → TIME → CUSTOMIZE → BUILD → LOCK → THE NAME.
+State chain: LOCKED (four looks) → 43 OF THEM → THE APP → LOCK → LIVE → AGENTS → TIME → CUSTOMIZE → BUILD → LOCK → THE NAME.
 
 | Time | Beat | Entry state | Exit state | Words | Purpose |
 |---|---|---|---|---|---|
@@ -16,7 +16,8 @@ State chain: LOCKED (four looks) → 43 OF THEM → THE APP → LOCK → LIVE �
 | 11.5–12 | B2 | the eighth cut is Bauhaus: the Themes window's own preview, filling the frame | same | | Sets up the step back |
 | 12–18 | B3 The app | the camera steps back: the preview is inside the real Themes window | the selection has gone down the list, one theme a beat from 13.0 to 17.0, each live, the page in each theme's colors; it stops on Galaxy Sea and holds a second | Pick one. (and a count: 03 / 43 …) | The product, by real use |
 | 18–24 | S Lock | on each bar the lock's own animation comes in over the app: Tiles over the walk's last theme (Galaxy Sea), then Sweep (Deep Blue) and Dissolve (Braun), each after a cut to its page an eighth note before | locked | Lock it your way. (label: the style, one of 7 lock animations) | The product's one action, and a feature |
-| 24–30 | C Live | 3 held shots, 2 s each: Snowfall, Sakura, Rainy | Rainy | Live wallpapers, drawn in Metal. | The only slow section: let the motion be seen |
+| 24–26 | C1 Live | cut: Snowfall, held | pushed in | Live wallpapers, drawn in Metal. | Let the motion be seen, in the score's quiet |
+| 26–30 | C2 Agents | cut: the locky-rex plugin's lock screen, live: glass panes with the agents that report to Rex and the sessions; Terraform's progress grows | at 28.0 Codex starts to need the user: its row turns orange and glides to the top | Lock your Mac. Your agents keep working. / See which one needs you. (label: Plugin · agents, live from Rex) | What a locked Mac still does, and why to look at its lock screen |
 | 30–34 | D1 Time | Lookout at the real hour; its widgets go; the day runs to night | night, stars, the lit window | It follows the real time of day. (label: the hour) | The timelapse |
 | 34–36 | D2 Schedule | the Themes window; a click opens the Schedule popover | Day: Lookout, Night: Observatory | One theme by day. One by night. | The time story ends in a feature |
 | 36–40 | E1 Customize | Aurora's page; a click on Customize…; the clock and the date are dragged left | new layout | Make it yours. / Drag anything. | The turn, in the score's build |
@@ -57,7 +58,8 @@ The film's sounds come from one table in `src/film.js` (`window.CUES`), written 
 | 12.0 | step back | air |
 | 13.0 … 17.0 | the list moves, 9 beats | ticks |
 | 18, 20, 22 | the lock comes in | air, then a low hit |
-| 24, 26, 28 | cuts | air; the score's breakdown starts at 24 |
+| 24, 26 | cuts | air; the score's breakdown starts at 24 |
+| 28.0 | a program needs the user | two soft notes |
 | 31.3 | the day runs | a long rise |
 | 33.75 | night | a bell |
 | 34.5 | the popover | a pop |

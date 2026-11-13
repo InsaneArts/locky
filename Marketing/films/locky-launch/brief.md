@@ -22,6 +22,7 @@ SwiftUI and Metal.
 | Drag widgets, add widgets, change the background, colors, font | `docs/create-theme.md` |
 | A theme is a Lua file | `docs/create-theme.md`, Export Theme |
 | A coding agent can write a widget | `docs/agents.md` |
+| A locked Mac's agents keep working, and the lock screen shows which one needs you | macOS does not stop programs when it locks. Locky's `agents` widget (`docs/widgets.md`) and the locky-rex plugin show them. Locky does not keep the Mac awake: `Sources/Locky/System/Power.swift` |
 | Unlocks with Touch ID or your password | README, `docs/security.md` |
 
 Copy (proposed by the studio, the owner's call):
@@ -34,6 +35,7 @@ Copy (proposed by the studio, the owner's call):
 6. Pick one.
 7. Lock it your way.
 8. Live wallpapers, drawn in Metal.
+8a. Lock your Mac. Your agents keep working. / See which one needs you.
 9. It follows the real time of day.
 10. One theme by day. One by night.
 11. Make it yours. / Drag anything. / Add widgets. / Change the sky.
@@ -58,6 +60,7 @@ and "You watched this lock screen being built."
 | The lock's animation: Tiles, Sweep, Dissolve, Iris | `footage/way-*.mkv`, `footage/lock-in.mkv` | `locky preview --transition`, the film build | real, see Notes |
 | The theme built in the film | `config/settings-final.json`, `config/themes/` | written by Locky's editor during `ui-new` and `ui-agent` | real |
 | The theme as Lua | `config/themes/launch.lua` | written by hand; `locky render` draws the same screen (mean difference 0.3 of 255) | real |
+| The agents' lock screen, 4 s | `footage/rex-clip.mkv`, cut by `tools/rex_timing.py film rex-clip.mkv` | the locky-rex plugin (its own repository), live in the Atlas helper | real, see Notes |
 | The agent's widget | `config/plugin/vacation.lua` | written by a coding agent with Locky's skill, from the docs' own prompt; `locky check` passes | real |
 | App icon | `assets/icon.png` | `Sources/Locky/Resources/AppIcon.icns` | real |
 | Score | `assets/music/b-organic.mp3` | ElevenLabs Music, composition plan (`tools/music/`) | generated for this film |
@@ -97,6 +100,13 @@ method). It fits because the film is real footage plus type and camera moves, an
 - The pointer is the film's: the helper's clicks are recorded with their place and time, and the film draws an
   arrow there. Every reaction of the app is recorded.
 - Waits are cut out of the recorded sessions, and some parts play at 1.2 to 3.2 times their speed.
+- The agents' lock screen (26 to 30 s) is the locky-rex plugin, which is not one of Locky's 43 themes; the film's label
+  says it is a plugin. Its Rex sessions and their names are made up. Their statuses are real reports through Rex's
+  Program Status Protocol, with made-up words. The take in the film is the Rex clip's (`footage/rex-clip.mkv`), so
+  Rex's app icon shows in the top pane. `tools/rex_shoot.py film` shoots a take without the icon; the helper was in
+  use by other work when this cut was made. The wallpaper's clock runs three times as fast, and the widgets look at
+  Rex every second, not every five.
+- The film does not say "now you can": a Mac's programs keep running under the macOS lock screen too. Locky adds the view.
 
 ## Deliverables
 

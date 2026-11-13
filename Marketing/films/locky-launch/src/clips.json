@@ -148,5 +148,10 @@
   "file": "rex-clip.mkv",
   "in": 1.0,
   "out": 15.4
+ },
+ "rexfilm": {
+  "file": "rex-clip.mkv",
+  "in": 4.75,
+  "out": 9.05
  }
 }
