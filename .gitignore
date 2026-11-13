@@ -1,5 +1,6 @@
 .build/
 *.app
+dist/
 .DS_Store
 signing.env
 # LLVM coverage output that instrumented tools write into their working directory

@@ -27,6 +27,8 @@ themes, and packs depend on it, and on the formats of settings.json and the them
   nothing takes the keyboard; after one that fails, the lock asks for it again. It hands over too when another app's
   window shows above it (watchWindowsAbove): macOS draws its accessory prompt above every app.
 - locky-guard locks the Mac with the macOS lock screen if Locky dies or hangs during a lock.
+- Locky updates itself with Sparkle (System/Updater.swift). No check starts during a lock, and a tool run starts no
+  updater. Scripts/release.sh makes a release, and docs/release.md has the steps: ask the owner before you publish one.
 - settings.json is written atomically, and only when it reads without an error. A broken file stays as it is, and
   Locky goes on with the last good settings (~/Library/Application Support/Locky/settings-last-good.json).
 - Tool runs (`LOCKY_RESOURCES` set, or `--behind`) have no location, and render, thumbnails, and screenshots use
