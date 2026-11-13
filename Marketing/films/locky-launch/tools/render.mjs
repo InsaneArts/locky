@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Renders the film (src/film.html) frame by frame in headless Chrome. Every frame is seek(t): any frame renders alone.
 //   node tools/render.mjs sheet 0.5,2,4.1 [--name hook] [--scale 1]   stills + a contact sheet in reviews/
+//   --page rex draws another composition of the same studio: src/rex.html (default: film)
 //   node tools/render.mjs film [--from 0 --to 64] [--scale 1] [--workers 6] [--out out/draft.mp4] [--audio out/score.wav]
 // The page posts each frame to this script as a JPEG; ffmpeg encodes the numbered frames.
 import { spawn, spawnSync } from "node:child_process";
@@ -15,6 +16,7 @@ const args = process.argv.slice(2);
 const mode = args[0];
 const opt = (k, d) => (args.includes(`--${k}`) ? args[args.indexOf(`--${k}`) + 1] : d);
 const scale = Number(opt("scale", 1));
+const pageName = opt("page", "film");
 const W = 1920 * scale, H = 1080 * scale, FPS = 60;
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -30,7 +32,7 @@ const server = createServer((req, res) => {
     req.on("end", () => { sink?.(Number(url.searchParams.get("i")), Buffer.concat(chunks)); res.writeHead(200).end("ok"); });
     return;
   }
-  const file = path.startsWith("/fonts/") ? join("/Library/Fonts", path.slice(7)) : join(film, path === "/" ? "src/film.html" : path.slice(1));
+  const file = path.startsWith("/fonts/") ? join("/Library/Fonts", path.slice(7)) : join(film, path === "/" ? `src/${pageName}.html` : path.slice(1));
   if (!existsSync(file) || !statSync(file).isFile()) return res.writeHead(404).end();
   res.writeHead(200, { "content-type": types[extname(file)] || "application/octet-stream", "cache-control": "no-store" });
   createReadStream(file).pipe(res);
@@ -103,7 +105,7 @@ try {
   } else if (mode === "cues") {
     // Every sound's time, as the page has it: tools/score.py reads this.
     const p = await page();
-    const out = resolve(film, "out/cues.json");
+    const out = resolve(film, pageName === "film" ? "out/cues.json" : `out/cues-${pageName}.json`);
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, await p.evaluate("JSON.stringify(window.CUES, null, 1)"));
     console.log(`cues → ${out}`);

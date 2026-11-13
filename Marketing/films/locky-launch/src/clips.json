@@ -143,5 +143,10 @@
   "file": "lock-vaporwave.mkv",
   "in": 0.5,
   "out": 5.6
+ },
+ "rexclip": {
+  "file": "rex-clip.mkv",
+  "in": 7.483,
+  "out": 17.7
  }
 }

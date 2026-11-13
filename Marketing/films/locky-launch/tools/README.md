@@ -57,6 +57,23 @@ Build it with `INSTALL=0 Scripts/package_app.sh` in the worktree, and copy the a
 `/Users/Shared/locky-film/Locky.app`, where the helper can run it. It is never installed, and the change is not in
 the repository.
 
+## The Rex clip
+
+A second composition of the same studio: `src/rex.html` and `src/rex.js`, 10 s. It is one take of the
+locky-rex pack's lock screen, with a tag. The pack is its own repository; `PACK` names its folder for `rex_shoot.py`.
+
+```sh
+python3 tools/rex_shoot.py                  # the take, in the helper, with four made-up Rex sessions
+python3 tools/prepare.py rexclip
+node tools/render.mjs cues --page rex       # out/cues-rex.json
+python3 tools/rex_score.py                  # out/score-rex.wav
+node tools/render.mjs film --page rex --out out/locky-rex-1080p.mp4 --audio out/score-rex.wav
+```
+
+- The take sets the wallpaper's `speed` to 4, so its 36 s loop takes 9 s and each split opens on a beat.
+- Rex's terminals do not draw in the helper (its window does), so the clip has no shot of Rex itself.
+- The Rex icon in the take is the helper's installed Rex app's own, as the pack shows it.
+
 ## Music
 
 `tools/music/make_candidates.py` makes candidates with ElevenLabs Music composition plans (the key comes from the
