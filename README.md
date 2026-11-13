@@ -269,3 +269,7 @@ Marketing/                    the launch film and its tools
 ## Credits
 
 Weather data by [Open-Meteo.com](https://open-meteo.com), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The weather and sun widgets use it. Locky › About Locky shows this credit too.
+
+## License
+
+[MIT License](LICENSE).
