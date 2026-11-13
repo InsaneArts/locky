@@ -59,20 +59,25 @@ the repository.
 
 ## The Rex clip
 
-A second composition of the same studio: `src/rex.html` and `src/rex.js`, 10 s. It is one take of the
-locky-rex pack's lock screen, with a tag. The pack is its own repository; `PACK` names its folder for `rex_shoot.py`.
+A second composition of the same studio: `src/rex.html` and `src/rex.js`, 13 s. It is one take of the locky-rex
+pack's lock screen, with a tag. The pack is its own repository; `PACK` names its folder for `rex_shoot.py`.
 
 ```sh
-python3 tools/rex_shoot.py                  # the take, in the helper, with four made-up Rex sessions
+python3 tools/rex_shoot.py                  # the take, in the helper, over made-up Rex sessions (about 5 min)
 python3 tools/prepare.py rexclip
+python3 tools/rex_timing.py                 # src/rex-timing.json: when a program first needs the user
 node tools/render.mjs cues --page rex       # out/cues-rex.json
 python3 tools/rex_score.py                  # out/score-rex.wav
 node tools/render.mjs film --page rex --out out/locky-rex-1080p.mp4 --audio out/score-rex.wav
 ```
 
-- The take sets the wallpaper's `speed` to 4, so its 36 s loop takes 9 s and each split opens on a beat.
+- The sessions and their names are made up. The statuses are real reports: each pane runs a script that writes the
+  Program Status Protocol's escape sequence (OSC 7501), as a coding agent does, and Rex records it. Three programs
+  report again while the camera runs.
+- The take sets the wallpaper's `speed` to 3, and the widgets' `every` to 1 second, so a report shows at once.
 - Rex's terminals do not draw in the helper (its window does), so the clip has no shot of Rex itself.
 - The Rex icon in the take is the helper's installed Rex app's own, as the pack shows it.
+- The helper's Rex has ten sessions of earlier work, which the script leaves alone: they are the "+ 10 more".
 
 ## Music
 
