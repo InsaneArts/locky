@@ -1,6 +1,10 @@
+<p align="center">
+  <img src=".github/assets/icon.png" width="112" alt="Locky's icon: a keyhole in a moon over dark hills" />
+</p>
+
 <h1 align="center">Locky</h1>
 
-<h3 align="center">A lock screen for your Mac that you build yourself.</h3>
+<h3 align="center">Your Mac came with one lock screen. Locky has 43.</h3>
 
 <p align="center">
   <img src=".github/assets/hero.jpg" width="100%" alt="A Mac locked with Locky's Sakura theme: a cherry branch under the moon, the time, and a password field" />
