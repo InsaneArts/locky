@@ -1,0 +1,662 @@
+{
+ "browse": [
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 3.123
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 4.124
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 5.128
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 6.133
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 7.133
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 8.138
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 9.143
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 10.147
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 11.153
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 12.153
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 13.158
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "down"
+   ],
+   "note": "",
+   "t": 14.163
+  }
+ ],
+ "schedule": [
+  {
+   "kind": "click",
+   "x": 1732,
+   "y": 26,
+   "note": "schedule",
+   "t": 1.342,
+   "seen": 1.633
+  }
+ ],
+ "customize": [
+  {
+   "kind": "click",
+   "x": 1396.5,
+   "y": 693.5,
+   "note": "Customize\u2026",
+   "t": 0.662,
+   "seen": 0.8
+  },
+  {
+   "kind": "drag",
+   "x": 730,
+   "y": 278,
+   "x1": 372,
+   "y1": 300,
+   "note": "clock",
+   "t": 2.865
+  },
+  {
+   "kind": "dragend",
+   "x": 372,
+   "y": 300,
+   "t": 3.548
+  },
+  {
+   "kind": "drag",
+   "x": 730,
+   "y": 190,
+   "x1": 372,
+   "y1": 196,
+   "note": "date",
+   "t": 4.453
+  },
+  {
+   "kind": "dragend",
+   "x": 372,
+   "y": 196,
+   "t": 5.126
+  },
+  {
+   "kind": "click",
+   "x": 1512,
+   "y": 26,
+   "note": "add",
+   "t": 6.335,
+   "seen": 6.633
+  },
+  {
+   "kind": "scroll",
+   "x": 880,
+   "y": 500,
+   "lines": 20,
+   "t": 8.029
+  },
+  {
+   "kind": "click",
+   "x": 909,
+   "y": 587,
+   "note": "medium",
+   "t": 10.616,
+   "seen": null
+  },
+  {
+   "kind": "click",
+   "x": 937,
+   "y": 587,
+   "note": "large",
+   "t": 11.623,
+   "seen": null
+  },
+  {
+   "kind": "click",
+   "x": 909,
+   "y": 587,
+   "note": "medium",
+   "t": 12.623,
+   "seen": null
+  },
+  {
+   "kind": "click",
+   "x": 880,
+   "y": 470,
+   "note": "add calendar",
+   "t": 13.617,
+   "seen": 13.867
+  },
+  {
+   "kind": "drag",
+   "x": 730,
+   "y": 520,
+   "x1": 1150,
+   "y1": 330,
+   "note": "calendar",
+   "t": 15.517
+  },
+  {
+   "kind": "dragend",
+   "x": 1150,
+   "y": 330,
+   "t": 16.249
+  },
+  {
+   "kind": "click",
+   "x": 300,
+   "y": 720,
+   "note": "deselect",
+   "t": 17.153,
+   "seen": 17.35
+  },
+  {
+   "kind": "click",
+   "x": 1693,
+   "y": 100,
+   "note": "background",
+   "t": 18.259,
+   "seen": 18.45
+  },
+  {
+   "kind": "click",
+   "x": 1669,
+   "y": 125,
+   "note": "animated",
+   "t": 19.18,
+   "seen": 19.6
+  },
+  {
+   "kind": "click",
+   "x": 1697,
+   "y": 236,
+   "note": "galaxysea",
+   "t": 20.896,
+   "seen": 21.133
+  },
+  {
+   "kind": "click",
+   "x": 1697,
+   "y": 159,
+   "note": "deepblue",
+   "t": 22.493,
+   "seen": 22.75
+  },
+  {
+   "kind": "click",
+   "x": 1609,
+   "y": 698,
+   "note": "synthwave",
+   "t": 24.108,
+   "seen": 24.333
+  },
+  {
+   "kind": "click",
+   "x": 1609,
+   "y": 621,
+   "note": "sakura",
+   "t": 25.708,
+   "seen": 25.95
+  }
+ ],
+ "new": [
+  {
+   "kind": "click",
+   "x": 1697,
+   "y": 26,
+   "note": "new theme",
+   "t": 1.055,
+   "seen": 1.25
+  },
+  {
+   "kind": "click",
+   "x": 1690,
+   "y": 80,
+   "note": "name",
+   "t": 3.747,
+   "seen": null
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 4.247
+  },
+  {
+   "kind": "type",
+   "text": "Launch Day",
+   "t": 4.533
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "return"
+   ],
+   "note": "",
+   "t": 5.026,
+   "seen": 6.083
+  },
+  {
+   "kind": "click",
+   "x": 1693,
+   "y": 146,
+   "note": "background",
+   "t": 5.914,
+   "seen": 6.083
+  },
+  {
+   "kind": "click",
+   "x": 1669,
+   "y": 171,
+   "note": "animated",
+   "t": 6.788,
+   "seen": 7.133
+  },
+  {
+   "kind": "click",
+   "x": 1697,
+   "y": 282,
+   "note": "galaxysea",
+   "t": 8.281,
+   "seen": 8.517
+  },
+  {
+   "kind": "click",
+   "x": 1512,
+   "y": 26,
+   "note": "add",
+   "t": 10.173,
+   "seen": 10.417
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 11.669
+  },
+  {
+   "kind": "type",
+   "text": "text",
+   "t": 11.852
+  },
+  {
+   "kind": "click",
+   "x": 633,
+   "y": 385,
+   "note": "add text",
+   "t": 13.188,
+   "seen": 13.4
+  },
+  {
+   "kind": "click",
+   "x": 1665,
+   "y": 350,
+   "note": "text field",
+   "t": 15.083,
+   "seen": null
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 15.587
+  },
+  {
+   "kind": "type",
+   "text": "Locky",
+   "t": 15.887
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "return"
+   ],
+   "note": "",
+   "t": 16.33,
+   "seen": 17.483
+  },
+  {
+   "kind": "click",
+   "x": 1692,
+   "y": 392,
+   "note": "size",
+   "t": 17.318,
+   "seen": 17.483
+  },
+  {
+   "kind": "click",
+   "x": 1679,
+   "y": 441,
+   "note": "huge",
+   "t": 18.208,
+   "seen": 18.533
+  },
+  {
+   "kind": "click",
+   "x": 1693,
+   "y": 430,
+   "note": "weight",
+   "t": 19.296,
+   "seen": 19.417
+  },
+  {
+   "kind": "click",
+   "x": 1680,
+   "y": 479,
+   "note": "semibold",
+   "t": 20.164,
+   "seen": null
+  },
+  {
+   "kind": "click",
+   "x": 1512,
+   "y": 26,
+   "note": "add",
+   "t": 21.249,
+   "seen": 21.483
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 22.751
+  },
+  {
+   "kind": "type",
+   "text": "text",
+   "t": 22.946
+  },
+  {
+   "kind": "click",
+   "x": 633,
+   "y": 385,
+   "note": "add text",
+   "t": 24.277,
+   "seen": 24.517
+  },
+  {
+   "kind": "click",
+   "x": 1665,
+   "y": 350,
+   "note": "text field",
+   "t": 26.177,
+   "seen": null
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 26.649
+  },
+  {
+   "kind": "type",
+   "text": "The lock screen you build yourself.",
+   "t": 26.946
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "return"
+   ],
+   "note": "",
+   "t": 27.65,
+   "seen": null
+  },
+  {
+   "kind": "drag",
+   "x": 730,
+   "y": 520,
+   "x1": 730,
+   "y1": 603,
+   "note": "line",
+   "t": 28.645
+  },
+  {
+   "kind": "dragend",
+   "x": 730,
+   "y": 603,
+   "t": 29.3
+  },
+  {
+   "kind": "click",
+   "x": 1656,
+   "y": 468,
+   "note": "color",
+   "t": 30.205,
+   "seen": 30.367
+  },
+  {
+   "kind": "click",
+   "x": 1656,
+   "y": 621,
+   "note": "muted",
+   "t": 31.09,
+   "seen": null
+  },
+  {
+   "kind": "click",
+   "x": 300,
+   "y": 760,
+   "note": "deselect",
+   "t": 32.18,
+   "seen": 32.383
+  }
+ ],
+ "agent": [
+  {
+   "kind": "click",
+   "x": 1512,
+   "y": 26,
+   "note": "add",
+   "t": 1.258,
+   "seen": 1.5
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 2.852
+  },
+  {
+   "kind": "type",
+   "text": "vac",
+   "t": 3.041
+  },
+  {
+   "kind": "click",
+   "x": 633,
+   "y": 385,
+   "note": "add vacation",
+   "t": 4.493,
+   "seen": 4.7
+  },
+  {
+   "kind": "click",
+   "x": 1727.0,
+   "y": 180.0,
+   "note": "pin top right",
+   "t": 6.744,
+   "seen": 6.9
+  },
+  {
+   "kind": "click",
+   "x": 1630.0,
+   "y": 248.5,
+   "note": "offset x",
+   "t": 8.04,
+   "seen": null
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 8.417
+  },
+  {
+   "kind": "type",
+   "text": "-56",
+   "t": 8.654
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "tab"
+   ],
+   "note": "",
+   "t": 8.984
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "cmd+a"
+   ],
+   "note": "",
+   "t": 9.578
+  },
+  {
+   "kind": "type",
+   "text": "56",
+   "t": 9.825
+  },
+  {
+   "kind": "key",
+   "keys": [
+    "return"
+   ],
+   "note": "",
+   "t": 10.159,
+   "seen": null
+  },
+  {
+   "kind": "click",
+   "x": 300,
+   "y": 780,
+   "note": "deselect",
+   "t": 11.255,
+   "seen": 11.483
+  }
+ ],
+ "agentDesk": 13.4,
+ "lockinKeys": [
+  4.349,
+  4.567,
+  4.775,
+  4.975,
+  5.184,
+  5.393,
+  5.597,
+  5.804,
+  6.011,
+  6.216,
+  6.425
+ ],
+ "editorLive": 0.983,
+ "browseSelected": [
+  3.283,
+  4.284,
+  5.288,
+  6.293,
+  7.293,
+  8.298,
+  9.303,
+  10.307,
+  11.313,
+  12.313,
+  13.318,
+  14.323
+ ],
+ "browseLive": [
+  3.367,
+  4.417,
+  5.4,
+  6.367,
+  7.433,
+  8.433,
+  9.603,
+  10.45,
+  11.383,
+  12.45,
+  13.4,
+  14.417
+ ]
+}

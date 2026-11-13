@@ -1,0 +1,12 @@
+# Footage, frames, and renders are large and can be made again (tools/README.md).
+build/
+footage/
+out/
+reviews/**/*.png
+reviews/**/*.jpg
+# Apple's fonts, and the score candidates that were not chosen.
+assets/fonts/
+assets/music/a-house.mp3
+assets/music/c-lush.mp3
+# Logs.
+*.log

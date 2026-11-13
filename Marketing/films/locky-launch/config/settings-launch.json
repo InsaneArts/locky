@@ -1,0 +1,70 @@
+{
+  "ambient_after" : 0,
+  "privacy" : true,
+  "theme" : "default",
+  "themes" : {
+    "untitled-theme" : {
+      "background" : {
+        "colors" : [
+          "#070418",
+          "#26174a",
+          "#5d3fa3",
+          "#e27fa4",
+          "#7fcfff"
+        ],
+        "fps" : 24,
+        "params" : [
+          610,
+          330
+        ],
+        "resolution" : 0.5,
+        "shader" : "galaxysea"
+      },
+      "widgets" : [
+        {
+          "anchor" : "top",
+          "offset" : [
+            0,
+            110
+          ],
+          "ref" : 1,
+          "widget" : "date"
+        },
+        {
+          "anchor" : "top",
+          "offset" : [
+            0,
+            130
+          ],
+          "ref" : 2,
+          "widget" : "clock"
+        },
+        {
+          "anchor" : "center",
+          "offset" : [
+            0,
+            0
+          ],
+          "opts" : {
+            "size" : "huge",
+            "text" : "Locky",
+            "weight" : "semibold"
+          },
+          "widget" : "text"
+        },
+        {
+          "anchor" : "center",
+          "offset" : [
+            0,
+            86
+          ],
+          "opts" : {
+            "color" : "muted",
+            "text" : "The lock screen you build yourself."
+          },
+          "widget" : "text"
+        }
+      ]
+    }
+  }
+}

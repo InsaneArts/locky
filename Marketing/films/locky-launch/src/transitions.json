@@ -1,0 +1,30 @@
+{
+ "lockin": {
+  "n": 884,
+  "out_start": 108,
+  "desk_from": 138,
+  "desk_to": 179,
+  "in_end": 211
+ },
+ "waytiles": {
+  "n": 302,
+  "out_start": 118,
+  "desk_from": 139,
+  "desk_to": 177,
+  "in_end": 206
+ },
+ "waysweep": {
+  "n": 302,
+  "out_start": 116,
+  "desk_from": 135,
+  "desk_to": 172,
+  "in_end": 197
+ },
+ "waydissolve": {
+  "n": 308,
+  "out_start": 120,
+  "desk_from": 139,
+  "desk_to": 179,
+  "in_end": 206
+ }
+}

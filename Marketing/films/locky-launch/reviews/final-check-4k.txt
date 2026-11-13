@@ -1,0 +1,8 @@
+stream: {'codec_name': 'h264', 'width': 3840, 'height': 2160, 'pix_fmt': 'yuv420p', 'color_space': 'bt709', 'r_frame_rate': '60/1', 'duration': '64.000000', 'side_data_list': [{}]}
+stream: {'codec_name': 'aac', 'sample_rate': '48000', 'channels': 2, 'r_frame_rate': '0/0', 'duration': '64.000000'}
+file: 64.00 s, 177.6 MB
+loudness: Summary: Integrated loudness: I: -14.0 LUFS Threshold: -24.1 LUFS Loudness range: LRA: 5.7 LU Threshold: -34.1 LUFS LRA low: -18.0 LUFS LRA high: -12.
+hard cuts found: 23; one frame before a quarter second: 22; on it: 0; elsewhere: 1
+  on the beat frame: []
+  elsewhere (frames before the next quarter second): [(53.017, -1)]
+flash check: passes; tile 3,3    2.0 flashes in the worst second (from 52.42 s)

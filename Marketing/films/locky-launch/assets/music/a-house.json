@@ -1,0 +1,196 @@
+{
+ "plan": {
+  "chunks": [
+   {
+    "text": "[Intro]",
+    "duration_ms": 4000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "melodic deep house",
+     "warm electric piano chords",
+     "four on the floor kick",
+     "shuffled crisp hi-hats",
+     "round sub bass",
+     "short glassy pluck lead",
+     "groovy, classy, expensive",
+     "120 BPM",
+     "instrumental",
+     "polished modern production",
+     "great mix, crisp and wide",
+     "F minor",
+     "starts at once with a warm sustained chord and a deep sub hit on the very first beat",
+     "a second chord on the third beat",
+     "no drums yet",
+     "a soft pulse",
+     "anticipation"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir",
+     "drums",
+     "kick",
+     "fade in",
+     "silence",
+     "slow build",
+     "guitar"
+    ]
+   },
+   {
+    "text": "[Drop]",
+    "duration_ms": 12000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "the full groove enters on the first beat",
+     "punchy kick on every beat",
+     "crisp hi-hats",
+     "round sub bass",
+     "the lead melody plays",
+     "confident and bright",
+     "steady four bar phrases"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir",
+     "dubstep",
+     "trap hi-hat rolls",
+     "guitar",
+     "breakdown"
+    ]
+   },
+   {
+    "text": "[Float]",
+    "duration_ms": 8000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "lighter and airy",
+     "drums thin out to hi-hats and a soft kick",
+     "shimmering arpeggio",
+     "wide warm pads",
+     "a feeling of wonder"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir",
+     "full drums",
+     "silence",
+     "clap"
+    ]
+   },
+   {
+    "text": "[Breakdown]",
+    "duration_ms": 6000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "breakdown",
+     "no drums",
+     "warm sustained chords",
+     "soft bass",
+     "intimate",
+     "gentle rising tension toward the end",
+     "a riser into the next section"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir",
+     "drums",
+     "kick",
+     "hi-hats"
+    ]
+   },
+   {
+    "text": "[Groove]",
+    "duration_ms": 12000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "the full groove returns on the first beat",
+     "punchy kick and clap on the beat",
+     "the lead melody plays",
+     "confident and bright",
+     "playful"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir"
+    ]
+   },
+   {
+    "text": "[Build]",
+    "duration_ms": 10000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "the groove continues",
+     "the melody develops",
+     "energy rises through the section",
+     "a short snare build in the last bar",
+     "everything cuts out on the very last beat"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir",
+     "breakdown",
+     "ambient"
+    ]
+   },
+   {
+    "text": "[Drop]",
+    "duration_ms": 6000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "full energy on the first beat",
+     "one big satisfying downbeat",
+     "punchy drums",
+     "the lead melody returns",
+     "euphoric but tasteful"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir"
+    ]
+   },
+   {
+    "text": "[Outro]",
+    "duration_ms": 8000,
+    "context_adherence": "high",
+    "positive_styles": [
+     "drums stop",
+     "resolves onto one long warm final chord on the first beat",
+     "the chord rings out with a soft reverb tail",
+     "calm ending"
+    ],
+    "negative_styles": [
+     "vocals",
+     "lyrics",
+     "singing",
+     "spoken word",
+     "choir",
+     "drums",
+     "abrupt ending",
+     "new melody",
+     "build up"
+    ]
+   }
+  ]
+ },
+ "song_id": "7Mtahr8D8EPg3WoNiM8Q"
+}

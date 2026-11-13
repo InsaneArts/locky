@@ -1,0 +1,147 @@
+{
+ "aurora": {
+  "file": "lock-default.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "eventhorizon": {
+  "file": "lock-eventhorizon.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "poster": {
+  "file": "lock-poster.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "station": {
+  "file": "lock-station.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "synthwave": {
+  "file": "lock-synthwave.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "neoncity": {
+  "file": "lock-neoncity.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "matrix": {
+  "file": "lock-matrix.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "phosphor": {
+  "file": "lock-phosphor.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "liquid": {
+  "file": "lock-liquid.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "sakura": {
+  "file": "lock-sakura.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "pocket": {
+  "file": "lock-pocket.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "bauhaus": {
+  "file": "lock-bauhaus.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "deepblue": {
+  "file": "lock-deepblue.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "rainy": {
+  "file": "lock-rainy.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "snowfall": {
+  "file": "lock-snowfall.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "galaxysea": {
+  "file": "lock-galaxysea.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "lookout": {
+  "file": "lock-lookout.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "browse": {
+  "file": "ui-browse.mkv",
+  "in": 0.0,
+  "out": 16.4
+ },
+ "schedule": {
+  "file": "ui-schedule.mkv",
+  "in": 0.9,
+  "out": 5.4
+ },
+ "customize": {
+  "file": "ui-customize.mkv",
+  "in": 2.0,
+  "out": 29.6
+ },
+ "new": {
+  "file": "ui-new.mkv",
+  "in": 1.0,
+  "out": 34.9
+ },
+ "agent": {
+  "file": "ui-agent.mkv",
+  "in": 1.0,
+  "out": 14.5
+ },
+ "lockin": {
+  "file": "lock-in.mkv",
+  "in": 0.0,
+  "out": 14.6
+ },
+ "waytiles": {
+  "file": "way-tiles.mkv",
+  "in": 0.0,
+  "out": 5.2
+ },
+ "waydissolve": {
+  "file": "way-dissolve.mkv",
+  "in": 0.0,
+  "out": 5.2
+ },
+ "waysweep": {
+  "file": "way-sweep.mkv",
+  "in": 0.0,
+  "out": 5.2
+ },
+ "notebook": {
+  "file": "lock-notebook.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "tokyonight": {
+  "file": "lock-tokyonight.mkv",
+  "in": 0.5,
+  "out": 5.6
+ },
+ "vaporwave": {
+  "file": "lock-vaporwave.mkv",
+  "in": 0.5,
+  "out": 5.6
+ }
+}
